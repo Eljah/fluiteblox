@@ -44,8 +44,16 @@ public class TonePracticeActivity extends AppCompatActivity {
 
     private PitchAnalyzer pitchAnalyzer;
     private final List<Float> userPitch = new ArrayList<>();
+    private boolean isRecording = false;
+    private boolean shouldRecognizeSpeech = false;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable stopRecordingRunnable = new Runnable() {
+        @Override
+        public void run() {
+            stopRecordingAndAnalyze(shouldRecognizeSpeech);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -107,6 +115,7 @@ public class TonePracticeActivity extends AppCompatActivity {
     private void playReference() {
         visualizerView.setReferenceData(referenceSample.getPitchHz());
         visualizerView.setUserData(null);
+        startRecording(false);
         playReferenceAudio();
     }
 
@@ -128,10 +137,23 @@ public class TonePracticeActivity extends AppCompatActivity {
     }
 
     private void recordUser() {
+        startRecording(true);
+    }
+
+    private void startRecording(boolean recognizeSpeech) {
+        if (isRecording) {
+            handler.removeCallbacks(stopRecordingRunnable);
+            pitchAnalyzer.stop();
+        }
+        isRecording = true;
+        shouldRecognizeSpeech = recognizeSpeech;
+
         userPitch.clear();
         visualizerView.setUserData(userPitch);
-        tvRecognized.setText("");
-        tvDiff.setText("");
+        if (recognizeSpeech) {
+            tvRecognized.setText("");
+            tvDiff.setText("");
+        }
         tvToneResult.setText("");
 
         pitchAnalyzer.startRealtimePitch(new PitchAnalyzer.PitchListener() {
@@ -147,19 +169,17 @@ public class TonePracticeActivity extends AppCompatActivity {
             }
         });
 
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                stopRecordingAndAnalyze();
-            }
-        }, 3000);
+        handler.postDelayed(stopRecordingRunnable, 3000);
     }
 
-    private void stopRecordingAndAnalyze() {
+    private void stopRecordingAndAnalyze(boolean recognizeSpeech) {
         pitchAnalyzer.stop();
+        isRecording = false;
         userSample = new ToneSample(new ArrayList<>(userPitch), 20);
         compareToneDirection();
-        startSpeechRecognition();
+        if (recognizeSpeech) {
+            startSpeechRecognition();
+        }
     }
 
     private void compareToneDirection() {
@@ -242,6 +262,7 @@ public class TonePracticeActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        handler.removeCallbacks(stopRecordingRunnable);
         pitchAnalyzer.stop();
         stopReferenceAudio();
         if (textToSpeech != null) {
