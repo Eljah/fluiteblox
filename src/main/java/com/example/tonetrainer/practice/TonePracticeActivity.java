@@ -176,15 +176,20 @@ public class TonePracticeActivity extends AppCompatActivity {
         pitchAnalyzer.stop();
         isRecording = false;
         userSample = new ToneSample(new ArrayList<>(userPitch), 20);
-        compareToneDirection();
+        compareToneDirection(recognizeSpeech);
         if (recognizeSpeech) {
             startSpeechRecognition();
         }
     }
 
-    private void compareToneDirection() {
+    private void compareToneDirection(boolean strictAnalysis) {
         ToneSample.Direction referenceDirection = referenceSample.getDirection();
-        ToneSample.Direction userDirection = userSample.getDirection();
+        ToneSample.Direction userDirection;
+        if (strictAnalysis) {
+            userDirection = userSample.getDirection();
+        } else {
+            userDirection = userSample.getDirection(10f, 1);
+        }
 
         String text;
         if (userPitch.isEmpty()) {
