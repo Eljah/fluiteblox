@@ -46,6 +46,7 @@ public class TonePracticeActivity extends AppCompatActivity {
     private final List<Float> userPitch = new ArrayList<>();
     private boolean isRecording = false;
     private boolean shouldRecognizeSpeech = false;
+    private long recordingStartMs = 0L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable stopRecordingRunnable = new Runnable() {
@@ -147,6 +148,7 @@ public class TonePracticeActivity extends AppCompatActivity {
         }
         isRecording = true;
         shouldRecognizeSpeech = recognizeSpeech;
+        recordingStartMs = android.os.SystemClock.elapsedRealtime();
 
         userPitch.clear();
         visualizerView.setUserData(userPitch);
@@ -176,19 +178,22 @@ public class TonePracticeActivity extends AppCompatActivity {
         pitchAnalyzer.stop();
         isRecording = false;
         userSample = new ToneSample(new ArrayList<>(userPitch), 20);
-        compareToneDirection(recognizeSpeech);
+        long durationMs = android.os.SystemClock.elapsedRealtime() - recordingStartMs;
+        compareToneDirection(recognizeSpeech, durationMs);
         if (recognizeSpeech) {
             startSpeechRecognition();
         }
     }
 
-    private void compareToneDirection(boolean strictAnalysis) {
+    private void compareToneDirection(boolean strictAnalysis, long durationMs) {
         ToneSample.Direction referenceDirection = referenceSample.getDirection();
         ToneSample.Direction userDirection;
         if (strictAnalysis) {
             userDirection = userSample.getDirection();
         } else {
-            userDirection = userSample.getDirection(10f, 1);
+            float threshold = getReferenceThreshold(durationMs);
+            int minSamples = getReferenceMinSamples(durationMs);
+            userDirection = userSample.getDirection(threshold, minSamples);
         }
 
         String text;
@@ -200,6 +205,26 @@ public class TonePracticeActivity extends AppCompatActivity {
             text = getString(R.string.tone_result_diff);
         }
         tvToneResult.setText(text);
+    }
+
+    private float getReferenceThreshold(long durationMs) {
+        if (durationMs <= 800) {
+            return 8f;
+        } else if (durationMs <= 1500) {
+            return 12f;
+        } else if (durationMs <= 2500) {
+            return 16f;
+        }
+        return 20f;
+    }
+
+    private int getReferenceMinSamples(long durationMs) {
+        if (durationMs <= 800) {
+            return 1;
+        } else if (durationMs <= 1500) {
+            return 2;
+        }
+        return 3;
     }
 
     private void startSpeechRecognition() {
