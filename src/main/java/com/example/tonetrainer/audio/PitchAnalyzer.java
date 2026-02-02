@@ -74,6 +74,30 @@ public class PitchAnalyzer {
         workerThread.start();
     }
 
+    public void analyzePcm(short[] samples, int sampleRate, PitchListener listener, SpectrumListener spectrumListener) {
+        if (samples == null || samples.length == 0) {
+            return;
+        }
+        int frameSize = 1024;
+        int hopSize = 512;
+        if (samples.length < frameSize) {
+            frameSize = samples.length;
+            hopSize = Math.max(1, frameSize / 2);
+        }
+        short[] frame = new short[frameSize];
+        for (int start = 0; start + frameSize <= samples.length; start += hopSize) {
+            System.arraycopy(samples, start, frame, 0, frameSize);
+            float pitch = estimatePitch(frame, frameSize, sampleRate);
+            if (pitch > 0f && listener != null) {
+                listener.onPitch(pitch);
+            }
+            if (spectrumListener != null) {
+                float[] magnitudes = computeSpectrum(frame, frameSize);
+                spectrumListener.onSpectrum(magnitudes, sampleRate);
+            }
+        }
+    }
+
     public void stop() {
         running = false;
         if (workerThread != null) {

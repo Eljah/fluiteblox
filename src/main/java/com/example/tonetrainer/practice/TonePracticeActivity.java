@@ -8,6 +8,7 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
@@ -22,6 +23,12 @@ import com.example.tonetrainer.ui.SpectrogramView;
 import com.example.tonetrainer.ui.ToneVisualizerView;
 import com.example.tonetrainer.util.TextDiffUtil;
 
+import java.io.File;
+import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -43,12 +50,17 @@ public class TonePracticeActivity extends AppCompatActivity {
 
     private TextToSpeech textToSpeech;
     private boolean isTtsReady = false;
+    private static final float REFERENCE_SPEECH_RATE = 0.8f;
+    private static final float DEFAULT_REFERENCE_THRESHOLD = 12f;
+    private static final int DEFAULT_REFERENCE_MIN_SAMPLES = 2;
+    private static final int REFERENCE_RECORDING_DURATION_MS = 500;
+    private static final int USER_RECORDING_DURATION_MS = 3000;
 
     private PitchAnalyzer pitchAnalyzer;
     private final List<Float> userPitch = new ArrayList<>();
     private boolean isRecording = false;
     private boolean shouldRecognizeSpeech = false;
-    private long recordingStartMs = 0L;
+    private String referenceFileUtteranceId;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable stopRecordingRunnable = new Runnable() {
@@ -85,6 +97,9 @@ public class TonePracticeActivity extends AppCompatActivity {
                     int languageStatus = textToSpeech.setLanguage(vietnameseLocale);
                     isTtsReady = languageStatus != TextToSpeech.LANG_MISSING_DATA
                             && languageStatus != TextToSpeech.LANG_NOT_SUPPORTED;
+                    if (isTtsReady) {
+                        textToSpeech.setSpeechRate(REFERENCE_SPEECH_RATE);
+                    }
                 }
             }
         }, "com.google.android.tts");
@@ -119,8 +134,10 @@ public class TonePracticeActivity extends AppCompatActivity {
     private void playReference() {
         visualizerView.setReferenceData(referenceSample.getPitchHz());
         visualizerView.setUserData(null);
-        startRecording(false);
-        playReferenceAudio();
+        if (spectrogramView != null) {
+            spectrogramView.clear();
+        }
+        synthesizeReferenceToFile();
     }
 
     private void playReferenceAudio() {
@@ -132,6 +149,186 @@ public class TonePracticeActivity extends AppCompatActivity {
         }
         textToSpeech.stop();
         textToSpeech.speak(targetSyllable.getText(), TextToSpeech.QUEUE_FLUSH, null, "reference-utterance");
+    }
+
+    private void synthesizeReferenceToFile() {
+        if (targetSyllable == null || !isTtsReady || textToSpeech == null) {
+            return;
+        }
+        final File outputFile;
+        try {
+            outputFile = File.createTempFile("reference_tts_", ".wav", getCacheDir());
+        } catch (IOException e) {
+            return;
+        }
+
+        referenceFileUtteranceId = "reference-file-" + System.currentTimeMillis();
+        textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+            @Override
+            public void onStart(String utteranceId) {
+            }
+
+            @Override
+            public void onDone(String utteranceId) {
+                if (utteranceId != null && utteranceId.equals(referenceFileUtteranceId)) {
+                    analyzeReferenceFile(outputFile);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            playReferenceAudio();
+                        }
+                    });
+                }
+            }
+
+            @Override
+            public void onError(String utteranceId) {
+                if (utteranceId != null && utteranceId.equals(referenceFileUtteranceId)) {
+                    deleteTempFile(outputFile);
+                }
+            }
+        });
+
+        Bundle params = new Bundle();
+        textToSpeech.synthesizeToFile(targetSyllable.getText(), params, outputFile, referenceFileUtteranceId);
+    }
+
+    private void analyzeReferenceFile(final File outputFile) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                WavData wavData;
+                try {
+                    wavData = readWavFile(outputFile);
+                } catch (IOException e) {
+                    deleteTempFile(outputFile);
+                    return;
+                }
+                final List<Float> pitchData = new ArrayList<>();
+                final List<float[]> spectrumFrames = new ArrayList<>();
+                pitchAnalyzer.analyzePcm(
+                        wavData.samples,
+                        wavData.sampleRate,
+                        new PitchAnalyzer.PitchListener() {
+                            @Override
+                            public void onPitch(float pitchHz) {
+                                pitchData.add(pitchHz);
+                            }
+                        },
+                        new PitchAnalyzer.SpectrumListener() {
+                            @Override
+                            public void onSpectrum(float[] magnitudes, int sampleRate) {
+                                spectrumFrames.add(magnitudes);
+                            }
+                        }
+                );
+                deleteTempFile(outputFile);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        referenceSample = new ToneSample(pitchData, 20);
+                        visualizerView.setReferenceData(referenceSample.getPitchHz());
+                        if (spectrogramView != null) {
+                            spectrogramView.clear();
+                            for (float[] frame : spectrumFrames) {
+                                spectrogramView.addSpectrumFrame(frame, wavData.sampleRate, frame.length * 2);
+                            }
+                        }
+                    }
+                });
+            }
+        }).start();
+    }
+
+    private void deleteTempFile(File file) {
+        if (file == null) {
+            return;
+        }
+        if (!file.delete()) {
+            file.deleteOnExit();
+        }
+    }
+
+    private static class WavData {
+        private final short[] samples;
+        private final int sampleRate;
+
+        private WavData(short[] samples, int sampleRate) {
+            this.samples = samples;
+            this.sampleRate = sampleRate;
+        }
+    }
+
+    private WavData readWavFile(File file) throws IOException {
+        byte[] bytes = readAllBytes(file);
+        ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+        if (buffer.remaining() < 12) {
+            throw new IOException("Invalid WAV header");
+        }
+        byte[] riff = new byte[4];
+        buffer.get(riff);
+        buffer.getInt();
+        byte[] wave = new byte[4];
+        buffer.get(wave);
+        int sampleRate = 0;
+        short channels = 0;
+        short bitsPerSample = 0;
+        int dataOffset = -1;
+        int dataSize = 0;
+        while (buffer.remaining() >= 8) {
+            byte[] chunkIdBytes = new byte[4];
+            buffer.get(chunkIdBytes);
+            String chunkId = new String(chunkIdBytes);
+            int chunkSize = buffer.getInt();
+            if ("fmt ".equals(chunkId)) {
+                short audioFormat = buffer.getShort();
+                channels = buffer.getShort();
+                sampleRate = buffer.getInt();
+                buffer.getInt();
+                buffer.getShort();
+                bitsPerSample = buffer.getShort();
+                if (chunkSize > 16) {
+                    buffer.position(buffer.position() + (chunkSize - 16));
+                }
+                if (audioFormat != 1) {
+                    throw new IOException("Unsupported WAV format");
+                }
+            } else if ("data".equals(chunkId)) {
+                dataOffset = buffer.position();
+                dataSize = chunkSize;
+                buffer.position(buffer.position() + chunkSize);
+            } else {
+                buffer.position(buffer.position() + chunkSize);
+            }
+        }
+        if (dataOffset < 0 || bitsPerSample != 16 || channels == 0 || sampleRate == 0) {
+            throw new IOException("Invalid WAV data");
+        }
+        ByteBuffer dataBuffer = ByteBuffer.wrap(bytes, dataOffset, dataSize).order(ByteOrder.LITTLE_ENDIAN);
+        int totalSamples = dataSize / 2 / channels;
+        short[] samples = new short[totalSamples];
+        for (int i = 0; i < totalSamples; i++) {
+            short sample = dataBuffer.getShort();
+            if (channels > 1) {
+                for (int c = 1; c < channels; c++) {
+                    dataBuffer.getShort();
+                }
+            }
+            samples[i] = sample;
+        }
+        return new WavData(samples, sampleRate);
+    }
+
+    private byte[] readAllBytes(File file) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        byte[] buffer = new byte[4096];
+        try (FileInputStream inputStream = new FileInputStream(file)) {
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, read);
+            }
+        }
+        return outputStream.toByteArray();
     }
 
     private void stopReferenceAudio() {
@@ -151,7 +348,6 @@ public class TonePracticeActivity extends AppCompatActivity {
         }
         isRecording = true;
         shouldRecognizeSpeech = recognizeSpeech;
-        recordingStartMs = android.os.SystemClock.elapsedRealtime();
 
         userPitch.clear();
         visualizerView.setUserData(userPitch);
@@ -190,29 +386,32 @@ public class TonePracticeActivity extends AppCompatActivity {
             }
         });
 
-        handler.postDelayed(stopRecordingRunnable, 3000);
+        int recordingDurationMs = recognizeSpeech
+                ? USER_RECORDING_DURATION_MS
+                : REFERENCE_RECORDING_DURATION_MS;
+        handler.postDelayed(stopRecordingRunnable, recordingDurationMs);
     }
 
     private void stopRecordingAndAnalyze(boolean recognizeSpeech) {
         pitchAnalyzer.stop();
         isRecording = false;
         userSample = new ToneSample(new ArrayList<>(userPitch), 20);
-        long durationMs = android.os.SystemClock.elapsedRealtime() - recordingStartMs;
-        compareToneDirection(recognizeSpeech, durationMs);
+        compareToneDirection(recognizeSpeech);
         if (recognizeSpeech) {
             startSpeechRecognition();
         }
     }
 
-    private void compareToneDirection(boolean strictAnalysis, long durationMs) {
+    private void compareToneDirection(boolean strictAnalysis) {
         ToneSample.Direction referenceDirection = referenceSample.getDirection();
         ToneSample.Direction userDirection;
         if (strictAnalysis) {
             userDirection = userSample.getDirection();
         } else {
-            float threshold = getReferenceThreshold(durationMs);
-            int minSamples = getReferenceMinSamples(durationMs);
-            userDirection = userSample.getDirection(threshold, minSamples);
+            userDirection = userSample.getDirection(
+                    DEFAULT_REFERENCE_THRESHOLD,
+                    DEFAULT_REFERENCE_MIN_SAMPLES
+            );
         }
 
         String text;
@@ -224,26 +423,6 @@ public class TonePracticeActivity extends AppCompatActivity {
             text = getString(R.string.tone_result_diff);
         }
         tvToneResult.setText(text);
-    }
-
-    private float getReferenceThreshold(long durationMs) {
-        if (durationMs <= 800) {
-            return 8f;
-        } else if (durationMs <= 1500) {
-            return 12f;
-        } else if (durationMs <= 2500) {
-            return 16f;
-        }
-        return 20f;
-    }
-
-    private int getReferenceMinSamples(long durationMs) {
-        if (durationMs <= 800) {
-            return 1;
-        } else if (durationMs <= 1500) {
-            return 2;
-        }
-        return 3;
     }
 
     private void startSpeechRecognition() {
