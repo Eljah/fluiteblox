@@ -18,6 +18,7 @@ import com.example.tonetrainer.R;
 import com.example.tonetrainer.audio.PitchAnalyzer;
 import com.example.tonetrainer.model.ToneSample;
 import com.example.tonetrainer.model.VietnameseSyllable;
+import com.example.tonetrainer.ui.SpectrogramView;
 import com.example.tonetrainer.ui.ToneVisualizerView;
 import com.example.tonetrainer.util.TextDiffUtil;
 
@@ -34,6 +35,7 @@ public class TonePracticeActivity extends AppCompatActivity {
     private TextView tvToneResult;
     private Button btnPlayReference;
     private Button btnRecordUser;
+    private SpectrogramView spectrogramView;
 
     private VietnameseSyllable targetSyllable;
     private ToneSample referenceSample;
@@ -44,8 +46,17 @@ public class TonePracticeActivity extends AppCompatActivity {
 
     private PitchAnalyzer pitchAnalyzer;
     private final List<Float> userPitch = new ArrayList<>();
+    private boolean isRecording = false;
+    private boolean shouldRecognizeSpeech = false;
+    private long recordingStartMs = 0L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable stopRecordingRunnable = new Runnable() {
+        @Override
+        public void run() {
+            stopRecordingAndAnalyze(shouldRecognizeSpeech);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,6 +70,7 @@ public class TonePracticeActivity extends AppCompatActivity {
         tvToneResult = findViewById(R.id.tv_tone_result);
         btnPlayReference = findViewById(R.id.btn_play_reference);
         btnRecordUser = findViewById(R.id.btn_record_user);
+        spectrogramView = findViewById(R.id.spectrogramView);
 
         pitchAnalyzer = new PitchAnalyzer();
 
@@ -107,6 +119,7 @@ public class TonePracticeActivity extends AppCompatActivity {
     private void playReference() {
         visualizerView.setReferenceData(referenceSample.getPitchHz());
         visualizerView.setUserData(null);
+        startRecording(false);
         playReferenceAudio();
     }
 
@@ -128,10 +141,27 @@ public class TonePracticeActivity extends AppCompatActivity {
     }
 
     private void recordUser() {
+        startRecording(true);
+    }
+
+    private void startRecording(boolean recognizeSpeech) {
+        if (isRecording) {
+            handler.removeCallbacks(stopRecordingRunnable);
+            pitchAnalyzer.stop();
+        }
+        isRecording = true;
+        shouldRecognizeSpeech = recognizeSpeech;
+        recordingStartMs = android.os.SystemClock.elapsedRealtime();
+
         userPitch.clear();
         visualizerView.setUserData(userPitch);
-        tvRecognized.setText("");
-        tvDiff.setText("");
+        if (spectrogramView != null) {
+            spectrogramView.clear();
+        }
+        if (recognizeSpeech) {
+            tvRecognized.setText("");
+            tvDiff.setText("");
+        }
         tvToneResult.setText("");
 
         pitchAnalyzer.startRealtimePitch(new PitchAnalyzer.PitchListener() {
@@ -145,26 +175,45 @@ public class TonePracticeActivity extends AppCompatActivity {
                     }
                 });
             }
+        }, new PitchAnalyzer.SpectrumListener() {
+            @Override
+            public void onSpectrum(final float[] magnitudes, final int sampleRate) {
+                if (spectrogramView == null) {
+                    return;
+                }
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        spectrogramView.addSpectrumFrame(magnitudes, sampleRate, magnitudes.length * 2);
+                    }
+                });
+            }
         });
 
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                stopRecordingAndAnalyze();
-            }
-        }, 3000);
+        handler.postDelayed(stopRecordingRunnable, 3000);
     }
 
-    private void stopRecordingAndAnalyze() {
+    private void stopRecordingAndAnalyze(boolean recognizeSpeech) {
         pitchAnalyzer.stop();
+        isRecording = false;
         userSample = new ToneSample(new ArrayList<>(userPitch), 20);
-        compareToneDirection();
-        startSpeechRecognition();
+        long durationMs = android.os.SystemClock.elapsedRealtime() - recordingStartMs;
+        compareToneDirection(recognizeSpeech, durationMs);
+        if (recognizeSpeech) {
+            startSpeechRecognition();
+        }
     }
 
-    private void compareToneDirection() {
+    private void compareToneDirection(boolean strictAnalysis, long durationMs) {
         ToneSample.Direction referenceDirection = referenceSample.getDirection();
-        ToneSample.Direction userDirection = userSample.getDirection();
+        ToneSample.Direction userDirection;
+        if (strictAnalysis) {
+            userDirection = userSample.getDirection();
+        } else {
+            float threshold = getReferenceThreshold(durationMs);
+            int minSamples = getReferenceMinSamples(durationMs);
+            userDirection = userSample.getDirection(threshold, minSamples);
+        }
 
         String text;
         if (userPitch.isEmpty()) {
@@ -175,6 +224,26 @@ public class TonePracticeActivity extends AppCompatActivity {
             text = getString(R.string.tone_result_diff);
         }
         tvToneResult.setText(text);
+    }
+
+    private float getReferenceThreshold(long durationMs) {
+        if (durationMs <= 800) {
+            return 8f;
+        } else if (durationMs <= 1500) {
+            return 12f;
+        } else if (durationMs <= 2500) {
+            return 16f;
+        }
+        return 20f;
+    }
+
+    private int getReferenceMinSamples(long durationMs) {
+        if (durationMs <= 800) {
+            return 1;
+        } else if (durationMs <= 1500) {
+            return 2;
+        }
+        return 3;
     }
 
     private void startSpeechRecognition() {
@@ -242,6 +311,7 @@ public class TonePracticeActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        handler.removeCallbacks(stopRecordingRunnable);
         pitchAnalyzer.stop();
         stopReferenceAudio();
         if (textToSpeech != null) {

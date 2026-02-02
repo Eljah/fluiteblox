@@ -20,12 +20,17 @@ public class ToneSample {
     }
 
     public Direction getDirection() {
-        if (pitchHz == null || pitchHz.size() < 2) {
+        return getDirection(20f, 2);
+    }
+
+    public Direction getDirection(float thresholdHz, int minValidSamples) {
+        if (pitchHz == null || pitchHz.size() < minValidSamples) {
             return Direction.FLAT;
         }
         float first = 0f;
         float last = 0f;
         boolean firstSet = false;
+        int validSamples = 0;
         for (Float value : pitchHz) {
             if (value != null && value > 0f) {
                 if (!firstSet) {
@@ -33,15 +38,16 @@ public class ToneSample {
                     firstSet = true;
                 }
                 last = value;
+                validSamples++;
             }
         }
-        if (!firstSet) {
+        if (!firstSet || validSamples < minValidSamples) {
             return Direction.FLAT;
         }
         float diff = last - first;
-        if (diff > 20f) {
+        if (diff > thresholdHz) {
             return Direction.RISING;
-        } else if (diff < -20f) {
+        } else if (diff < -thresholdHz) {
             return Direction.FALLING;
         } else {
             return Direction.FLAT;

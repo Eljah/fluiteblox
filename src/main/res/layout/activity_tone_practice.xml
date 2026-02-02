@@ -43,6 +43,13 @@
             android:layout_marginTop="16dp"
             android:textSize="16sp" />
 
+        <com.example.tonetrainer.ui.SpectrogramView
+            android:id="@+id/spectrogramView"
+            android:layout_width="match_parent"
+            android:layout_height="220dp"
+            android:layout_marginTop="12dp"
+            android:background="#222222" />
+
         <TextView
             android:id="@+id/tv_recognized"
             android:layout_width="match_parent"
