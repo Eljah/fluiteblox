@@ -18,6 +18,7 @@ import com.example.tonetrainer.R;
 import com.example.tonetrainer.audio.PitchAnalyzer;
 import com.example.tonetrainer.model.ToneSample;
 import com.example.tonetrainer.model.VietnameseSyllable;
+import com.example.tonetrainer.ui.SpectrogramView;
 import com.example.tonetrainer.ui.ToneVisualizerView;
 import com.example.tonetrainer.util.TextDiffUtil;
 
@@ -34,6 +35,7 @@ public class TonePracticeActivity extends AppCompatActivity {
     private TextView tvToneResult;
     private Button btnPlayReference;
     private Button btnRecordUser;
+    private SpectrogramView spectrogramView;
 
     private VietnameseSyllable targetSyllable;
     private ToneSample referenceSample;
@@ -68,6 +70,7 @@ public class TonePracticeActivity extends AppCompatActivity {
         tvToneResult = findViewById(R.id.tv_tone_result);
         btnPlayReference = findViewById(R.id.btn_play_reference);
         btnRecordUser = findViewById(R.id.btn_record_user);
+        spectrogramView = findViewById(R.id.spectrogramView);
 
         pitchAnalyzer = new PitchAnalyzer();
 
@@ -152,6 +155,9 @@ public class TonePracticeActivity extends AppCompatActivity {
 
         userPitch.clear();
         visualizerView.setUserData(userPitch);
+        if (spectrogramView != null) {
+            spectrogramView.clear();
+        }
         if (recognizeSpeech) {
             tvRecognized.setText("");
             tvDiff.setText("");
@@ -166,6 +172,19 @@ public class TonePracticeActivity extends AppCompatActivity {
                     @Override
                     public void run() {
                         visualizerView.setUserData(userPitch);
+                    }
+                });
+            }
+        }, new PitchAnalyzer.SpectrumListener() {
+            @Override
+            public void onSpectrum(final float[] magnitudes, final int sampleRate) {
+                if (spectrogramView == null) {
+                    return;
+                }
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        spectrogramView.addSpectrumFrame(magnitudes, sampleRate, magnitudes.length * 2);
                     }
                 });
             }
