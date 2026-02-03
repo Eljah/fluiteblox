@@ -78,6 +78,26 @@
                 </configuration>
             </plugin>
             <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>prepare-aab-module</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <copy file="${project.build.directory}/${project.build.finalName}.ap_"
+                                      tofile="${project.build.directory}/${project.build.finalName}.ap_.zip"
+                                      overwrite="true" />
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.3.0</version>
@@ -94,7 +114,7 @@
                             <arguments>
                                 <argument>build-bundle</argument>
                                 <argument>--modules</argument>
-                                <argument>${project.build.directory}/${project.build.finalName}.ap_</argument>
+                                <argument>${project.build.directory}/${project.build.finalName}.ap_.zip</argument>
                                 <argument>--output</argument>
                                 <argument>${project.build.directory}/${project.build.finalName}.aab</argument>
                             </arguments>
