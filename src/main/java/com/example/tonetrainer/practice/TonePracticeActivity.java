@@ -10,7 +10,10 @@ import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import android.support.v7.app.AppCompatActivity;
@@ -30,10 +33,34 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class TonePracticeActivity extends AppCompatActivity {
+
+    private static final String[] CONSONANTS = {"", "m", "n", "l", "b", "d", "g", "h", "k", "ng"};
+    private static final String[] VOWELS = {
+            "a", "ă", "â", "e", "ê", "i", "o", "ô", "ơ", "u", "ư", "y"
+    };
+    private static final String[] TONES = {"ngang", "sắc", "huyền", "hỏi", "ngã", "nặng"};
+    private static final Map<String, String[]> TONE_FORMS = new HashMap<>();
+
+    static {
+        TONE_FORMS.put("a", new String[]{"a", "á", "à", "ả", "ã", "ạ"});
+        TONE_FORMS.put("ă", new String[]{"ă", "ắ", "ằ", "ẳ", "ẵ", "ặ"});
+        TONE_FORMS.put("â", new String[]{"â", "ấ", "ầ", "ẩ", "ẫ", "ậ"});
+        TONE_FORMS.put("e", new String[]{"e", "é", "è", "ẻ", "ẽ", "ẹ"});
+        TONE_FORMS.put("ê", new String[]{"ê", "ế", "ề", "ể", "ễ", "ệ"});
+        TONE_FORMS.put("i", new String[]{"i", "í", "ì", "ỉ", "ĩ", "ị"});
+        TONE_FORMS.put("o", new String[]{"o", "ó", "ò", "ỏ", "õ", "ọ"});
+        TONE_FORMS.put("ô", new String[]{"ô", "ố", "ồ", "ổ", "ỗ", "ộ"});
+        TONE_FORMS.put("ơ", new String[]{"ơ", "ớ", "ờ", "ở", "ỡ", "ợ"});
+        TONE_FORMS.put("u", new String[]{"u", "ú", "ù", "ủ", "ũ", "ụ"});
+        TONE_FORMS.put("ư", new String[]{"ư", "ứ", "ừ", "ử", "ữ", "ự"});
+        TONE_FORMS.put("y", new String[]{"y", "ý", "ỳ", "ỷ", "ỹ", "ỵ"});
+    }
 
     private ToneVisualizerView visualizerView;
     private TextView tvTarget;
@@ -43,6 +70,9 @@ public class TonePracticeActivity extends AppCompatActivity {
     private Button btnPlayReference;
     private Button btnRecordUser;
     private SpectrogramView spectrogramView;
+    private Spinner practiceConsonantSpinner;
+    private Spinner practiceVowelSpinner;
+    private Spinner practiceToneSpinner;
 
     private VietnameseSyllable targetSyllable;
     private ToneSample referenceSample;
@@ -83,11 +113,14 @@ public class TonePracticeActivity extends AppCompatActivity {
         btnPlayReference = findViewById(R.id.btn_play_reference);
         btnRecordUser = findViewById(R.id.btn_record_user);
         spectrogramView = findViewById(R.id.spectrogramView);
+        practiceConsonantSpinner = findViewById(R.id.spinner_practice_consonant);
+        practiceVowelSpinner = findViewById(R.id.spinner_practice_vowel);
+        practiceToneSpinner = findViewById(R.id.spinner_practice_tone);
 
         pitchAnalyzer = new PitchAnalyzer();
 
-        targetSyllable = new VietnameseSyllable("má", "sắc", R.raw.ma2);
-        tvTarget.setText(targetSyllable.getText());
+        setupSpinners();
+        updateTargetFromSelection();
 
         textToSpeech = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
             @Override
@@ -121,6 +154,68 @@ public class TonePracticeActivity extends AppCompatActivity {
                 recordUser();
             }
         });
+    }
+
+    private void setupSpinners() {
+        ArrayAdapter<String> consonantAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, CONSONANTS);
+        consonantAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+
+        ArrayAdapter<String> vowelAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, VOWELS);
+        vowelAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+
+        ArrayAdapter<String> toneAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, TONES);
+        toneAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+
+        practiceConsonantSpinner.setAdapter(consonantAdapter);
+        practiceVowelSpinner.setAdapter(vowelAdapter);
+        practiceToneSpinner.setAdapter(toneAdapter);
+
+        AdapterView.OnItemSelectedListener updateListener = new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                updateTargetFromSelection();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        };
+        practiceConsonantSpinner.setOnItemSelectedListener(updateListener);
+        practiceVowelSpinner.setOnItemSelectedListener(updateListener);
+        practiceToneSpinner.setOnItemSelectedListener(updateListener);
+    }
+
+    private void updateTargetFromSelection() {
+        String syllable = buildSyllable(practiceConsonantSpinner, practiceVowelSpinner, practiceToneSpinner);
+        String tone = String.valueOf(practiceToneSpinner.getSelectedItem());
+        targetSyllable = new VietnameseSyllable(syllable, tone, 0);
+        tvTarget.setText(syllable);
+    }
+
+    private String buildSyllable(Spinner consonantSpinner, Spinner vowelSpinner, Spinner toneSpinner) {
+        String consonant = String.valueOf(consonantSpinner.getSelectedItem());
+        String vowel = String.valueOf(vowelSpinner.getSelectedItem());
+        String tone = String.valueOf(toneSpinner.getSelectedItem());
+        String tonedVowel = applyTone(vowel, tone);
+        return (consonant + tonedVowel).trim();
+    }
+
+    private String applyTone(String vowel, String toneLabel) {
+        int toneIndex = 0;
+        for (int i = 0; i < TONES.length; i++) {
+            if (TONES[i].equals(toneLabel)) {
+                toneIndex = i;
+                break;
+            }
+        }
+        String[] forms = TONE_FORMS.get(vowel);
+        if (forms == null || toneIndex >= forms.length) {
+            return vowel;
+        }
+        return forms[toneIndex];
     }
 
     private ToneSample createSimpleReferenceSample() {

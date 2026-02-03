@@ -30,16 +30,24 @@ import java.util.Map;
 public class ToneDemoActivity extends AppCompatActivity {
 
     private static final String[] CONSONANTS = {"", "m", "n", "l", "b", "d", "g", "h", "k", "ng"};
-    private static final String[] VOWELS = {"a", "e", "i", "o", "u", "y"};
+    private static final String[] VOWELS = {
+            "a", "ă", "â", "e", "ê", "i", "o", "ô", "ơ", "u", "ư", "y"
+    };
     private static final String[] TONES = {"ngang", "sắc", "huyền", "hỏi", "ngã", "nặng"};
     private static final Map<String, String[]> TONE_FORMS = new HashMap<>();
 
     static {
         TONE_FORMS.put("a", new String[]{"a", "á", "à", "ả", "ã", "ạ"});
+        TONE_FORMS.put("ă", new String[]{"ă", "ắ", "ằ", "ẳ", "ẵ", "ặ"});
+        TONE_FORMS.put("â", new String[]{"â", "ấ", "ầ", "ẩ", "ẫ", "ậ"});
         TONE_FORMS.put("e", new String[]{"e", "é", "è", "ẻ", "ẽ", "ẹ"});
+        TONE_FORMS.put("ê", new String[]{"ê", "ế", "ề", "ể", "ễ", "ệ"});
         TONE_FORMS.put("i", new String[]{"i", "í", "ì", "ỉ", "ĩ", "ị"});
         TONE_FORMS.put("o", new String[]{"o", "ó", "ò", "ỏ", "õ", "ọ"});
+        TONE_FORMS.put("ô", new String[]{"ô", "ố", "ồ", "ổ", "ỗ", "ộ"});
+        TONE_FORMS.put("ơ", new String[]{"ơ", "ớ", "ờ", "ở", "ỡ", "ợ"});
         TONE_FORMS.put("u", new String[]{"u", "ú", "ù", "ủ", "ũ", "ụ"});
+        TONE_FORMS.put("ư", new String[]{"ư", "ứ", "ừ", "ử", "ữ", "ự"});
         TONE_FORMS.put("y", new String[]{"y", "ý", "ỳ", "ỷ", "ỹ", "ỵ"});
     }
 
