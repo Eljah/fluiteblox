@@ -77,12 +77,12 @@ jobs:
               { owner, repo, per_page: 100 }
             );
             const matching = artifacts
-              .filter((artifact) => artifact.name === artifactName)
+              .filter((artifact) => artifactNames.includes(artifact.name))
               .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
             const toDelete = matching.slice(3);
 
             core.info(
-              `Found ${matching.length} artifacts for ${artifactName}. Deleting ${toDelete.length}.`
+              `Found ${matching.length} artifacts for ${artifactNames.join(", ")}. Deleting ${toDelete.length}.`
             );
             for (const artifact of toDelete) {
               try {
