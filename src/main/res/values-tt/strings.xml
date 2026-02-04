@@ -14,6 +14,8 @@
     <string name="label_sample_selected">Үрнәк: %1$s</string>
     <string name="label_demo_phrase">Демо: %1$s</string>
     <string name="btn_record_user">Үз версиямне яздырырга</string>
+    <string name="btn_play_user_recording">Үз язмамны уйнату</string>
+    <string name="btn_voice_settings">Тавыш көйләүләре</string>
     <string name="label_select_consonant">Тартык</string>
     <string name="label_select_base_vowel">Төп сузык</string>
     <string name="label_select_tone">Тон</string>
@@ -35,4 +37,10 @@
     <string name="tone_result_match">Тон юнәлеше үрнәк белән туры килә.</string>
     <string name="tone_result_diff">Тон юнәлеше үрнәктән аерыла.</string>
     <string name="tone_result_no_data">Тонны анализлау өчен мәгълүмат җитми.</string>
+    <string name="title_voice_settings">Тавыш көйләүләре</string>
+    <string name="label_voice_gender">Тавыш җенесе</string>
+    <string name="label_voice_gender_hint">Сайланган сөйләм синтезаторы ир һәм хатын-кыз тавышларын тәкъдим итсә кулланыла.</string>
+    <string name="voice_gender_auto">Автоматик</string>
+    <string name="voice_gender_male">Ир-ат</string>
+    <string name="voice_gender_female">Хатын-кыз</string>
 </resources>

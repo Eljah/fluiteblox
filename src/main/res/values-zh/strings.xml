@@ -14,6 +14,8 @@
     <string name="label_sample_selected">参考：%1$s</string>
     <string name="label_demo_phrase">演示：%1$s</string>
     <string name="btn_record_user">录制我的版本</string>
+    <string name="btn_play_user_recording">播放我的录音</string>
+    <string name="btn_voice_settings">语音设置</string>
     <string name="label_select_consonant">辅音</string>
     <string name="label_select_base_vowel">基本元音</string>
     <string name="label_select_tone">声调</string>
@@ -35,4 +37,10 @@
     <string name="tone_result_match">声调走向与参考一致。</string>
     <string name="tone_result_diff">声调走向与参考不同。</string>
     <string name="tone_result_no_data">数据不足，无法分析声调。</string>
+    <string name="title_voice_settings">语音设置</string>
+    <string name="label_voice_gender">语音性别</string>
+    <string name="label_voice_gender_hint">当所选文字转语音引擎提供男女声音时应用。</string>
+    <string name="voice_gender_auto">自动</string>
+    <string name="voice_gender_male">男声</string>
+    <string name="voice_gender_female">女声</string>
 </resources>

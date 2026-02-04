@@ -14,6 +14,8 @@
     <string name="label_sample_selected">المرجع: %1$s</string>
     <string name="label_demo_phrase">العرض: %1$s</string>
     <string name="btn_record_user">تسجيل نسختي</string>
+    <string name="btn_play_user_recording">تشغيل تسجيلي</string>
+    <string name="btn_voice_settings">إعدادات الصوت</string>
     <string name="label_select_consonant">حرف ساكن</string>
     <string name="label_select_base_vowel">حرف علّة أساسي</string>
     <string name="label_select_tone">نغمة</string>
@@ -35,4 +37,10 @@
     <string name="tone_result_match">اتجاه النغمة يطابق المرجع.</string>
     <string name="tone_result_diff">اتجاه النغمة يختلف عن المرجع.</string>
     <string name="tone_result_no_data">لا توجد بيانات كافية لتحليل النغمة.</string>
+    <string name="title_voice_settings">إعدادات الصوت</string>
+    <string name="label_voice_gender">جنس الصوت</string>
+    <string name="label_voice_gender_hint">يُطبَّق عند توفر أصوات ذكر/أنثى في محرك تحويل النص إلى كلام المحدد.</string>
+    <string name="voice_gender_auto">تلقائي</string>
+    <string name="voice_gender_male">ذكر</string>
+    <string name="voice_gender_female">أنثى</string>
 </resources>

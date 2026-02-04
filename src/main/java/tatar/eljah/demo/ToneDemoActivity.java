@@ -12,6 +12,7 @@ import android.widget.TextView;
 
 import tatar.eljah.R;
 import tatar.eljah.audio.PitchAnalyzer;
+import tatar.eljah.tts.TtsVoiceSelector;
 import tatar.eljah.ui.SpectrogramView;
 import tatar.eljah.ui.ToneVisualizerView;
 
@@ -166,6 +167,9 @@ public class ToneDemoActivity extends AppCompatActivity {
                     int languageStatus = textToSpeech.setLanguage(vietnameseLocale);
                     isTtsReady = languageStatus != TextToSpeech.LANG_MISSING_DATA
                             && languageStatus != TextToSpeech.LANG_NOT_SUPPORTED;
+                    if (isTtsReady) {
+                        TtsVoiceSelector.applyPreferredVoice(ToneDemoActivity.this, textToSpeech, vietnameseLocale);
+                    }
                 }
             }
         }, "com.google.android.tts");

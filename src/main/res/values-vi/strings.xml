@@ -14,6 +14,8 @@
     <string name="label_sample_selected">Mẫu chuẩn: %1$s</string>
     <string name="label_demo_phrase">Demo: %1$s</string>
     <string name="btn_record_user">Ghi âm phiên bản của tôi</string>
+    <string name="btn_play_user_recording">Phát bản ghi của tôi</string>
+    <string name="btn_voice_settings">Cài đặt giọng nói</string>
     <string name="label_select_consonant">Phụ âm</string>
     <string name="label_select_base_vowel">Nguyên âm cơ bản</string>
     <string name="label_select_tone">Thanh điệu</string>
@@ -35,4 +37,10 @@
     <string name="tone_result_match">Hướng thanh điệu khớp với mẫu chuẩn.</string>
     <string name="tone_result_diff">Hướng thanh điệu khác với mẫu chuẩn.</string>
     <string name="tone_result_no_data">Không đủ dữ liệu để phân tích thanh điệu.</string>
+    <string name="title_voice_settings">Cài đặt giọng nói</string>
+    <string name="label_voice_gender">Giới tính giọng nói</string>
+    <string name="label_voice_gender_hint">Áp dụng khi công cụ chuyển văn bản thành giọng nói đã chọn có giọng nam/nữ.</string>
+    <string name="voice_gender_auto">Tự động</string>
+    <string name="voice_gender_male">Nam</string>
+    <string name="voice_gender_female">Nữ</string>
 </resources>

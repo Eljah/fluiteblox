@@ -14,6 +14,8 @@
     <string name="label_sample_selected">Образец: %1$s</string>
     <string name="label_demo_phrase">Демо: %1$s</string>
     <string name="btn_record_user">Записать мой вариант</string>
+    <string name="btn_play_user_recording">Проиграть мою запись</string>
+    <string name="btn_voice_settings">Настройки голоса</string>
     <string name="label_select_consonant">Согласная</string>
     <string name="label_select_base_vowel">Базовая гласная</string>
     <string name="label_select_tone">Тон</string>
@@ -35,4 +37,10 @@
     <string name="tone_result_match">Направление тона совпадает с эталоном.</string>
     <string name="tone_result_diff">Направление тона отличается от эталона.</string>
     <string name="tone_result_no_data">Недостаточно данных для анализа тона.</string>
+    <string name="title_voice_settings">Настройки голоса</string>
+    <string name="label_voice_gender">Пол голоса</string>
+    <string name="label_voice_gender_hint">Применяется, если выбранный синтезатор речи поддерживает мужские и женские голоса.</string>
+    <string name="voice_gender_auto">Автоматически</string>
+    <string name="voice_gender_male">Мужской</string>
+    <string name="voice_gender_female">Женский</string>
 </resources>

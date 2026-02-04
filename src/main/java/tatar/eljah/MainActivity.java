@@ -7,6 +7,7 @@ import android.view.View;
 import tatar.eljah.demo.ToneDemoActivity;
 import tatar.eljah.practice.SyllableDiscriminationActivity;
 import tatar.eljah.practice.TonePracticeActivity;
+import tatar.eljah.settings.VoiceSettingsActivity;
 import tatar.eljah.R;
 
 public class MainActivity extends AppCompatActivity {
@@ -20,6 +21,7 @@ public class MainActivity extends AppCompatActivity {
         View practiceButton = findViewById(R.id.btn_practice);
         View soundModeButton = findViewById(R.id.btn_sound_mode);
         View toneModeButton = findViewById(R.id.btn_tone_mode);
+        View voiceSettingsButton = findViewById(R.id.btn_voice_settings);
 
         demoButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -51,6 +53,14 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 Intent intent = new Intent(MainActivity.this, SyllableDiscriminationActivity.class);
                 intent.putExtra(SyllableDiscriminationActivity.EXTRA_MODE, SyllableDiscriminationActivity.MODE_TONE);
+                startActivity(intent);
+            }
+        });
+
+        voiceSettingsButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(MainActivity.this, VoiceSettingsActivity.class);
                 startActivity(intent);
             }
         });

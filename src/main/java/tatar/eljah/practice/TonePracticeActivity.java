@@ -26,6 +26,7 @@ import tatar.eljah.R;
 import tatar.eljah.audio.PitchAnalyzer;
 import tatar.eljah.model.ToneSample;
 import tatar.eljah.model.VietnameseSyllable;
+import tatar.eljah.tts.TtsVoiceSelector;
 import tatar.eljah.ui.SpectrogramView;
 import tatar.eljah.ui.ToneVisualizerView;
 import tatar.eljah.util.TextDiffUtil;
@@ -145,6 +146,7 @@ public class TonePracticeActivity extends AppCompatActivity {
                     isTtsReady = languageStatus != TextToSpeech.LANG_MISSING_DATA
                             && languageStatus != TextToSpeech.LANG_NOT_SUPPORTED;
                     if (isTtsReady) {
+                        TtsVoiceSelector.applyPreferredVoice(TonePracticeActivity.this, textToSpeech, vietnameseLocale);
                         textToSpeech.setSpeechRate(REFERENCE_SPEECH_RATE);
                     }
                 }

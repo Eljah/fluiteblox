@@ -26,6 +26,9 @@
             android:name=".practice.SyllableDiscriminationActivity"
             android:exported="false" />
         <activity
+            android:name=".settings.VoiceSettingsActivity"
+            android:exported="false" />
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>

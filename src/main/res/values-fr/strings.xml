@@ -12,8 +12,10 @@
     <string name="label_first_syllable">Première syllabe</string>
     <string name="label_second_syllable">Deuxième syllabe</string>
     <string name="label_sample_selected">Référence : %1$s</string>
-    <string name="label_demo_phrase">Démo : %1$s</string>
+    <string name="label_demo_phrase">Démo : %1$s</string>
     <string name="btn_record_user">Enregistrer ma version</string>
+    <string name="btn_play_user_recording">Lire mon enregistrement</string>
+    <string name="btn_voice_settings">Paramètres de voix</string>
     <string name="label_select_consonant">Consonne</string>
     <string name="label_select_base_vowel">Voyelle de base</string>
     <string name="label_select_tone">Ton</string>
@@ -35,4 +37,10 @@
     <string name="tone_result_match">La direction du ton correspond à la référence.</string>
     <string name="tone_result_diff">La direction du ton diffère de la référence.</string>
     <string name="tone_result_no_data">Pas assez de données pour analyser le ton.</string>
+    <string name="title_voice_settings">Paramètres de voix</string>
+    <string name="label_voice_gender">Genre de la voix</string>
+    <string name="label_voice_gender_hint">Appliqué lorsque le moteur de synthèse vocale sélectionné propose des voix genrées.</string>
+    <string name="voice_gender_auto">Automatique</string>
+    <string name="voice_gender_male">Masculin</string>
+    <string name="voice_gender_female">Féminin</string>
 </resources>

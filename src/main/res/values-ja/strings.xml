@@ -14,6 +14,8 @@
     <string name="label_sample_selected">お手本: %1$s</string>
     <string name="label_demo_phrase">デモ: %1$s</string>
     <string name="btn_record_user">自分の音声を録音</string>
+    <string name="btn_play_user_recording">自分の録音を再生</string>
+    <string name="btn_voice_settings">音声設定</string>
     <string name="label_select_consonant">子音</string>
     <string name="label_select_base_vowel">基本母音</string>
     <string name="label_select_tone">声調</string>
@@ -35,4 +37,10 @@
     <string name="tone_result_match">声調の向きが参照と一致します。</string>
     <string name="tone_result_diff">声調の向きが参照と異なります。</string>
     <string name="tone_result_no_data">声調を分析するためのデータが不足しています。</string>
+    <string name="title_voice_settings">音声設定</string>
+    <string name="label_voice_gender">音声の性別</string>
+    <string name="label_voice_gender_hint">選択した音声合成エンジンに男女の音声がある場合に適用されます。</string>
+    <string name="voice_gender_auto">自動</string>
+    <string name="voice_gender_male">男性</string>
+    <string name="voice_gender_female">女性</string>
 </resources>

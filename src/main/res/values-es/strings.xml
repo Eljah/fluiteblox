@@ -14,6 +14,8 @@
     <string name="label_sample_selected">Referencia: %1$s</string>
     <string name="label_demo_phrase">Demo: %1$s</string>
     <string name="btn_record_user">Grabar mi versión</string>
+    <string name="btn_play_user_recording">Reproducir mi grabación</string>
+    <string name="btn_voice_settings">Ajustes de voz</string>
     <string name="label_select_consonant">Consonante</string>
     <string name="label_select_base_vowel">Vocal base</string>
     <string name="label_select_tone">Tono</string>
@@ -35,4 +37,10 @@
     <string name="tone_result_match">La dirección del tono coincide con la referencia.</string>
     <string name="tone_result_diff">La dirección del tono difiere de la referencia.</string>
     <string name="tone_result_no_data">No hay datos suficientes para analizar el tono.</string>
+    <string name="title_voice_settings">Ajustes de voz</string>
+    <string name="label_voice_gender">Género de la voz</string>
+    <string name="label_voice_gender_hint">Se aplica cuando el motor de texto a voz seleccionado ofrece voces con género.</string>
+    <string name="voice_gender_auto">Automático</string>
+    <string name="voice_gender_male">Masculino</string>
+    <string name="voice_gender_female">Femenino</string>
 </resources>
