@@ -9,9 +9,8 @@
     <packaging>apk</packaging>
 
     <properties>
-        <android.platform.version>28</android.platform.version>
-        <android.build.tools>28.0.3</android.build.tools>
-        <aab.skip>true</aab.skip>
+        <android.sdk.platform>34</android.sdk.platform>
+        <android.build.tools>34.0.0</android.build.tools>
         <java.version>1.8</java.version>
     </properties>
 
@@ -19,15 +18,21 @@
         <dependency>
             <groupId>android</groupId>
             <artifactId>android</artifactId>
-            <version>28</version>
+            <version>34</version>
             <scope>system</scope>
-            <systemPath>${env.ANDROID_HOME}/platforms/android-${android.platform.version}/android.jar</systemPath>
+            <systemPath>${env.ANDROID_HOME}/platforms/android-${android.sdk.platform}/android.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>com.android.support</groupId>
             <artifactId>appcompat-v7</artifactId>
             <version>28.0.0</version>
             <type>aar</type>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.android.support</groupId>
+                    <artifactId>animated-vector-drawable</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>com.android.support</groupId>
@@ -55,17 +60,39 @@
             <extension>
                 <groupId>com.simpligility.maven.plugins</groupId>
                 <artifactId>android-maven-plugin</artifactId>
-                <version>4.5.0</version>
+                <version>4.6.0</version>
             </extension>
         </extensions>
         <plugins>
             <plugin>
                 <groupId>com.simpligility.maven.plugins</groupId>
                 <artifactId>android-maven-plugin</artifactId>
-                <version>4.5.0</version>
+                <version>4.6.0</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>javax.xml.bind</groupId>
+                        <artifactId>jaxb-api</artifactId>
+                        <version>2.3.1</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>com.sun.xml.bind</groupId>
+                        <artifactId>jaxb-impl</artifactId>
+                        <version>2.3.3</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>com.sun.xml.bind</groupId>
+                        <artifactId>jaxb-core</artifactId>
+                        <version>2.3.0.1</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>javax.activation</groupId>
+                        <artifactId>activation</artifactId>
+                        <version>1.1.1</version>
+                    </dependency>
+                </dependencies>
                 <configuration>
                     <sdk>
-                        <platform>28</platform>
+                        <platform>${android.sdk.platform}</platform>
                         <buildTools>${android.build.tools}</buildTools>
                     </sdk>
                     <deleteConflictingFiles>true</deleteConflictingFiles>
@@ -127,4 +154,5 @@
             </plugin>
         </plugins>
     </build>
+
 </project>

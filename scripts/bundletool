@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUNDLETOOL_JAR="$REPO_ROOT/tools/bundletool.jar"
+
+if [[ ! -f "$BUNDLETOOL_JAR" ]]; then
+  mkdir -p "$REPO_ROOT/tools"
+  curl -sSL -o "$BUNDLETOOL_JAR" \
+    https://github.com/google/bundletool/releases/download/1.16.0/bundletool-all-1.16.0.jar
+fi
+
+exec java -jar "$BUNDLETOOL_JAR" "$@"

@@ -1,0 +1,5 @@
+android-sdk/
+keystore/release-key.jks
+.jdk/
+tools/bundletool.jar
+target/
