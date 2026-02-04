@@ -47,10 +47,30 @@ jobs:
       - name: Prepare release keystore
         run: bash scripts/prepare-keystore.sh
 
+      - name: Bump minor version
+        run: |
+          python - <<'PY'
+          import pathlib
+          import re
+
+          path = pathlib.Path("pom.xml")
+          text = path.read_text()
+          match = re.search(r"<version>(\d+)\.(\d+)([^<]*)</version>", text)
+          if not match:
+            raise SystemExit("Could not find project version in pom.xml")
+          major, minor, suffix = match.groups()
+          new_version = f"{major}.{int(minor) + 1}{suffix}"
+          text = text[:match.start()] + f"<version>{new_version}</version>" + text[match.end():]
+          path.write_text(text)
+          print(f"Bumped version to {new_version}")
+          PY
+
       - name: Build APK (Maven)
         run: PATH="${GITHUB_WORKSPACE}/scripts:${PATH}" mvn -U -Dexec.skip=true package
 
       - name: Sign APK (release keystore)
+        env:
+          BUILD_TOOLS_VERSION: 34.0.0
         run: bash scripts/sign-apk.sh
 
       - name: Build AAB (bundletool + signing)
@@ -63,7 +83,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vietnamese-tone-trainer-apk
-          path: target/*.apk
+          path: target/*-signed.apk
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
