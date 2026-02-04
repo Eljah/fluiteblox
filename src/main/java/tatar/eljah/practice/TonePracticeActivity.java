@@ -2,6 +2,7 @@ package tatar.eljah.practice;
 
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -32,6 +33,7 @@ import tatar.eljah.util.TextDiffUtil;
 import java.io.File;
 import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -73,6 +75,7 @@ public class TonePracticeActivity extends AppCompatActivity {
     private TextView tvToneResult;
     private Button btnPlayReference;
     private Button btnRecordUser;
+    private Button btnPlayUserRecording;
     private SpectrogramView spectrogramView;
     private Spinner practiceConsonantSpinner;
     private Spinner practiceVowelSpinner;
@@ -96,6 +99,10 @@ public class TonePracticeActivity extends AppCompatActivity {
     private boolean shouldRecognizeSpeech = false;
     private String referenceFileUtteranceId;
     private boolean pendingStartRecording = false;
+    private File userRecordingFile;
+    private ByteArrayOutputStream userPcmStream;
+    private int userSampleRate;
+    private MediaPlayer userPlayer;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable stopRecordingRunnable = new Runnable() {
@@ -117,6 +124,7 @@ public class TonePracticeActivity extends AppCompatActivity {
         tvToneResult = findViewById(R.id.tv_tone_result);
         btnPlayReference = findViewById(R.id.btn_play_reference);
         btnRecordUser = findViewById(R.id.btn_record_user);
+        btnPlayUserRecording = findViewById(R.id.btn_play_user_recording);
         spectrogramView = findViewById(R.id.spectrogramView);
         practiceConsonantSpinner = findViewById(R.id.spinner_practice_consonant);
         practiceVowelSpinner = findViewById(R.id.spinner_practice_vowel);
@@ -158,6 +166,14 @@ public class TonePracticeActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 recordUser();
+            }
+        });
+
+        btnPlayUserRecording.setEnabled(false);
+        btnPlayUserRecording.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                playUserRecording();
             }
         });
     }
@@ -483,6 +499,7 @@ public class TonePracticeActivity extends AppCompatActivity {
         shouldRecognizeSpeech = recognizeSpeech;
 
         userPitch.clear();
+        resetUserRecording();
         visualizerView.setUserData(userPitch);
         if (spectrogramView != null) {
             spectrogramView.clear();
@@ -517,6 +534,11 @@ public class TonePracticeActivity extends AppCompatActivity {
                     }
                 });
             }
+        }, new PitchAnalyzer.AudioListener() {
+            @Override
+            public void onAudio(short[] samples, int length, int sampleRate) {
+                appendUserPcm(samples, length, sampleRate);
+            }
         });
 
         int recordingDurationMs = recognizeSpeech
@@ -529,9 +551,125 @@ public class TonePracticeActivity extends AppCompatActivity {
         pitchAnalyzer.stop();
         isRecording = false;
         userSample = new ToneSample(new ArrayList<>(userPitch), 20);
+        finalizeUserRecording();
         compareToneDirection(recognizeSpeech);
         if (recognizeSpeech) {
             startSpeechRecognition();
+        }
+    }
+
+    private void resetUserRecording() {
+        stopUserPlayback();
+        deleteTempFile(userRecordingFile);
+        userRecordingFile = null;
+        userPcmStream = new ByteArrayOutputStream();
+        userSampleRate = 0;
+        btnPlayUserRecording.setEnabled(false);
+    }
+
+    private synchronized void appendUserPcm(short[] samples, int length, int sampleRate) {
+        if (userPcmStream == null) {
+            return;
+        }
+        if (userSampleRate == 0) {
+            userSampleRate = sampleRate;
+        }
+        byte[] bytes = new byte[length * 2];
+        int index = 0;
+        for (int i = 0; i < length; i++) {
+            short sample = samples[i];
+            bytes[index++] = (byte) (sample & 0xff);
+            bytes[index++] = (byte) ((sample >> 8) & 0xff);
+        }
+        userPcmStream.write(bytes, 0, bytes.length);
+    }
+
+    private void finalizeUserRecording() {
+        ByteArrayOutputStream pcmStream = userPcmStream;
+        userPcmStream = null;
+        if (pcmStream == null || pcmStream.size() == 0 || userSampleRate == 0) {
+            return;
+        }
+        File outputFile;
+        try {
+            outputFile = File.createTempFile("user_recording_", ".wav", getCacheDir());
+        } catch (IOException e) {
+            return;
+        }
+        byte[] pcmData = pcmStream.toByteArray();
+        if (!writeWavFile(outputFile, pcmData, userSampleRate)) {
+            deleteTempFile(outputFile);
+            return;
+        }
+        userRecordingFile = outputFile;
+        btnPlayUserRecording.setEnabled(true);
+    }
+
+    private boolean writeWavFile(File file, byte[] pcmData, int sampleRate) {
+        int channels = 1;
+        int bitsPerSample = 16;
+        int byteRate = sampleRate * channels * bitsPerSample / 8;
+        int dataSize = pcmData.length;
+        int chunkSize = 36 + dataSize;
+        try (FileOutputStream outputStream = new FileOutputStream(file)) {
+            outputStream.write(new byte[]{'R', 'I', 'F', 'F'});
+            writeIntLE(outputStream, chunkSize);
+            outputStream.write(new byte[]{'W', 'A', 'V', 'E'});
+            outputStream.write(new byte[]{'f', 'm', 't', ' '});
+            writeIntLE(outputStream, 16);
+            writeShortLE(outputStream, (short) 1);
+            writeShortLE(outputStream, (short) channels);
+            writeIntLE(outputStream, sampleRate);
+            writeIntLE(outputStream, byteRate);
+            writeShortLE(outputStream, (short) (channels * bitsPerSample / 8));
+            writeShortLE(outputStream, (short) bitsPerSample);
+            outputStream.write(new byte[]{'d', 'a', 't', 'a'});
+            writeIntLE(outputStream, dataSize);
+            outputStream.write(pcmData);
+            outputStream.flush();
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private void writeIntLE(FileOutputStream outputStream, int value) throws IOException {
+        outputStream.write(value & 0xff);
+        outputStream.write((value >> 8) & 0xff);
+        outputStream.write((value >> 16) & 0xff);
+        outputStream.write((value >> 24) & 0xff);
+    }
+
+    private void writeShortLE(FileOutputStream outputStream, short value) throws IOException {
+        outputStream.write(value & 0xff);
+        outputStream.write((value >> 8) & 0xff);
+    }
+
+    private void playUserRecording() {
+        if (userRecordingFile == null || !userRecordingFile.exists()) {
+            return;
+        }
+        stopUserPlayback();
+        userPlayer = new MediaPlayer();
+        try {
+            userPlayer.setDataSource(userRecordingFile.getAbsolutePath());
+            userPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                @Override
+                public void onCompletion(MediaPlayer mp) {
+                    stopUserPlayback();
+                }
+            });
+            userPlayer.prepare();
+            userPlayer.start();
+        } catch (IOException e) {
+            stopUserPlayback();
+        }
+    }
+
+    private void stopUserPlayback() {
+        if (userPlayer != null) {
+            userPlayer.release();
+            userPlayer = null;
         }
     }
 
@@ -626,6 +764,8 @@ public class TonePracticeActivity extends AppCompatActivity {
         handler.removeCallbacks(stopRecordingRunnable);
         pitchAnalyzer.stop();
         stopReferenceAudio();
+        stopUserPlayback();
+        deleteTempFile(userRecordingFile);
         if (textToSpeech != null) {
             textToSpeech.shutdown();
             textToSpeech = null;

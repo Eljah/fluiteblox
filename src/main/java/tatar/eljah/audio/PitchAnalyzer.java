@@ -14,6 +14,10 @@ public class PitchAnalyzer {
         void onSpectrum(float[] magnitudes, int sampleRate);
     }
 
+    public interface AudioListener {
+        void onAudio(short[] samples, int length, int sampleRate);
+    }
+
     private volatile boolean running;
     private Thread workerThread;
 
@@ -22,6 +26,12 @@ public class PitchAnalyzer {
     }
 
     public void startRealtimePitch(final PitchListener listener, final SpectrumListener spectrumListener) {
+        startRealtimePitch(listener, spectrumListener, null);
+    }
+
+    public void startRealtimePitch(final PitchListener listener,
+                                   final SpectrumListener spectrumListener,
+                                   final AudioListener audioListener) {
         if (running) {
             return;
         }
@@ -66,6 +76,11 @@ public class PitchAnalyzer {
                             if (spectrumListener != null) {
                                 float[] magnitudes = computeSpectrum(buffer, read);
                                 spectrumListener.onSpectrum(magnitudes, sampleRate);
+                            }
+                            if (audioListener != null) {
+                                short[] samples = new short[read];
+                                System.arraycopy(buffer, 0, samples, 0, read);
+                                audioListener.onAudio(samples, read, sampleRate);
                             }
                         }
                     }

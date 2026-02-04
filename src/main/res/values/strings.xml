@@ -14,6 +14,7 @@
     <string name="label_sample_selected">Reference: %1$s</string>
     <string name="label_demo_phrase">Demo: %1$s</string>
     <string name="btn_record_user">Record my version</string>
+    <string name="btn_play_user_recording">Play my recording</string>
     <string name="label_select_consonant">Consonant</string>
     <string name="label_select_base_vowel">Base vowel</string>
     <string name="label_select_tone">Tone</string>
