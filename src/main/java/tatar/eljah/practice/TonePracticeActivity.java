@@ -1,6 +1,7 @@
 package tatar.eljah.practice;
 
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -16,6 +17,8 @@ import android.widget.Button;
 import android.widget.Spinner;
 import android.widget.TextView;
 
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 
 import tatar.eljah.R;
@@ -40,6 +43,7 @@ import java.util.Map;
 
 public class TonePracticeActivity extends AppCompatActivity {
 
+    private static final int REQUEST_RECORD_AUDIO = 1001;
     private static final String[] CONSONANTS = {"", "m", "n", "l", "b", "d", "g", "h", "k", "ng"};
     private static final String[] VOWELS = {
             "a", "ă", "â", "e", "ê", "i", "o", "ô", "ơ", "u", "ư", "y"
@@ -91,6 +95,7 @@ public class TonePracticeActivity extends AppCompatActivity {
     private boolean isRecording = false;
     private boolean shouldRecognizeSpeech = false;
     private String referenceFileUtteranceId;
+    private boolean pendingStartRecording = false;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable stopRecordingRunnable = new Runnable() {
@@ -121,6 +126,7 @@ public class TonePracticeActivity extends AppCompatActivity {
 
         setupSpinners();
         updateTargetFromSelection();
+        ensureRecordingPermission();
 
         textToSpeech = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
             @Override
@@ -433,7 +439,39 @@ public class TonePracticeActivity extends AppCompatActivity {
     }
 
     private void recordUser() {
+        if (!ensureRecordingPermission()) {
+            pendingStartRecording = true;
+            return;
+        }
         startRecording(true);
+    }
+
+    private boolean ensureRecordingPermission() {
+        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED) {
+            return true;
+        }
+        ActivityCompat.requestPermissions(
+                this,
+                new String[]{android.Manifest.permission.RECORD_AUDIO},
+                REQUEST_RECORD_AUDIO
+        );
+        return false;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQUEST_RECORD_AUDIO) {
+            return;
+        }
+        boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+        if (granted && pendingStartRecording) {
+            pendingStartRecording = false;
+            startRecording(true);
+        } else if (!granted) {
+            pendingStartRecording = false;
+        }
     }
 
     private void startRecording(boolean recognizeSpeech) {
