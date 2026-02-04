@@ -1,4 +1,4 @@
-package com.example.tonetrainer.model;
+package tatar.eljah.model;
 
 import java.util.List;
 

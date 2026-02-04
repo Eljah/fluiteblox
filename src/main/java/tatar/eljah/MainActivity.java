@@ -1,12 +1,12 @@
-package com.example.tonetrainer;
+package tatar.eljah;
 
 import android.content.Intent;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
-import com.example.tonetrainer.demo.ToneDemoActivity;
-import com.example.tonetrainer.practice.TonePracticeActivity;
-import com.example.tonetrainer.R;
+import tatar.eljah.demo.ToneDemoActivity;
+import tatar.eljah.practice.TonePracticeActivity;
+import tatar.eljah.R;
 
 public class MainActivity extends AppCompatActivity {
 

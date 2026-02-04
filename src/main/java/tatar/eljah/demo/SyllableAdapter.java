@@ -1,4 +1,4 @@
-package com.example.tonetrainer.demo;
+package tatar.eljah.demo;
 
 import android.view.LayoutInflater;
 import android.view.View;
@@ -8,8 +8,8 @@ import android.widget.TextView;
 import android.support.annotation.NonNull;
 import android.support.v7.widget.RecyclerView;
 
-import com.example.tonetrainer.R;
-import com.example.tonetrainer.model.VietnameseSyllable;
+import tatar.eljah.R;
+import tatar.eljah.model.VietnameseSyllable;
 
 import java.util.List;
 

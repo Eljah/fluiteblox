@@ -1,4 +1,4 @@
-package com.example.tonetrainer.demo;
+package tatar.eljah.demo;
 
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
@@ -10,10 +10,10 @@ import android.widget.Button;
 import android.widget.Spinner;
 import android.widget.TextView;
 
-import com.example.tonetrainer.R;
-import com.example.tonetrainer.audio.PitchAnalyzer;
-import com.example.tonetrainer.ui.SpectrogramView;
-import com.example.tonetrainer.ui.ToneVisualizerView;
+import tatar.eljah.R;
+import tatar.eljah.audio.PitchAnalyzer;
+import tatar.eljah.ui.SpectrogramView;
+import tatar.eljah.ui.ToneVisualizerView;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;

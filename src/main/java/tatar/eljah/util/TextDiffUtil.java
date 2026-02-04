@@ -1,4 +1,4 @@
-package com.example.tonetrainer.util;
+package tatar.eljah.util;
 
 import android.graphics.Color;
 import android.text.Spannable;

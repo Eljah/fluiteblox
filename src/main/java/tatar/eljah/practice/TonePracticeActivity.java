@@ -1,4 +1,4 @@
-package com.example.tonetrainer.practice;
+package tatar.eljah.practice;
 
 import android.content.Intent;
 import android.os.Bundle;
@@ -18,13 +18,13 @@ import android.widget.TextView;
 
 import android.support.v7.app.AppCompatActivity;
 
-import com.example.tonetrainer.R;
-import com.example.tonetrainer.audio.PitchAnalyzer;
-import com.example.tonetrainer.model.ToneSample;
-import com.example.tonetrainer.model.VietnameseSyllable;
-import com.example.tonetrainer.ui.SpectrogramView;
-import com.example.tonetrainer.ui.ToneVisualizerView;
-import com.example.tonetrainer.util.TextDiffUtil;
+import tatar.eljah.R;
+import tatar.eljah.audio.PitchAnalyzer;
+import tatar.eljah.model.ToneSample;
+import tatar.eljah.model.VietnameseSyllable;
+import tatar.eljah.ui.SpectrogramView;
+import tatar.eljah.ui.ToneVisualizerView;
+import tatar.eljah.util.TextDiffUtil;
 
 import java.io.File;
 import java.io.ByteArrayOutputStream;

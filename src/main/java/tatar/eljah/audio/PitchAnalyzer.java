@@ -1,4 +1,4 @@
-package com.example.tonetrainer.audio;
+package tatar.eljah.audio;
 
 import android.media.AudioFormat;
 import android.media.AudioRecord;
