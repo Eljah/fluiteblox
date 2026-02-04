@@ -17,4 +17,18 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:text="@string/btn_practice" />
+
+    <Button
+        android:id="@+id/btn_sound_mode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/btn_sound_mode" />
+
+    <Button
+        android:id="@+id/btn_tone_mode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/btn_tone_mode" />
 </LinearLayout>

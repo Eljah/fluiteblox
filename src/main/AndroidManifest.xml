@@ -23,6 +23,9 @@
             android:name=".demo.ToneDemoActivity"
             android:exported="false" />
         <activity
+            android:name=".practice.SyllableDiscriminationActivity"
+            android:exported="false" />
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
