@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">ベトナム語声調トレーナー</string>
+    <string name="btn_demo">声調デモ</string>
+    <string name="btn_practice">練習</string>
+    <string name="btn_play_reference">お手本を再生</string>
+    <string name="btn_play_demo">デモを再生</string>
+    <string name="label_sample_section">お手本</string>
+    <string name="label_demo_section">デモ</string>
+    <string name="label_first_syllable">第1音節</string>
+    <string name="label_second_syllable">第2音節</string>
+    <string name="label_sample_selected">お手本: %1$s</string>
+    <string name="label_demo_phrase">デモ: %1$s</string>
+    <string name="btn_record_user">自分の音声を録音</string>
+    <string name="tone_result_match">声調の向きが参照と一致します。</string>
+    <string name="tone_result_diff">声調の向きが参照と異なります。</string>
+    <string name="tone_result_no_data">声調を分析するためのデータが不足しています。</string>
+</resources>

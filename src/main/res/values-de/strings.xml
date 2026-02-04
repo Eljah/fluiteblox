@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Trainer für vietnamesische Töne</string>
+    <string name="btn_demo">Ton-Demo</string>
+    <string name="btn_practice">Übung</string>
+    <string name="btn_play_reference">Referenz abspielen</string>
+    <string name="btn_play_demo">Demo abspielen</string>
+    <string name="label_sample_section">Referenz</string>
+    <string name="label_demo_section">Demo</string>
+    <string name="label_first_syllable">Erste Silbe</string>
+    <string name="label_second_syllable">Zweite Silbe</string>
+    <string name="label_sample_selected">Referenz: %1$s</string>
+    <string name="label_demo_phrase">Demo: %1$s</string>
+    <string name="btn_record_user">Meine Version aufnehmen</string>
+    <string name="tone_result_match">Die Tonrichtung stimmt mit der Referenz überein.</string>
+    <string name="tone_result_diff">Die Tonrichtung weicht von der Referenz ab.</string>
+    <string name="tone_result_no_data">Nicht genug Daten, um den Ton zu analysieren.</string>
+</resources>

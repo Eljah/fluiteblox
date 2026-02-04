@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">مدرب نغمات الفيتنامية</string>
+    <string name="btn_demo">عرض النغمات</string>
+    <string name="btn_practice">تدريب</string>
+    <string name="btn_play_reference">تشغيل المرجع</string>
+    <string name="btn_play_demo">تشغيل العرض</string>
+    <string name="label_sample_section">المرجع</string>
+    <string name="label_demo_section">عرض</string>
+    <string name="label_first_syllable">المقطع الأول</string>
+    <string name="label_second_syllable">المقطع الثاني</string>
+    <string name="label_sample_selected">المرجع: %1$s</string>
+    <string name="label_demo_phrase">العرض: %1$s</string>
+    <string name="btn_record_user">تسجيل نسختي</string>
+    <string name="tone_result_match">اتجاه النغمة يطابق المرجع.</string>
+    <string name="tone_result_diff">اتجاه النغمة يختلف عن المرجع.</string>
+    <string name="tone_result_no_data">لا توجد بيانات كافية لتحليل النغمة.</string>
+</resources>

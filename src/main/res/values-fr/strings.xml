@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Entraîneur de tons vietnamiens</string>
+    <string name="btn_demo">Démo des tons</string>
+    <string name="btn_practice">Entraînement</string>
+    <string name="btn_play_reference">Lire la référence</string>
+    <string name="btn_play_demo">Lire la démo</string>
+    <string name="label_sample_section">Référence</string>
+    <string name="label_demo_section">Démo</string>
+    <string name="label_first_syllable">Première syllabe</string>
+    <string name="label_second_syllable">Deuxième syllabe</string>
+    <string name="label_sample_selected">Référence : %1$s</string>
+    <string name="label_demo_phrase">Démo : %1$s</string>
+    <string name="btn_record_user">Enregistrer ma version</string>
+    <string name="tone_result_match">La direction du ton correspond à la référence.</string>
+    <string name="tone_result_diff">La direction du ton diffère de la référence.</string>
+    <string name="tone_result_no_data">Pas assez de données pour analyser le ton.</string>
+</resources>
