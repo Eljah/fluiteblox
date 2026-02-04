@@ -1,4 +1,4 @@
-package com.example.tonetrainer.model;
+package tatar.eljah.model;
 
 public class VietnameseSyllable {
     private final String text;

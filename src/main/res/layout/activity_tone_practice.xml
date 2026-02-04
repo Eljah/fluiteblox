@@ -63,7 +63,7 @@
             android:layout_marginTop="8dp"
             android:text="@string/btn_record_user" />
 
-        <com.example.tonetrainer.ui.ToneVisualizerView
+        <tatar.eljah.ui.ToneVisualizerView
             android:id="@+id/toneVisualizerView"
             android:layout_width="match_parent"
             android:layout_height="200dp"
@@ -76,7 +76,7 @@
             android:layout_marginTop="16dp"
             android:textSize="16sp" />
 
-        <com.example.tonetrainer.ui.SpectrogramView
+        <tatar.eljah.ui.SpectrogramView
             android:id="@+id/spectrogramView"
             android:layout_width="match_parent"
             android:layout_height="220dp"

@@ -136,13 +136,13 @@
             android:layout_marginTop="4dp"
             android:textSize="16sp" />
 
-        <com.example.tonetrainer.ui.ToneVisualizerView
+        <tatar.eljah.ui.ToneVisualizerView
             android:id="@+id/toneVisualizerView"
             android:layout_width="match_parent"
             android:layout_height="200dp"
             android:layout_marginTop="16dp"/>
 
-        <com.example.tonetrainer.ui.SpectrogramView
+        <tatar.eljah.ui.SpectrogramView
             android:id="@+id/spectrogramView"
             android:layout_width="match_parent"
             android:layout_height="220dp"

@@ -1,4 +1,4 @@
-package com.example.tonetrainer.ui;
+package tatar.eljah.ui;
 
 import android.content.Context;
 import android.graphics.Canvas;

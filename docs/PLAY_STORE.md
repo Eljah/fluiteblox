@@ -13,10 +13,10 @@ Google Play only accepts **signed** release artifacts.
 - The build is driven by `android-maven-plugin` in `pom.xml`, which does not currently define any signing configuration.
 
 ## 2) Build type: AAB (required for new uploads)
-New apps and updates must be uploaded as **AAB** (Android App Bundle). The current Maven setup packages as `apk` only, so we add a bundletool step on top of Maven to create a release AAB.
+New apps and updates must be uploaded as **AAB** (Android App Bundle). This repo already includes a bundletool step (`scripts/build-aab.sh`) wired into Maven to produce `target/app-release.aab`.
 
-**What to change**
-- Keep Maven for APK builds, and use the bundletool AAB step for the release bundle (see `scripts/build-aab.sh`).
+**What to do**
+- Use `scripts/build-aab.sh` (or the Maven profile that runs it) for release builds, and upload the resulting `.aab` to Play.
 
 ## 3) Versioning metadata (required)
 Google Play requires `versionCode` and `versionName` to be set.
@@ -36,7 +36,7 @@ Play enforces minimum **targetSdkVersion** levels (updated yearly). The manifest
 `com.example.*` is a placeholder package. Play requires a unique application ID.
 
 **What to change**
-- Replace `com.example.tonetrainer` with your own unique package name.
+- Replace `com.example.tonetrainer` with your own unique package name (for example, `tatar.eljah`).
 
 ## 6) Store listing / policy requirements (required)
 These are outside the build system but required to publish:
@@ -48,8 +48,7 @@ These are outside the build system but required to publish:
 
 ### Summary: “what is missing to publish?”
 1. **Release signing** (keystore + signing config).
-2. **AAB output** (bundletool step after Maven APK build).
-3. **Manifest versioning** (`versionCode` / `versionName`).
-4. **Modern SDK targeting** (`minSdkVersion`, `targetSdkVersion`).
-5. **Unique package name** (not `com.example`).
-6. Store listing + policy assets.
+2. **Manifest versioning** (`versionCode` / `versionName`).
+3. **Modern SDK targeting** (`minSdkVersion`, `targetSdkVersion`).
+4. **Unique package name** (not `com.example`).
+5. Store listing + policy assets.
