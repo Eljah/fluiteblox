@@ -5,14 +5,61 @@
 
     <groupId>tatar.eljah</groupId>
     <artifactId>vietnamese-tone-trainer</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>2</version>
     <packaging>apk</packaging>
 
     <properties>
         <android.sdk.platform>34</android.sdk.platform>
-        <android.build.tools>34.0.0</android.build.tools>
+        <android.build.tools>28.0.3</android.build.tools>
+        <android.sdk.home>/usr/local/lib/android/sdk</android.sdk.home>
+        <android.sdk.path>${android.sdk.home}</android.sdk.path>
+        <aab.skip>true</aab.skip>
         <java.version>1.8</java.version>
+        <android.support.version>28.0.0</android.support.version>
+        <android.maven.plugin.version>4.6.0</android.maven.plugin.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>javax.xml.bind</groupId>
+                <artifactId>jaxb-api</artifactId>
+                <version>2.3.1</version>
+            </dependency>
+            <dependency>
+                <groupId>com.sun.xml.bind</groupId>
+                <artifactId>jaxb-impl</artifactId>
+                <version>2.3.3</version>
+            </dependency>
+            <dependency>
+                <groupId>com.sun.xml.bind</groupId>
+                <artifactId>jaxb-core</artifactId>
+                <version>2.3.0.1</version>
+            </dependency>
+            <dependency>
+                <groupId>javax.activation</groupId>
+                <artifactId>activation</artifactId>
+                <version>1.1.1</version>
+            </dependency>
+            <dependency>
+                <groupId>com.android.support</groupId>
+                <artifactId>appcompat-v7</artifactId>
+                <version>${android.support.version}</version>
+                <type>aar</type>
+            </dependency>
+            <dependency>
+                <groupId>com.android.support</groupId>
+                <artifactId>recyclerview-v7</artifactId>
+                <version>${android.support.version}</version>
+                <type>aar</type>
+            </dependency>
+            <dependency>
+                <groupId>com.android.support</groupId>
+                <artifactId>support-annotations</artifactId>
+                <version>${android.support.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -20,12 +67,12 @@
             <artifactId>android</artifactId>
             <version>34</version>
             <scope>system</scope>
-            <systemPath>${env.ANDROID_HOME}/platforms/android-${android.sdk.platform}/android.jar</systemPath>
+            <systemPath>${android.sdk.home}/platforms/android-${android.sdk.platform}/android.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>com.android.support</groupId>
             <artifactId>appcompat-v7</artifactId>
-            <version>28.0.0</version>
+            <version>${android.support.version}</version>
             <type>aar</type>
             <exclusions>
                 <exclusion>
@@ -37,15 +84,40 @@
         <dependency>
             <groupId>com.android.support</groupId>
             <artifactId>recyclerview-v7</artifactId>
-            <version>28.0.0</version>
+            <version>${android.support.version}</version>
             <type>aar</type>
         </dependency>
         <dependency>
             <groupId>com.android.support</groupId>
             <artifactId>support-annotations</artifactId>
-            <version>28.0.0</version>
+            <version>${android.support.version}</version>
         </dependency>
     </dependencies>
+
+    <profiles>
+        <profile>
+            <id>android-home</id>
+            <activation>
+                <property>
+                    <name>env.ANDROID_HOME</name>
+                </property>
+            </activation>
+            <properties>
+                <android.sdk.home>${env.ANDROID_HOME}</android.sdk.home>
+            </properties>
+        </profile>
+        <profile>
+            <id>android-sdk-root</id>
+            <activation>
+                <property>
+                    <name>env.ANDROID_SDK_ROOT</name>
+                </property>
+            </activation>
+            <properties>
+                <android.sdk.home>${env.ANDROID_SDK_ROOT}</android.sdk.home>
+            </properties>
+        </profile>
+    </profiles>
 
     <repositories>
         <repository>
@@ -60,14 +132,14 @@
             <extension>
                 <groupId>com.simpligility.maven.plugins</groupId>
                 <artifactId>android-maven-plugin</artifactId>
-                <version>4.6.0</version>
+                <version>${android.maven.plugin.version}</version>
             </extension>
         </extensions>
         <plugins>
             <plugin>
                 <groupId>com.simpligility.maven.plugins</groupId>
                 <artifactId>android-maven-plugin</artifactId>
-                <version>4.6.0</version>
+                <version>${android.maven.plugin.version}</version>
                 <dependencies>
                     <dependency>
                         <groupId>javax.xml.bind</groupId>
