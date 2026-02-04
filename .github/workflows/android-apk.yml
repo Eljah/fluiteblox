@@ -44,8 +44,14 @@ jobs:
           java-version: "8"
           cache: maven
 
+      - name: Prepare release keystore
+        run: bash scripts/prepare-keystore.sh
+
       - name: Build APK (Maven)
         run: PATH="${GITHUB_WORKSPACE}/scripts:${PATH}" mvn -U -Dexec.skip=true package
+
+      - name: Sign APK (release keystore)
+        run: bash scripts/sign-apk.sh
 
       - name: Build AAB (bundletool + signing)
         env:
