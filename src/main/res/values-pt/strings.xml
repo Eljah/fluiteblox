@@ -18,7 +18,8 @@
     <string name="label_select_base_vowel">Vogal base</string>
     <string name="label_select_tone">Tom</string>
     <string name="label_select_vowel">Vogal</string>
-    <string name="btn_play_pair">Reproduzir par</string>
+    <string name="btn_play_pair">Gerar par</string>
+    <string name="btn_repeat_pair">Repetir par</string>
     <string name="label_options">Opções: %1$s / %2$s</string>
     <string name="label_first_choice">Primeira sílaba</string>
     <string name="label_second_choice">Segunda sílaba</string>

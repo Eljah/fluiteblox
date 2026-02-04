@@ -18,7 +18,8 @@
     <string name="label_select_base_vowel">基本母音</string>
     <string name="label_select_tone">声調</string>
     <string name="label_select_vowel">母音</string>
-    <string name="btn_play_pair">ペアを再生</string>
+    <string name="btn_play_pair">ペアを生成</string>
+    <string name="btn_repeat_pair">ペアを繰り返す</string>
     <string name="label_options">選択肢: %1$s / %2$s</string>
     <string name="label_first_choice">最初の音節</string>
     <string name="label_second_choice">2番目の音節</string>

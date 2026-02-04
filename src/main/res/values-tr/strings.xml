@@ -18,7 +18,8 @@
     <string name="label_select_base_vowel">Temel ünlü</string>
     <string name="label_select_tone">Ton</string>
     <string name="label_select_vowel">Ünlü</string>
-    <string name="btn_play_pair">Çifti çal</string>
+    <string name="btn_play_pair">Çifti oluştur</string>
+    <string name="btn_repeat_pair">Çifti tekrarla</string>
     <string name="label_options">Seçenekler: %1$s / %2$s</string>
     <string name="label_first_choice">İlk hece</string>
     <string name="label_second_choice">İkinci hece</string>

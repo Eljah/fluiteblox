@@ -18,7 +18,8 @@
     <string name="label_select_base_vowel">Nguyên âm cơ bản</string>
     <string name="label_select_tone">Thanh điệu</string>
     <string name="label_select_vowel">Nguyên âm</string>
-    <string name="btn_play_pair">Phát cặp</string>
+    <string name="btn_play_pair">Tạo cặp</string>
+    <string name="btn_repeat_pair">Lặp lại cặp</string>
     <string name="label_options">Tùy chọn: %1$s / %2$s</string>
     <string name="label_first_choice">Âm tiết thứ nhất</string>
     <string name="label_second_choice">Âm tiết thứ hai</string>

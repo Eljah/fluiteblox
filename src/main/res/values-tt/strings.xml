@@ -18,7 +18,8 @@
     <string name="label_select_base_vowel">Төп сузык</string>
     <string name="label_select_tone">Тон</string>
     <string name="label_select_vowel">Сузык</string>
-    <string name="btn_play_pair">Парны уйнат</string>
+    <string name="btn_play_pair">Парны ясау</string>
+    <string name="btn_repeat_pair">Парны кабатлау</string>
     <string name="label_options">Вариантлар: %1$s / %2$s</string>
     <string name="label_first_choice">Беренче иҗек</string>
     <string name="label_second_choice">Икенче иҗек</string>

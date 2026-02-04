@@ -18,7 +18,8 @@
     <string name="label_select_base_vowel">基本元音</string>
     <string name="label_select_tone">声调</string>
     <string name="label_select_vowel">元音</string>
-    <string name="btn_play_pair">播放一对</string>
+    <string name="btn_play_pair">生成一对</string>
+    <string name="btn_repeat_pair">重复一对</string>
     <string name="label_options">选项：%1$s / %2$s</string>
     <string name="label_first_choice">第一个音节</string>
     <string name="label_second_choice">第二个音节</string>

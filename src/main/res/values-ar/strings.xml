@@ -18,7 +18,8 @@
     <string name="label_select_base_vowel">حرف علّة أساسي</string>
     <string name="label_select_tone">نغمة</string>
     <string name="label_select_vowel">حرف علّة</string>
-    <string name="btn_play_pair">تشغيل الزوج</string>
+    <string name="btn_play_pair">إنشاء زوج</string>
+    <string name="btn_repeat_pair">إعادة الزوج</string>
     <string name="label_options">الخيارات: %1$s / %2$s</string>
     <string name="label_first_choice">المقطع الأول</string>
     <string name="label_second_choice">المقطع الثاني</string>

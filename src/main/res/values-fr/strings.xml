@@ -18,7 +18,8 @@
     <string name="label_select_base_vowel">Voyelle de base</string>
     <string name="label_select_tone">Ton</string>
     <string name="label_select_vowel">Voyelle</string>
-    <string name="btn_play_pair">Lire la paire</string>
+    <string name="btn_play_pair">Générer une paire</string>
+    <string name="btn_repeat_pair">Répéter la paire</string>
     <string name="label_options">Options : %1$s / %2$s</string>
     <string name="label_first_choice">Première syllabe</string>
     <string name="label_second_choice">Deuxième syllabe</string>
@@ -26,7 +27,7 @@
     <string name="label_score">Score : %1$d</string>
     <string name="label_correct">Correct !</string>
     <string name="label_wrong">Ordre incorrect.</string>
-    <string name="label_no_round">Lisez d\'abord une paire.</string>
+    <string name="label_no_round">Générez d\'abord une paire.</string>
     <string name="label_not_enough_variants">Pas assez de variantes pour cette sélection.</string>
     <string name="label_tts_not_ready">La synthèse vocale n\'est pas prête.</string>
     <string name="title_sound_mode">Discrimination des sons</string>

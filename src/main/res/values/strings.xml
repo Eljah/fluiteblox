@@ -18,7 +18,7 @@
     <string name="label_select_base_vowel">Base vowel</string>
     <string name="label_select_tone">Tone</string>
     <string name="label_select_vowel">Vowel</string>
-    <string name="btn_play_pair">Play pair</string>
+    <string name="btn_play_pair">Generate pair</string>
     <string name="btn_repeat_pair">Repeat pair</string>
     <string name="label_options">Options: %1$s / %2$s</string>
     <string name="label_first_choice">First syllable</string>
@@ -27,8 +27,8 @@
     <string name="label_score">Score: %1$d</string>
     <string name="label_correct">Correct!</string>
     <string name="label_wrong">Wrong order.</string>
-    <string name="label_no_round">Play a pair first.</string>
-    <string name="label_already_scored">This round is already scored. Play a new pair.</string>
+    <string name="label_no_round">Generate a pair first.</string>
+    <string name="label_already_scored">This round is already scored. Generate a new pair.</string>
     <string name="label_not_enough_variants">Not enough variants for this selection.</string>
     <string name="label_tts_not_ready">Text-to-speech is not ready.</string>
     <string name="title_sound_mode">Sound discrimination</string>

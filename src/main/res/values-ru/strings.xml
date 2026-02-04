@@ -18,7 +18,8 @@
     <string name="label_select_base_vowel">Базовая гласная</string>
     <string name="label_select_tone">Тон</string>
     <string name="label_select_vowel">Гласная</string>
-    <string name="btn_play_pair">Проиграть пару</string>
+    <string name="btn_play_pair">Сгенерировать пару</string>
+    <string name="btn_repeat_pair">Повторить пару</string>
     <string name="label_options">Варианты: %1$s / %2$s</string>
     <string name="label_first_choice">Первый слог</string>
     <string name="label_second_choice">Второй слог</string>

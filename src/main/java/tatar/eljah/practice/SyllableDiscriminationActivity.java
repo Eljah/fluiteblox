@@ -97,6 +97,30 @@ public class SyllableDiscriminationActivity extends AppCompatActivity {
     private String mode = MODE_SOUND;
     private boolean hasAnswered = false;
     private String lastPairText;
+    private final Map<String, File> pendingSpectrogramFiles = new HashMap<>();
+    private final UtteranceProgressListener spectrogramListener = new UtteranceProgressListener() {
+        @Override
+        public void onStart(String utteranceId) {
+        }
+
+        @Override
+        public void onDone(String utteranceId) {
+            File pendingFile = removePendingSpectrogramFile(utteranceId);
+            if (pendingFile == null) {
+                return;
+            }
+            analyzeSpectrogramFile(pendingFile);
+        }
+
+        @Override
+        public void onError(String utteranceId) {
+            File pendingFile = removePendingSpectrogramFile(utteranceId);
+            if (pendingFile == null) {
+                return;
+            }
+            deleteTempFile(pendingFile);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -142,6 +166,7 @@ public class SyllableDiscriminationActivity extends AppCompatActivity {
                 }
             }
         }, "com.google.android.tts");
+        textToSpeech.setOnUtteranceProgressListener(spectrogramListener);
 
         playPairButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -171,6 +196,7 @@ public class SyllableDiscriminationActivity extends AppCompatActivity {
         if (spectrogramThread != null) {
             spectrogramThread.interrupt();
         }
+        clearPendingSpectrogramFiles();
         if (textToSpeech != null) {
             textToSpeech.shutdown();
         }
@@ -393,27 +419,9 @@ public class SyllableDiscriminationActivity extends AppCompatActivity {
             return;
         }
         final String expectedUtteranceId = "pair-spectrogram-" + System.currentTimeMillis();
-        textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-            @Override
-            public void onStart(String utteranceId) {
-            }
-
-            @Override
-            public void onDone(String utteranceId) {
-                if (utteranceId == null || !utteranceId.equals(expectedUtteranceId)) {
-                    return;
-                }
-                analyzeSpectrogramFile(outputFile);
-            }
-
-            @Override
-            public void onError(String utteranceId) {
-                if (utteranceId == null || !utteranceId.equals(expectedUtteranceId)) {
-                    return;
-                }
-                deleteTempFile(outputFile);
-            }
-        });
+        synchronized (pendingSpectrogramFiles) {
+            pendingSpectrogramFiles.put(expectedUtteranceId, outputFile);
+        }
         Bundle params = new Bundle();
         textToSpeech.synthesizeToFile(lastPairText, params, outputFile, expectedUtteranceId);
     }
@@ -683,6 +691,24 @@ public class SyllableDiscriminationActivity extends AppCompatActivity {
         }
         if (!file.delete()) {
             file.deleteOnExit();
+        }
+    }
+
+    private File removePendingSpectrogramFile(String utteranceId) {
+        if (utteranceId == null) {
+            return null;
+        }
+        synchronized (pendingSpectrogramFiles) {
+            return pendingSpectrogramFiles.remove(utteranceId);
+        }
+    }
+
+    private void clearPendingSpectrogramFiles() {
+        synchronized (pendingSpectrogramFiles) {
+            for (File file : pendingSpectrogramFiles.values()) {
+                deleteTempFile(file);
+            }
+            pendingSpectrogramFiles.clear();
         }
     }
 

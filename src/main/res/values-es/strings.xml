@@ -18,7 +18,8 @@
     <string name="label_select_base_vowel">Vocal base</string>
     <string name="label_select_tone">Tono</string>
     <string name="label_select_vowel">Vocal</string>
-    <string name="btn_play_pair">Reproducir par</string>
+    <string name="btn_play_pair">Generar par</string>
+    <string name="btn_repeat_pair">Repetir par</string>
     <string name="label_options">Opciones: %1$s / %2$s</string>
     <string name="label_first_choice">Primera sílaba</string>
     <string name="label_second_choice">Segunda sílaba</string>

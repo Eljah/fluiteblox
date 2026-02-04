@@ -18,7 +18,8 @@
     <string name="label_select_base_vowel">Grundvokal</string>
     <string name="label_select_tone">Ton</string>
     <string name="label_select_vowel">Vokal</string>
-    <string name="btn_play_pair">Paar abspielen</string>
+    <string name="btn_play_pair">Paar erzeugen</string>
+    <string name="btn_repeat_pair">Paar wiederholen</string>
     <string name="label_options">Optionen: %1$s / %2$s</string>
     <string name="label_first_choice">Erste Silbe</string>
     <string name="label_second_choice">Zweite Silbe</string>
