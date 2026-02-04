@@ -1,5 +1,9 @@
 package tatar.eljah.practice;
 
+import android.content.res.AssetFileDescriptor;
+import android.media.MediaCodec;
+import android.media.MediaExtractor;
+import android.media.MediaFormat;
 import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
 import android.view.View;
@@ -12,6 +16,8 @@ import android.widget.TextView;
 import android.support.v7.app.AppCompatActivity;
 
 import tatar.eljah.R;
+import tatar.eljah.audio.PitchAnalyzer;
+import tatar.eljah.ui.SpectrogramView;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -19,6 +25,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.ShortBuffer;
 
 public class SyllableDiscriminationActivity extends AppCompatActivity {
 
@@ -70,6 +80,9 @@ public class SyllableDiscriminationActivity extends AppCompatActivity {
     private TextView resultView;
     private Button playPairButton;
     private Button checkAnswerButton;
+    private SpectrogramView spectrogramView;
+    private Thread spectrogramThread;
+    private PitchAnalyzer pitchAnalyzer;
 
     private TextToSpeech textToSpeech;
     private boolean isTtsReady = false;
@@ -104,10 +117,13 @@ public class SyllableDiscriminationActivity extends AppCompatActivity {
         resultView = findViewById(R.id.tv_discrimination_result);
         playPairButton = findViewById(R.id.btn_play_pair);
         checkAnswerButton = findViewById(R.id.btn_check_answer);
+        spectrogramView = findViewById(R.id.spectrogramView);
 
         setupSpinners();
         updateModeUi();
         updateScore();
+        pitchAnalyzer = new PitchAnalyzer();
+        loadReferenceSpectrogram();
 
         textToSpeech = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
             @Override
@@ -139,6 +155,9 @@ public class SyllableDiscriminationActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (spectrogramThread != null) {
+            spectrogramThread.interrupt();
+        }
         if (textToSpeech != null) {
             textToSpeech.shutdown();
         }
@@ -283,5 +302,176 @@ public class SyllableDiscriminationActivity extends AppCompatActivity {
 
     private void updateScore() {
         scoreView.setText(getString(R.string.label_score, score));
+    }
+
+    private void loadReferenceSpectrogram() {
+        spectrogramThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                PcmData pcmData = decodeAudioResource(R.raw.ma1);
+                if (pcmData == null || Thread.currentThread().isInterrupted()) {
+                    return;
+                }
+                final List<float[]> spectrumFrames = new ArrayList<>();
+                pitchAnalyzer.analyzePcm(
+                        pcmData.samples,
+                        pcmData.sampleRate,
+                        null,
+                        new PitchAnalyzer.SpectrumListener() {
+                            @Override
+                            public void onSpectrum(float[] magnitudes, int sampleRate) {
+                                spectrumFrames.add(magnitudes);
+                            }
+                        }
+                );
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (spectrogramView == null) {
+                            return;
+                        }
+                        spectrogramView.clear();
+                        for (float[] frame : spectrumFrames) {
+                            spectrogramView.addSpectrumFrame(frame, pcmData.sampleRate, frame.length * 2);
+                        }
+                    }
+                });
+            }
+        });
+        spectrogramThread.start();
+    }
+
+    private PcmData decodeAudioResource(int resId) {
+        MediaExtractor extractor = new MediaExtractor();
+        MediaCodec codec = null;
+        int sampleRate = 22050;
+        int channels = 1;
+        List<Short> samples = new ArrayList<>();
+        try {
+            AssetFileDescriptor afd = getResources().openRawResourceFd(resId);
+            extractor.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
+            afd.close();
+
+            int trackIndex = selectAudioTrack(extractor);
+            if (trackIndex < 0) {
+                return null;
+            }
+            extractor.selectTrack(trackIndex);
+            MediaFormat format = extractor.getTrackFormat(trackIndex);
+            String mime = format.getString(MediaFormat.KEY_MIME);
+            if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE);
+            }
+            if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
+                channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
+            }
+            if (mime == null) {
+                return null;
+            }
+            codec = MediaCodec.createDecoderByType(mime);
+            codec.configure(format, null, null, 0);
+            codec.start();
+
+            boolean inputDone = false;
+            boolean outputDone = false;
+            MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
+            while (!outputDone && !Thread.currentThread().isInterrupted()) {
+                if (!inputDone) {
+                    int inputIndex = codec.dequeueInputBuffer(10000);
+                    if (inputIndex >= 0) {
+                        ByteBuffer inputBuffer = codec.getInputBuffer(inputIndex);
+                        int sampleSize = extractor.readSampleData(inputBuffer, 0);
+                        if (sampleSize < 0) {
+                            codec.queueInputBuffer(inputIndex, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                            inputDone = true;
+                        } else {
+                            long presentationTimeUs = extractor.getSampleTime();
+                            codec.queueInputBuffer(inputIndex, 0, sampleSize, presentationTimeUs, 0);
+                            extractor.advance();
+                        }
+                    }
+                }
+
+                int outputIndex = codec.dequeueOutputBuffer(bufferInfo, 10000);
+                if (outputIndex >= 0) {
+                    if ((bufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                        outputDone = true;
+                    }
+                    if (bufferInfo.size > 0) {
+                        ByteBuffer outputBuffer = codec.getOutputBuffer(outputIndex);
+                        if (outputBuffer != null) {
+                            outputBuffer.position(bufferInfo.offset);
+                            outputBuffer.limit(bufferInfo.offset + bufferInfo.size);
+                            outputBuffer.order(ByteOrder.LITTLE_ENDIAN);
+                            ByteBuffer slice = outputBuffer.slice();
+                            slice.order(ByteOrder.LITTLE_ENDIAN);
+                            ShortBuffer shortBuffer = slice.asShortBuffer();
+                            short[] temp = new short[bufferInfo.size / 2];
+                            shortBuffer.get(temp);
+                            if (channels > 1) {
+                                for (int i = 0; i < temp.length; i += channels) {
+                                    samples.add(temp[i]);
+                                }
+                            } else {
+                                for (short value : temp) {
+                                    samples.add(value);
+                                }
+                            }
+                        }
+                    }
+                    codec.releaseOutputBuffer(outputIndex, false);
+                } else if (outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    MediaFormat outputFormat = codec.getOutputFormat();
+                    if (outputFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                        sampleRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE);
+                    }
+                    if (outputFormat.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
+                        channels = outputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
+                    }
+                }
+            }
+        } catch (IOException ignored) {
+            return null;
+        } finally {
+            extractor.release();
+            if (codec != null) {
+                try {
+                    codec.stop();
+                } catch (Exception ignored) {
+                }
+                codec.release();
+            }
+        }
+
+        if (samples.isEmpty()) {
+            return null;
+        }
+        short[] pcmSamples = new short[samples.size()];
+        for (int i = 0; i < samples.size(); i++) {
+            pcmSamples[i] = samples.get(i);
+        }
+        return new PcmData(pcmSamples, sampleRate);
+    }
+
+    private int selectAudioTrack(MediaExtractor extractor) {
+        int trackCount = extractor.getTrackCount();
+        for (int i = 0; i < trackCount; i++) {
+            MediaFormat format = extractor.getTrackFormat(i);
+            String mime = format.getString(MediaFormat.KEY_MIME);
+            if (mime != null && mime.startsWith("audio/")) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static class PcmData {
+        private final short[] samples;
+        private final int sampleRate;
+
+        private PcmData(short[] samples, int sampleRate) {
+            this.samples = samples;
+            this.sampleRate = sampleRate;
+        }
     }
 }

@@ -50,19 +50,31 @@ jobs:
       - name: Bump minor version
         run: |
           python - <<'PY'
+          import os
           import pathlib
           import re
 
-          path = pathlib.Path("pom.xml")
-          text = path.read_text()
-          match = re.search(r"<version>(\d+)\.(\d+)([^<]*)</version>", text)
+          run_number = int(os.environ.get("GITHUB_RUN_NUMBER", "0"))
+          if run_number <= 0:
+            raise SystemExit("GITHUB_RUN_NUMBER is missing or invalid")
+
+          pom_path = pathlib.Path("pom.xml")
+          pom_text = pom_path.read_text()
+          match = re.search(r"<version>(\d+)\.(\d+)([^<]*)</version>", pom_text)
           if not match:
             raise SystemExit("Could not find project version in pom.xml")
-          major, minor, suffix = match.groups()
-          new_version = f"{major}.{int(minor) + 1}{suffix}"
-          text = text[:match.start()] + f"<version>{new_version}</version>" + text[match.end():]
-          path.write_text(text)
-          print(f"Bumped version to {new_version}")
+          major, _minor, suffix = match.groups()
+          new_version = f"{major}.{run_number}{suffix}"
+          pom_text = pom_text[:match.start()] + f"<version>{new_version}</version>" + pom_text[match.end():]
+          pom_path.write_text(pom_text)
+
+          manifest_path = pathlib.Path("src/main/AndroidManifest.xml")
+          manifest_text = manifest_path.read_text()
+          manifest_text = re.sub(r'android:versionName="[^"]+"', f'android:versionName="{new_version}"', manifest_text)
+          manifest_text = re.sub(r'android:versionCode="\\d+"', f'android:versionCode="{run_number}"', manifest_text)
+          manifest_path.write_text(manifest_text)
+
+          print(f"Bumped version to {new_version} (versionCode {run_number})")
           PY
 
       - name: Build APK (Maven)
