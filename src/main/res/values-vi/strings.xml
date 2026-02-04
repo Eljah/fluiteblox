@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Luyện tập thanh điệu tiếng Việt</string>
+    <string name="btn_demo">Bản demo thanh điệu</string>
+    <string name="btn_practice">Luyện tập</string>
+    <string name="btn_play_reference">Phát mẫu chuẩn</string>
+    <string name="btn_play_demo">Phát demo</string>
+    <string name="label_sample_section">Mẫu chuẩn</string>
+    <string name="label_demo_section">Demo</string>
+    <string name="label_first_syllable">Âm tiết thứ nhất</string>
+    <string name="label_second_syllable">Âm tiết thứ hai</string>
+    <string name="label_sample_selected">Mẫu chuẩn: %1$s</string>
+    <string name="label_demo_phrase">Demo: %1$s</string>
+    <string name="btn_record_user">Ghi âm phiên bản của tôi</string>
+    <string name="tone_result_match">Hướng thanh điệu khớp với mẫu chuẩn.</string>
+    <string name="tone_result_diff">Hướng thanh điệu khác với mẫu chuẩn.</string>
+    <string name="tone_result_no_data">Không đủ dữ liệu để phân tích thanh điệu.</string>
+</resources>

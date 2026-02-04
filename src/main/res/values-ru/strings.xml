@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Тренажёр вьетнамских тонов</string>
+    <string name="btn_demo">Демо тонов</string>
+    <string name="btn_practice">Тренировка</string>
+    <string name="btn_play_reference">Проиграть образец</string>
+    <string name="btn_play_demo">Проиграть демо</string>
+    <string name="label_sample_section">Образец</string>
+    <string name="label_demo_section">Демо</string>
+    <string name="label_first_syllable">Первый слог</string>
+    <string name="label_second_syllable">Второй слог</string>
+    <string name="label_sample_selected">Образец: %1$s</string>
+    <string name="label_demo_phrase">Демо: %1$s</string>
+    <string name="btn_record_user">Записать мой вариант</string>
+    <string name="tone_result_match">Направление тона совпадает с эталоном.</string>
+    <string name="tone_result_diff">Направление тона отличается от эталона.</string>
+    <string name="tone_result_no_data">Недостаточно данных для анализа тона.</string>
+</resources>

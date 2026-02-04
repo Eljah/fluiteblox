@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">越南语声调训练器</string>
+    <string name="btn_demo">声调演示</string>
+    <string name="btn_practice">练习</string>
+    <string name="btn_play_reference">播放参考</string>
+    <string name="btn_play_demo">播放演示</string>
+    <string name="label_sample_section">参考</string>
+    <string name="label_demo_section">演示</string>
+    <string name="label_first_syllable">第一音节</string>
+    <string name="label_second_syllable">第二音节</string>
+    <string name="label_sample_selected">参考：%1$s</string>
+    <string name="label_demo_phrase">演示：%1$s</string>
+    <string name="btn_record_user">录制我的版本</string>
+    <string name="tone_result_match">声调走向与参考一致。</string>
+    <string name="tone_result_diff">声调走向与参考不同。</string>
+    <string name="tone_result_no_data">数据不足，无法分析声调。</string>
+</resources>

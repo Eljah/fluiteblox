@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Вьетнам тоннары тренажёры</string>
+    <string name="btn_demo">Тоннар демосы</string>
+    <string name="btn_practice">Күнегү</string>
+    <string name="btn_play_reference">Үрнәкне уйнат</string>
+    <string name="btn_play_demo">Демоны уйнат</string>
+    <string name="label_sample_section">Үрнәк</string>
+    <string name="label_demo_section">Демо</string>
+    <string name="label_first_syllable">Беренче иҗек</string>
+    <string name="label_second_syllable">Икенче иҗек</string>
+    <string name="label_sample_selected">Үрнәк: %1$s</string>
+    <string name="label_demo_phrase">Демо: %1$s</string>
+    <string name="btn_record_user">Үз версиямне яздырырга</string>
+    <string name="tone_result_match">Тон юнәлеше үрнәк белән туры килә.</string>
+    <string name="tone_result_diff">Тон юнәлеше үрнәктән аерыла.</string>
+    <string name="tone_result_no_data">Тонны анализлау өчен мәгълүмат җитми.</string>
+</resources>
