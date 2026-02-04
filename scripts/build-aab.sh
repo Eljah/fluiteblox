@@ -2,14 +2,14 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-KEYSTORE_B64="$REPO_ROOT/keystore/release-key.jks.b64"
 KEYSTORE_PATH="$REPO_ROOT/keystore/release-key.jks"
+KEY_ALIAS="${KEY_ALIAS:-release}"
+KEYSTORE_PASSWORD="${KEYSTORE_PASSWORD:-Tatarstan1920}"
+KEY_PASSWORD="${KEY_PASSWORD:-Tatarstan1920}"
 ANDROID_PLATFORM="${ANDROID_PLATFORM:-34}"
 BUILD_TOOLS_AAPT2="${BUILD_TOOLS_AAPT2:-34.0.0}"
 
-if [[ -f "$KEYSTORE_B64" ]]; then
-  base64 -d "$KEYSTORE_B64" > "$KEYSTORE_PATH"
-fi
+"$REPO_ROOT/scripts/prepare-keystore.sh"
 
 if [[ -z "${ANDROID_HOME:-}" ]]; then
   echo "ANDROID_HOME is not set." >&2
@@ -85,8 +85,8 @@ java -jar "$BUNDLETOOL_JAR" build-bundle \
 
 jarsigner \
   -keystore "$KEYSTORE_PATH" \
-  -storepass changeit \
-  -keypass changeit \
-  "$AAB_PATH" release
+  -storepass "$KEYSTORE_PASSWORD" \
+  -keypass "$KEY_PASSWORD" \
+  "$AAB_PATH" "$KEY_ALIAS"
 
 rm -rf "$WORK_DIR"
