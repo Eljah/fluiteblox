@@ -18,6 +18,9 @@ public class AudioSettingsActivity extends AppCompatActivity {
     private IntensityGraphView intensityGraph;
     private TextView thresholdText;
 
+    private volatile float latestIntensity;
+    private volatile float currentThreshold;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -28,6 +31,7 @@ public class AudioSettingsActivity extends AppCompatActivity {
         thresholdText = findViewById(R.id.settings_threshold_value);
 
         float threshold = AudioSettingsStore.intensityThreshold(this);
+        currentThreshold = threshold;
         updateThreshold(threshold);
 
         intensityGraph.setOnThresholdChangedListener(new IntensityGraphView.OnThresholdChangedListener() {
@@ -57,7 +61,11 @@ public class AudioSettingsActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        spectrogram.setSpectrum(magnitudes, sampleRate);
+                        if (latestIntensity < currentThreshold) {
+                            spectrogram.setSpectrum(new float[magnitudes.length], sampleRate);
+                        } else {
+                            spectrogram.setSpectrum(magnitudes, sampleRate);
+                        }
                     }
                 });
             }
@@ -65,6 +73,7 @@ public class AudioSettingsActivity extends AppCompatActivity {
             @Override
             public void onAudio(short[] samples, int length, int sampleRate) {
                 final float intensity = calculateRms(samples, length);
+                latestIntensity = intensity;
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
@@ -88,6 +97,7 @@ public class AudioSettingsActivity extends AppCompatActivity {
     }
 
     private void updateThreshold(float value) {
+        currentThreshold = value;
         intensityGraph.setThreshold(value);
         thresholdText.setText(getString(R.string.settings_threshold_value_template, value));
     }

@@ -75,7 +75,7 @@ public class ScorePlayActivity extends AppCompatActivity {
                     startMidiPlayback();
                 } else if (checkedId == R.id.radio_mode_tablature) {
                     stopMidiPlayback();
-                    ensureMicListening();
+                    pitchAnalyzer.stop();
                     startTablaturePlayback();
                 } else {
                     stopMidiPlayback();
@@ -120,7 +120,11 @@ public class ScorePlayActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        overlayView.setSpectrum(magnitudes, sampleRate);
+                        if (currentInputIntensity < intensityThreshold) {
+                            overlayView.setSpectrum(new float[magnitudes.length], sampleRate);
+                        } else {
+                            overlayView.setSpectrum(magnitudes, sampleRate);
+                        }
                     }
                 });
             }
