@@ -87,8 +87,13 @@ public class OpenCvScoreProcessor {
         int perpendicular = estimatePerpendicular(bitmap);
         fillNotes(piece, noteHeads, staffSpacing, w, h);
 
-        if (piece.notes.size() < 8) {
-            fallbackFill(piece, Math.max(8, staffRows * 10));
+        int minRecognized = 8;
+        int syntheticTarget = Math.max(minRecognized, staffRows * 10);
+        if (piece.notes.isEmpty()) {
+            fallbackFill(piece, 0, syntheticTarget, syntheticTarget);
+        } else if (piece.notes.size() < minRecognized) {
+            int missing = minRecognized - piece.notes.size();
+            fallbackFill(piece, piece.notes.size(), missing, minRecognized);
         }
 
         return new ProcessingResult(piece, staffRows, barlines, perpendicular);
@@ -375,13 +380,14 @@ public class OpenCvScoreProcessor {
         }
     }
 
-    private void fallbackFill(ScorePiece piece, int notesCount) {
+    private void fallbackFill(ScorePiece piece, int startIndex, int notesToAdd, int totalNotesForSpacing) {
         String[] notes = new String[]{"C", "D", "E", "F", "G", "A", "B"};
         String[] durations = new String[]{"quarter", "eighth", "half"};
 
-        for (int i = 0; i < notesCount; i++) {
+        for (int offset = 0; offset < notesToAdd; offset++) {
+            int i = startIndex + offset;
             int measure = 1 + i / 4;
-            float x = 0.08f + ((float) i / Math.max(1, notesCount - 1)) * 0.84f;
+            float x = 0.08f + ((float) i / Math.max(1, totalNotesForSpacing - 1)) * 0.84f;
             int row = i % 3;
             float y = 0.2f + row * 0.28f + ((i % 3) - 1) * 0.02f;
             y = Math.max(0.08f, Math.min(0.92f, y));
