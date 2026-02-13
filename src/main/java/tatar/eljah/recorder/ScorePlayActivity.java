@@ -86,6 +86,16 @@ public class ScorePlayActivity extends AppCompatActivity {
                     }
                 });
             }
+        }, new PitchAnalyzer.SpectrumListener() {
+            @Override
+            public void onSpectrum(final float[] magnitudes, final int sampleRate) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        overlayView.setSpectrum(magnitudes, sampleRate);
+                    }
+                });
+            }
         });
     }
 
@@ -130,7 +140,17 @@ public class ScorePlayActivity extends AppCompatActivity {
         midiThread = new Thread(new Runnable() {
             @Override
             public void run() {
-                playNotesWithSynth();
+                try {
+                    playNotesWithSynth();
+                } catch (Throwable ignored) {
+                    midiPlaybackRequested = false;
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            status.setText(R.string.play_midi_failed);
+                        }
+                    });
+                }
             }
         }, "midi-playback");
         midiThread.start();
@@ -152,12 +172,14 @@ public class ScorePlayActivity extends AppCompatActivity {
                 AudioFormat.CHANNEL_OUT_MONO,
                 AudioFormat.ENCODING_PCM_16BIT);
         if (minBuffer <= 0) {
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    status.setText(R.string.play_midi_finished);
-                }
-            });
+            if (midiPlaybackRequested) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        status.setText(R.string.play_midi_finished);
+                    }
+                });
+            }
             return;
         }
 
@@ -222,12 +244,14 @@ public class ScorePlayActivity extends AppCompatActivity {
                 track.release();
             }
             midiThread = null;
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    status.setText(R.string.play_midi_finished);
-                }
-            });
+            if (midiPlaybackRequested) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        status.setText(R.string.play_midi_finished);
+                    }
+                });
+            }
         }
     }
 

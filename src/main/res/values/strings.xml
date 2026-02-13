@@ -32,6 +32,7 @@
     <string name="play_midi_started">MIDI-проигрывание запущено.</string>
     <string name="play_midi_note">MIDI: %1$s</string>
     <string name="play_midi_finished">MIDI-проигрывание завершено.</string>
+    <string name="play_midi_failed">Не удалось запустить MIDI-проигрывание на этом устройстве.</string>
 
     <string name="hint_title">Подсказка аппликатуры</string>
     <string name="hint_expected">Нужно было: %1$s\nПальцы: %2$s</string>
