@@ -25,6 +25,7 @@ public class ScorePlayActivity extends AppCompatActivity {
 
     private TextView status;
     private PitchOverlayView overlayView;
+    private AudioManager audioManager;
 
     private volatile boolean midiPlaybackRequested;
     private Thread midiThread;
@@ -40,6 +41,7 @@ public class ScorePlayActivity extends AppCompatActivity {
 
         status = findViewById(R.id.text_status);
         overlayView = findViewById(R.id.pitch_overlay);
+        audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
 
         if (piece == null || piece.notes.isEmpty()) {
             status.setText(R.string.play_no_piece);
@@ -129,6 +131,10 @@ public class ScorePlayActivity extends AppCompatActivity {
 
     private void startMidiPlayback() {
         pitchAnalyzer.stop();
+        if (!requestMusicFocus()) {
+            status.setText(R.string.play_midi_failed);
+            return;
+        }
         midiPlaybackRequested = true;
         pointer = 0;
         overlayView.setPointer(pointer);
@@ -162,6 +168,7 @@ public class ScorePlayActivity extends AppCompatActivity {
             midiThread.interrupt();
             midiThread = null;
         }
+        abandonMusicFocus();
     }
 
     private void playNotesWithSynth() {
@@ -176,7 +183,7 @@ public class ScorePlayActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        status.setText(R.string.play_midi_finished);
+                        status.setText(R.string.play_midi_failed);
                     }
                 });
             }
@@ -192,6 +199,12 @@ public class ScorePlayActivity extends AppCompatActivity {
                     Math.max(minBuffer, SYNTH_SAMPLE_RATE / 2),
                     AudioTrack.MODE_STREAM);
             if (track.getState() != AudioTrack.STATE_INITIALIZED) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        status.setText(R.string.play_midi_failed);
+                    }
+                });
                 return;
             }
 
@@ -227,12 +240,26 @@ public class ScorePlayActivity extends AppCompatActivity {
                     }
                     int result = track.write(buffer, 0, chunk);
                     if (result <= 0) {
+                        midiPlaybackRequested = false;
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                status.setText(R.string.play_midi_failed);
+                            }
+                        });
                         break;
                     }
                     written += result;
                 }
             }
         } catch (IllegalStateException ignored) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    status.setText(R.string.play_midi_failed);
+                }
+            });
+            midiPlaybackRequested = false;
         } finally {
             if (track != null) {
                 try {
@@ -252,6 +279,23 @@ public class ScorePlayActivity extends AppCompatActivity {
                     }
                 });
             }
+            abandonMusicFocus();
+        }
+    }
+
+
+    private boolean requestMusicFocus() {
+        if (audioManager == null) {
+            return true;
+        }
+        int result = audioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
+        return result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+    }
+
+    private void abandonMusicFocus() {
+        if (audioManager != null) {
+            audioManager.abandonAudioFocus(null);
         }
     }
 
@@ -296,5 +340,6 @@ public class ScorePlayActivity extends AppCompatActivity {
         super.onDestroy();
         pitchAnalyzer.stop();
         stopMidiPlayback();
+        abandonMusicFocus();
     }
 }

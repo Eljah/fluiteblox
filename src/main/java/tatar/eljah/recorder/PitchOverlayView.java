@@ -165,6 +165,10 @@ public class PitchOverlayView extends View {
                 continue;
             }
             int bins = frame.length;
+            float frameMax = max(frame);
+            if (frameMax <= 0f) {
+                frameMax = 1f;
+            }
             for (int bin = 0; bin < bins; bin++) {
                 float hz = bin * lastSpectrumSampleRate / (2f * bins);
                 if (hz > MAX_SPECTROGRAM_HZ) {
@@ -173,7 +177,7 @@ public class PitchOverlayView extends View {
                 float nextHz = (bin + 1) * lastSpectrumSampleRate / (2f * bins);
                 float yTop = yForFrequency(nextHz, top, bottom);
                 float yBottom = yForFrequency(hz, top, bottom);
-                float intensity = normalizeMagnitude(frame[bin]);
+                float intensity = normalizeMagnitude(frame[bin], frameMax);
                 heatPaint.setColor(heatColor(intensity));
                 heatPaint.setStyle(Paint.Style.FILL);
                 float left = x * colW;
@@ -182,20 +186,28 @@ public class PitchOverlayView extends View {
         }
     }
 
-    private float normalizeMagnitude(float value) {
-        if (value <= 0f) {
+    private float normalizeMagnitude(float value, float frameMax) {
+        if (value <= 0f || frameMax <= 0f) {
             return 0f;
         }
-        float log = (float) Math.log10(1f + value);
-        return Math.max(0f, Math.min(1f, log / 3.5f));
+        float normalized = value / frameMax;
+        return Math.max(0f, Math.min(1f, normalized));
     }
 
     private int heatColor(float intensity) {
-        float i = Math.max(0f, Math.min(1f, intensity));
-        int r = (int) (255f * i);
-        int g = (int) (255f * Math.min(1f, i * 1.3f));
-        int b = (int) (255f * (1f - i) * 0.6f);
-        return Color.rgb(r, g, b);
+        float clamped = Math.max(0f, Math.min(1f, intensity));
+        float hue = (1f - clamped) * 240f;
+        return Color.HSVToColor(new float[]{hue, 1f, clamped});
+    }
+
+    private float max(float[] values) {
+        float max = 0f;
+        for (float value : values) {
+            if (value > max) {
+                max = value;
+            }
+        }
+        return max;
     }
 
     private float yForMidi(int midi, float firstLineY, float lineGap) {
