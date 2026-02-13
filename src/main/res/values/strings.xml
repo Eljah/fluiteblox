@@ -10,6 +10,8 @@
     <string name="capture_waiting">Ожидание фото. Подсказка: держите лист как можно перпендикулярнее камере.</string>
     <string name="capture_save">Сохранить в библиотеку</string>
     <string name="capture_analysis_template">OpenCV-оценка: перпендикулярность %1$d%%, ряды %2$d, тактовые линии %3$d, найдено нот %4$d.</string>
+    <string name="capture_debug_colors">Подсветка: белый — ноты/штрихи, черный — фон, красный — линии нотоносца, зеленый — музыкальные символы.</string>
+    <string name="capture_expected_notes">Эталон извлечен из XML/MIDI: ожидается 54 ноты.</string>
     <string name="capture_take_photo_first">Сначала сделайте фото.</string>
     <string name="capture_title_required">Введите название произведения.</string>
     <string name="capture_saved">Ноты сохранены в библиотеку.</string>
@@ -25,6 +27,11 @@
     <string name="play_status_template">Ожидается: %1$s, сыграно: %2$s (%3$d Гц)</string>
     <string name="play_done">Произведение сыграно. Отлично!</string>
     <string name="play_microphone_denied">Доступ к микрофону не выдан. Без него режим игры недоступен.</string>
+    <string name="play_mode_mic">Mic</string>
+    <string name="play_mode_midi">Play Midi</string>
+    <string name="play_midi_started">MIDI-проигрывание запущено.</string>
+    <string name="play_midi_note">MIDI: %1$s</string>
+    <string name="play_midi_finished">MIDI-проигрывание завершено.</string>
 
     <string name="hint_title">Подсказка аппликатуры</string>
     <string name="hint_expected">Нужно было: %1$s\nПальцы: %2$s</string>

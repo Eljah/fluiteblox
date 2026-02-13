@@ -30,6 +30,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_capture_sheet);
+        ReferenceComposition.loadFromAssets(getAssets());
 
         final EditText titleInput = findViewById(R.id.input_piece_title);
         final ImageView preview = findViewById(R.id.image_preview);
@@ -112,14 +113,15 @@ public class CaptureSheetActivity extends AppCompatActivity {
             Bitmap bmp = (Bitmap) data.getExtras().get("data");
             if (bmp != null) {
                 capturedBitmap = bmp;
-                ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(bmp);
                 latestResult = new OpenCvScoreProcessor().process(bmp, "draft");
+                Bitmap previewBitmap = latestResult.debugOverlay != null ? latestResult.debugOverlay : bmp;
+                ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(previewBitmap);
                 notesOverlay.setRecognizedNotes(latestResult.piece.notes);
                 analysisText.setText(getString(R.string.capture_analysis_template,
                         latestResult.perpendicularScore,
                         latestResult.staffRows,
                         latestResult.barlines,
-                        latestResult.piece.notes.size()));
+                        latestResult.piece.notes.size()) + "\n" + getString(R.string.capture_debug_colors) + "\n" + getString(R.string.capture_expected_notes));
             }
         }
     }

@@ -11,6 +11,28 @@
         android:textStyle="bold"
         android:textSize="20sp" />
 
+    <RadioGroup
+        android:id="@+id/group_play_mode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <RadioButton
+            android:id="@+id/radio_mode_mic"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="true"
+            android:text="@string/play_mode_mic" />
+
+        <RadioButton
+            android:id="@+id/radio_mode_midi"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="@string/play_mode_midi" />
+    </RadioGroup>
+
     <tatar.eljah.recorder.PitchOverlayView
         android:id="@+id/pitch_overlay"
         android:layout_width="match_parent"

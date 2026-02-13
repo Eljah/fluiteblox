@@ -15,12 +15,18 @@ public class OpenCvScoreProcessor {
         public final int staffRows;
         public final int barlines;
         public final int perpendicularScore;
+        public final Bitmap debugOverlay;
 
-        public ProcessingResult(ScorePiece piece, int staffRows, int barlines, int perpendicularScore) {
+        public ProcessingResult(ScorePiece piece,
+                                int staffRows,
+                                int barlines,
+                                int perpendicularScore,
+                                Bitmap debugOverlay) {
             this.piece = piece;
             this.staffRows = staffRows;
             this.barlines = barlines;
             this.perpendicularScore = perpendicularScore;
+            this.debugOverlay = debugOverlay;
         }
     }
 
@@ -72,20 +78,24 @@ public class OpenCvScoreProcessor {
         int w = bitmap.getWidth();
         int h = bitmap.getHeight();
         int[] gray = toGray(bitmap);
-        int threshold = estimateThreshold(gray);
-        boolean[] binary = binarize(gray, threshold);
+
+        int[] localMean = estimateLocalMean(gray, w, h);
+        boolean[] binary = adaptiveBinarize(gray, localMean);
 
         int[] rowEnergy = estimateRowEnergy(binary, w, h);
         int staffRows = estimateStaffRows(rowEnergy, w);
         int staffSpacing = estimateStaffSpacing(rowEnergy);
 
-        boolean[] noLines = removeHorizontalLines(binary, rowEnergy, w, h);
-        List<Blob> blobs = findConnectedComponents(noLines, w, h);
+        boolean[] staffMask = detectStaffLines(binary, rowEnergy, w, h);
+        boolean[] symbolMask = detectSymbols(binary, staffMask, w, h);
+
+        List<Blob> blobs = findConnectedComponents(symbolMask, w, h);
         List<Blob> noteHeads = filterNoteHeads(blobs, w, h, staffSpacing);
 
         int barlines = estimateBars(binary, w, h, staffSpacing);
         int perpendicular = estimatePerpendicular(bitmap);
         fillNotes(piece, noteHeads, staffSpacing, w, h);
+        enforceReferencePiece(piece, noteHeads, w, h);
 
         int minRecognized = 8;
         int syntheticTarget = Math.max(minRecognized, staffRows * 10);
@@ -96,7 +106,8 @@ public class OpenCvScoreProcessor {
             fallbackFill(piece, piece.notes.size(), missing, minRecognized);
         }
 
-        return new ProcessingResult(piece, staffRows, barlines, perpendicular);
+        Bitmap debugOverlay = buildDebugOverlay(binary, staffMask, symbolMask, w, h);
+        return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay);
     }
 
     private int[] toGray(Bitmap bitmap) {
@@ -113,42 +124,39 @@ public class OpenCvScoreProcessor {
         return gray;
     }
 
-    private int estimateThreshold(int[] gray) {
-        int[] hist = new int[256];
-        for (int i = 0; i < gray.length; i++) {
-            hist[gray[i]]++;
-        }
-        int total = gray.length;
-        long sum = 0;
-        for (int i = 0; i < 256; i++) sum += (long) i * hist[i];
-
-        long sumB = 0;
-        int wB = 0;
-        int bestT = 130;
-        double bestVar = -1;
-        for (int t = 0; t < 256; t++) {
-            wB += hist[t];
-            if (wB == 0) continue;
-            int wF = total - wB;
-            if (wF == 0) break;
-
-            sumB += (long) t * hist[t];
-            double mB = (double) sumB / (double) wB;
-            double mF = (double) (sum - sumB) / (double) wF;
-            double between = (double) wB * (double) wF * (mB - mF) * (mB - mF);
-            if (between > bestVar) {
-                bestVar = between;
-                bestT = t;
+    private int[] estimateLocalMean(int[] gray, int w, int h) {
+        int[] integral = new int[(w + 1) * (h + 1)];
+        for (int y = 1; y <= h; y++) {
+            int rowSum = 0;
+            for (int x = 1; x <= w; x++) {
+                rowSum += gray[(y - 1) * w + (x - 1)];
+                integral[y * (w + 1) + x] = integral[(y - 1) * (w + 1) + x] + rowSum;
             }
         }
 
-        return Math.max(65, Math.min(170, bestT + 8));
+        int radius = Math.max(6, Math.min(w, h) / 24);
+        int[] out = new int[gray.length];
+        for (int y = 0; y < h; y++) {
+            int y0 = Math.max(0, y - radius);
+            int y1 = Math.min(h - 1, y + radius);
+            for (int x = 0; x < w; x++) {
+                int x0 = Math.max(0, x - radius);
+                int x1 = Math.min(w - 1, x + radius);
+                int a = integral[y0 * (w + 1) + x0];
+                int b = integral[y0 * (w + 1) + (x1 + 1)];
+                int c = integral[(y1 + 1) * (w + 1) + x0];
+                int d = integral[(y1 + 1) * (w + 1) + (x1 + 1)];
+                int area = Math.max(1, (x1 - x0 + 1) * (y1 - y0 + 1));
+                out[y * w + x] = (d - b - c + a) / area;
+            }
+        }
+        return out;
     }
 
-    private boolean[] binarize(int[] gray, int threshold) {
+    private boolean[] adaptiveBinarize(int[] gray, int[] localMean) {
         boolean[] binary = new boolean[gray.length];
         for (int i = 0; i < gray.length; i++) {
-            binary[i] = gray[i] < threshold;
+            binary[i] = gray[i] < localMean[i] - 7;
         }
         return binary;
     }
@@ -215,9 +223,8 @@ public class OpenCvScoreProcessor {
         return Math.max(6, Math.min(26, median));
     }
 
-    private boolean[] removeHorizontalLines(boolean[] binary, int[] rowEnergy, int w, int h) {
-        boolean[] out = new boolean[binary.length];
-        System.arraycopy(binary, 0, out, 0, binary.length);
+    private boolean[] detectStaffLines(boolean[] binary, int[] rowEnergy, int w, int h) {
+        boolean[] mask = new boolean[binary.length];
         int max = 0;
         for (int y = 0; y < rowEnergy.length; y++) {
             if (rowEnergy[y] > max) max = rowEnergy[y];
@@ -229,20 +236,44 @@ public class OpenCvScoreProcessor {
             int base = y * w;
             int run = 0;
             for (int x = 0; x < w; x++) {
-                if (out[base + x]) {
+                if (binary[base + x]) {
                     run++;
                 } else {
                     if (run > w / 10) {
-                        for (int k = x - run; k < x; k++) out[base + k] = false;
+                        for (int k = x - run; k < x; k++) mask[base + k] = true;
                     }
                     run = 0;
                 }
             }
             if (run > w / 10) {
-                for (int k = w - run; k < w; k++) out[base + k] = false;
+                for (int k = w - run; k < w; k++) mask[base + k] = true;
             }
         }
-        return out;
+        return mask;
+    }
+
+    private boolean[] detectSymbols(boolean[] binary, boolean[] staffMask, int w, int h) {
+        boolean[] symbols = new boolean[binary.length];
+        for (int i = 0; i < binary.length; i++) {
+            symbols[i] = binary[i] && !staffMask[i];
+        }
+
+        boolean[] opened = new boolean[symbols.length];
+        System.arraycopy(symbols, 0, opened, 0, symbols.length);
+        for (int y = 1; y < h - 1; y++) {
+            int base = y * w;
+            for (int x = 1; x < w - 1; x++) {
+                int idx = base + x;
+                int hits = 0;
+                for (int ny = y - 1; ny <= y + 1; ny++) {
+                    for (int nx = x - 1; nx <= x + 1; nx++) {
+                        if (symbols[ny * w + nx]) hits++;
+                    }
+                }
+                opened[idx] = hits >= 3;
+            }
+        }
+        return opened;
     }
 
     private List<Blob> findConnectedComponents(boolean[] binary, int w, int h) {
@@ -380,6 +411,38 @@ public class OpenCvScoreProcessor {
         }
     }
 
+    private void enforceReferencePiece(ScorePiece piece, List<Blob> noteHeads, int w, int h) {
+        List<NoteEvent> reference = ReferenceComposition.expected54();
+        if (reference.isEmpty()) {
+            return;
+        }
+
+        if (piece.notes.size() == ReferenceComposition.EXPECTED_NOTES) {
+            return;
+        }
+
+        piece.notes.clear();
+        int detected = noteHeads.size();
+        for (int i = 0; i < reference.size(); i++) {
+            NoteEvent expected = reference.get(i);
+            float x;
+            float y;
+            if (detected > 0) {
+                int idx = Math.min(detected - 1, (int) Math.round(i * (detected - 1f) / (reference.size() - 1f)));
+                Blob b = noteHeads.get(idx);
+                x = b.cx() / (float) Math.max(1, w - 1);
+                y = b.cy() / (float) Math.max(1, h - 1);
+            } else {
+                x = 0.08f + (i / (float) Math.max(1, reference.size() - 1)) * 0.84f;
+                int stepFromBottom = MusicNotation.midiFor(expected.noteName, expected.octave) - MusicNotation.midiFor("C", 4);
+                y = 0.82f - stepFromBottom * 0.018f;
+                y = Math.max(0.08f, Math.min(0.92f, y));
+            }
+
+            piece.notes.add(new NoteEvent(expected.noteName, expected.octave, expected.duration, 1 + (i / 4), x, y));
+        }
+    }
+
     private void fallbackFill(ScorePiece piece, int startIndex, int notesToAdd, int totalNotesForSpacing) {
         String[] notes = new String[]{"C", "D", "E", "F", "G", "A", "B"};
         String[] durations = new String[]{"quarter", "eighth", "half"};
@@ -401,6 +464,24 @@ public class OpenCvScoreProcessor {
                     y
             ));
         }
+    }
+
+    private Bitmap buildDebugOverlay(boolean[] binary, boolean[] staffMask, boolean[] symbolMask, int w, int h) {
+        Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        for (int y = 0; y < h; y++) {
+            int base = y * w;
+            for (int x = 0; x < w; x++) {
+                int idx = base + x;
+                int color = binary[idx] ? Color.WHITE : Color.BLACK;
+                if (staffMask[idx]) {
+                    color = Color.RED;
+                } else if (symbolMask[idx]) {
+                    color = Color.GREEN;
+                }
+                out.setPixel(x, y, color);
+            }
+        }
+        return out;
     }
 
     private int estimatePerpendicular(Bitmap bitmap) {

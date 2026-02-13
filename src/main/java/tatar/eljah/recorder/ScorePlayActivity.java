@@ -2,13 +2,17 @@ package tatar.eljah.recorder;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.media.AudioFormat;
+import android.media.AudioManager;
+import android.media.AudioTrack;
 import android.os.Build;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
+import android.widget.RadioGroup;
 import android.widget.TextView;
 
-import tatar.eljah.fluitblox.R;
 import tatar.eljah.audio.PitchAnalyzer;
+import tatar.eljah.fluitblox.R;
 
 public class ScorePlayActivity extends AppCompatActivity {
     public static final String EXTRA_PIECE_ID = "piece_id";
@@ -21,6 +25,9 @@ public class ScorePlayActivity extends AppCompatActivity {
 
     private TextView status;
     private PitchOverlayView overlayView;
+
+    private volatile boolean midiPlaybackRequested;
+    private Thread midiThread;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,6 +49,23 @@ public class ScorePlayActivity extends AppCompatActivity {
         overlayView.setNotes(piece.notes);
         overlayView.setPointer(pointer);
 
+        RadioGroup modeGroup = findViewById(R.id.group_play_mode);
+        modeGroup.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(RadioGroup group, int checkedId) {
+                if (checkedId == R.id.radio_mode_midi) {
+                    startMidiPlayback();
+                } else {
+                    stopMidiPlayback();
+                    ensureMicListening();
+                }
+            }
+        });
+
+        ensureMicListening();
+    }
+
+    private void ensureMicListening() {
         if (Build.VERSION.SDK_INT >= 23
                 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 1001);
@@ -92,6 +116,93 @@ public class ScorePlayActivity extends AppCompatActivity {
         }
     }
 
+    private void startMidiPlayback() {
+        pitchAnalyzer.stop();
+        midiPlaybackRequested = true;
+        status.setText(R.string.play_midi_started);
+        if (midiThread != null && midiThread.isAlive()) {
+            return;
+        }
+
+        midiThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                playNotesWithSynth();
+            }
+        }, "midi-playback");
+        midiThread.start();
+    }
+
+    private void stopMidiPlayback() {
+        midiPlaybackRequested = false;
+    }
+
+    private void playNotesWithSynth() {
+        if (piece == null || piece.notes.isEmpty()) {
+            return;
+        }
+        int sampleRate = 22050;
+        int minBuffer = AudioTrack.getMinBufferSize(sampleRate,
+                AudioFormat.CHANNEL_OUT_MONO,
+                AudioFormat.ENCODING_PCM_16BIT);
+        AudioTrack track = new AudioTrack(AudioManager.STREAM_MUSIC,
+                sampleRate,
+                AudioFormat.CHANNEL_OUT_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                Math.max(minBuffer, sampleRate / 2),
+                AudioTrack.MODE_STREAM);
+        track.play();
+
+        short[] buffer = new short[sampleRate / 8];
+        try {
+            for (int i = 0; i < piece.notes.size() && midiPlaybackRequested; i++) {
+                final int idx = i;
+                final NoteEvent note = piece.notes.get(i);
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        overlayView.setPointer(idx);
+                        status.setText(getString(R.string.play_midi_note,
+                                MusicNotation.toEuropeanLabel(note.noteName, note.octave)));
+                    }
+                });
+
+                double freq = midiToFrequency(MusicNotation.midiFor(note.noteName, note.octave));
+                int ms = durationMs(note.duration);
+                int totalSamples = sampleRate * ms / 1000;
+                int written = 0;
+                while (written < totalSamples && midiPlaybackRequested) {
+                    int chunk = Math.min(buffer.length, totalSamples - written);
+                    for (int s = 0; s < chunk; s++) {
+                        double t = (written + s) / (double) sampleRate;
+                        buffer[s] = (short) (Math.sin(2d * Math.PI * freq * t) * 12000);
+                    }
+                    track.write(buffer, 0, chunk);
+                    written += chunk;
+                }
+            }
+        } finally {
+            track.stop();
+            track.release();
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    status.setText(R.string.play_midi_finished);
+                }
+            });
+        }
+    }
+
+    private int durationMs(String duration) {
+        if ("eighth".equals(duration)) return 240;
+        if ("half".equals(duration)) return 900;
+        return 450;
+    }
+
+    private double midiToFrequency(int midi) {
+        return 440.0 * Math.pow(2.0, (midi - 69) / 12.0);
+    }
+
     private String toEuropeanLabelFromFull(String fullName) {
         if (fullName == null || fullName.length() < 2) {
             return fullName;
@@ -122,5 +233,6 @@ public class ScorePlayActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         pitchAnalyzer.stop();
+        stopMidiPlayback();
     }
 }
