@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">مدرب نغمات الفيتنامية</string>
+    <string name="app_name">Fluitebox</string>
     <string name="btn_demo">عرض النغمات</string>
     <string name="btn_practice">تدريب</string>
     <string name="btn_play_reference">تشغيل المرجع</string>

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Trainer für vietnamesische Töne</string>
+    <string name="app_name">Fluitebox</string>
     <string name="btn_demo">Ton-Demo</string>
     <string name="btn_practice">Übung</string>
     <string name="btn_play_reference">Referenz abspielen</string>

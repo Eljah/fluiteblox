@@ -13,7 +13,7 @@ import android.widget.TextView;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.recordercoach.app.R;
+import com.fluitebox.app.R;
 import tatar.eljah.audio.PitchAnalyzer;
 
 public class ScorePlayActivity extends AppCompatActivity {

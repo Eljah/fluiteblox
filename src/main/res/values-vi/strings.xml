@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Luyện tập thanh điệu tiếng Việt</string>
+    <string name="app_name">Fluitebox</string>
     <string name="btn_demo">Bản demo thanh điệu</string>
     <string name="btn_practice">Luyện tập</string>
     <string name="btn_play_reference">Phát mẫu chuẩn</string>

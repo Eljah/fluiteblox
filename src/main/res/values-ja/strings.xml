@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">ベトナム語声調トレーナー</string>
+    <string name="app_name">Fluitebox</string>
     <string name="btn_demo">声調デモ</string>
     <string name="btn_practice">練習</string>
     <string name="btn_play_reference">お手本を再生</string>

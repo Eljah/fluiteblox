@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">越南语声调训练器</string>
+    <string name="app_name">Fluitebox</string>
     <string name="btn_demo">声调演示</string>
     <string name="btn_practice">练习</string>
     <string name="btn_play_reference">播放参考</string>

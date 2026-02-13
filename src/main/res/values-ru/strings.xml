@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Тренажёр вьетнамских тонов</string>
+    <string name="app_name">Fluitebox</string>
     <string name="btn_demo">Демо тонов</string>
     <string name="btn_practice">Тренировка</string>
     <string name="btn_play_reference">Проиграть образец</string>

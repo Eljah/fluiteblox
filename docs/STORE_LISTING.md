@@ -17,7 +17,7 @@
 - Any important limitations or requirements (e.g., microphone).
 
 ### Example outline
-- **Learn and practice tones** with guided demos and practice exercises.
+- **Learn and practice with Fluitebox** with guided demos and practice exercises.
 - **Real-time pitch analysis** using your microphone.
 - **Reference samples** to compare pronunciation.
 - **Progress-focused practice** for consistent improvement.

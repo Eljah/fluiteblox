@@ -5,7 +5,7 @@ import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 
-import com.recordercoach.app.R;
+import com.fluitebox.app.R;
 
 import tatar.eljah.recorder.CaptureSheetActivity;
 import tatar.eljah.recorder.LibraryActivity;
