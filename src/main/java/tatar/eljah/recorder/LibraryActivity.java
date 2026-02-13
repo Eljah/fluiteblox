@@ -11,7 +11,7 @@ import android.widget.ListView;
 import java.util.ArrayList;
 import java.util.List;
 
-import tatar.eljah.R;
+import com.recordercoach.app.R;
 
 public class LibraryActivity extends AppCompatActivity {
 

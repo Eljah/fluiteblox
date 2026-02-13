@@ -11,7 +11,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import tatar.eljah.R;
+import com.recordercoach.app.R;
 
 public class CaptureSheetActivity extends AppCompatActivity {
     private static final int REQ_CAMERA = 410;

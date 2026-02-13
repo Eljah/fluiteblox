@@ -4,7 +4,7 @@ import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.widget.TextView;
 
-import tatar.eljah.R;
+import com.recordercoach.app.R;
 
 public class FingeringHintActivity extends AppCompatActivity {
     @Override

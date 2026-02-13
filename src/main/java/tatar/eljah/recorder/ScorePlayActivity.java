@@ -13,7 +13,7 @@ import android.widget.TextView;
 import java.util.ArrayList;
 import java.util.List;
 
-import tatar.eljah.R;
+import com.recordercoach.app.R;
 import tatar.eljah.audio.PitchAnalyzer;
 
 public class ScorePlayActivity extends AppCompatActivity {
@@ -123,6 +123,18 @@ public class ScorePlayActivity extends AppCompatActivity {
         } else {
             status.setText(R.string.play_done);
             pitchAnalyzer.stop();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 1001) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                startListening();
+            } else {
+                status.setText(R.string.play_microphone_denied);
+            }
         }
     }
 

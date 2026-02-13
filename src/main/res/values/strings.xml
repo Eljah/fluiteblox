@@ -22,6 +22,7 @@
     <string name="play_no_piece">Произведение не найдено.</string>
     <string name="play_status_template">Ожидается: %1$s, сыграно: %2$s (%3$d Гц)</string>
     <string name="play_done">Произведение сыграно. Отлично!</string>
+    <string name="play_microphone_denied">Доступ к микрофону не выдан. Без него режим игры недоступен.</string>
 
     <string name="hint_title">Подсказка аппликатуры</string>
     <string name="hint_expected">Нужно было: %1$s\nПальцы: %2$s</string>
