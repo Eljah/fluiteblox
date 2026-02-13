@@ -1,6 +1,7 @@
 package tatar.eljah.recorder;
 
 import android.graphics.Bitmap;
+import android.graphics.Color;
 
 public class OpenCvScoreProcessor {
 
@@ -22,21 +23,88 @@ public class OpenCvScoreProcessor {
         ScorePiece piece = new ScorePiece();
         piece.title = title;
 
-        int seed = Math.max(8, (bitmap.getWidth() + bitmap.getHeight()) / 120);
+        int[] rowEnergy = estimateRowEnergy(bitmap);
+        int rows = estimateStaffRows(rowEnergy, bitmap.getWidth());
+        int bars = estimateBars(bitmap);
+        int notesCount = Math.max(8, rows * 6);
+
         String[] notes = new String[]{"C", "D", "E", "F", "G", "A", "B"};
         String[] durations = new String[]{"quarter", "eighth", "half"};
-        int measure = 1;
-        for (int i = 0; i < seed; i++) {
-            if (i > 0 && i % 4 == 0) {
-                measure++;
-            }
-            piece.notes.add(new NoteEvent(notes[i % notes.length], (i % 2 == 0) ? 5 : 4, durations[i % durations.length], measure));
+
+        for (int i = 0; i < notesCount; i++) {
+            int measure = 1 + i / 4;
+            float x = 0.08f + ((float) i / Math.max(1, notesCount - 1)) * 0.84f;
+            int row = i % Math.max(1, rows);
+            float y = 0.18f + row * (0.64f / Math.max(1, rows - 1)) + ((i % 3) - 1) * 0.02f;
+            y = Math.max(0.08f, Math.min(0.92f, y));
+
+            piece.notes.add(new NoteEvent(
+                    notes[i % notes.length],
+                    i % 2 == 0 ? 5 : 4,
+                    durations[i % durations.length],
+                    measure,
+                    x,
+                    y
+            ));
         }
 
         int perpendicular = estimatePerpendicular(bitmap);
-        int rows = Math.max(1, bitmap.getHeight() / 420);
-        int bars = Math.max(2, piece.notes.size() / 2);
         return new ProcessingResult(piece, rows, bars, perpendicular);
+    }
+
+    private int[] estimateRowEnergy(Bitmap bitmap) {
+        int h = bitmap.getHeight();
+        int w = bitmap.getWidth();
+        int[] energy = new int[h];
+        int sampleStep = Math.max(1, w / 280);
+        for (int y = 0; y < h; y++) {
+            int dark = 0;
+            for (int x = 0; x < w; x += sampleStep) {
+                int px = bitmap.getPixel(x, y);
+                int gray = (Color.red(px) + Color.green(px) + Color.blue(px)) / 3;
+                if (gray < 110) {
+                    dark++;
+                }
+            }
+            energy[y] = dark;
+        }
+        return energy;
+    }
+
+    private int estimateStaffRows(int[] rowEnergy, int width) {
+        int threshold = Math.max(8, width / 35);
+        int lines = 0;
+        boolean inLine = false;
+        for (int value : rowEnergy) {
+            if (value > threshold && !inLine) {
+                lines++;
+                inLine = true;
+            } else if (value <= threshold) {
+                inLine = false;
+            }
+        }
+        return Math.max(1, Math.min(8, lines / 5));
+    }
+
+    private int estimateBars(Bitmap bitmap) {
+        int w = bitmap.getWidth();
+        int h = bitmap.getHeight();
+        int sampleStep = Math.max(1, h / 250);
+        int bars = 0;
+        for (int x = 0; x < w; x += Math.max(2, w / 80)) {
+            int dark = 0;
+            for (int y = 0; y < h; y += sampleStep) {
+                int px = bitmap.getPixel(x, y);
+                int gray = (Color.red(px) + Color.green(px) + Color.blue(px)) / 3;
+                if (gray < 80) {
+                    dark++;
+                }
+            }
+            if (dark > (h / sampleStep) * 0.35f) {
+                bars++;
+            }
+        }
+        return Math.max(2, bars);
     }
 
     private int estimatePerpendicular(Bitmap bitmap) {

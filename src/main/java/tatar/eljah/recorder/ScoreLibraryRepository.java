@@ -53,7 +53,9 @@ public class ScoreLibraryRepository {
                                 note.optString("noteName"),
                                 note.optInt("octave", 4),
                                 note.optString("duration", "quarter"),
-                                note.optInt("measure", 1)
+                                note.optInt("measure", 1),
+                                (float) note.optDouble("x", -1d),
+                                (float) note.optDouble("y", -1d)
                         ));
                     }
                 }
@@ -90,6 +92,8 @@ public class ScoreLibraryRepository {
                     noteObj.put("octave", note.octave);
                     noteObj.put("duration", note.duration);
                     noteObj.put("measure", note.measure);
+                    noteObj.put("x", note.x);
+                    noteObj.put("y", note.y);
                     notesArray.put(noteObj);
                 }
                 obj.put("notes", notesArray);

@@ -23,6 +23,8 @@ public class CaptureSheetActivity extends AppCompatActivity {
 
     private Bitmap capturedBitmap;
     private TextView analysisText;
+    private RecognitionOverlayView notesOverlay;
+    private OpenCvScoreProcessor.ProcessingResult latestResult;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,6 +34,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         final EditText titleInput = findViewById(R.id.input_piece_title);
         final ImageView preview = findViewById(R.id.image_preview);
         analysisText = findViewById(R.id.text_analysis);
+        notesOverlay = findViewById(R.id.image_notes_overlay);
 
         findViewById(R.id.btn_open_camera).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -52,7 +55,11 @@ public class CaptureSheetActivity extends AppCompatActivity {
                     Toast.makeText(CaptureSheetActivity.this, R.string.capture_title_required, Toast.LENGTH_SHORT).show();
                     return;
                 }
-                OpenCvScoreProcessor.ProcessingResult result = new OpenCvScoreProcessor().process(capturedBitmap, title);
+                OpenCvScoreProcessor.ProcessingResult result = latestResult;
+                if (result == null) {
+                    result = new OpenCvScoreProcessor().process(capturedBitmap, title);
+                }
+                result.piece.title = title;
                 new ScoreLibraryRepository(CaptureSheetActivity.this).savePiece(result.piece);
                 Toast.makeText(CaptureSheetActivity.this, R.string.capture_saved, Toast.LENGTH_SHORT).show();
                 startActivity(new Intent(CaptureSheetActivity.this, LibraryActivity.class));
@@ -106,12 +113,13 @@ public class CaptureSheetActivity extends AppCompatActivity {
             if (bmp != null) {
                 capturedBitmap = bmp;
                 ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(bmp);
-                OpenCvScoreProcessor.ProcessingResult result = new OpenCvScoreProcessor().process(bmp, "draft");
+                latestResult = new OpenCvScoreProcessor().process(bmp, "draft");
+                notesOverlay.setRecognizedNotes(latestResult.piece.notes);
                 analysisText.setText(getString(R.string.capture_analysis_template,
-                        result.perpendicularScore,
-                        result.staffRows,
-                        result.barlines,
-                        result.piece.notes.size()));
+                        latestResult.perpendicularScore,
+                        latestResult.staffRows,
+                        latestResult.barlines,
+                        latestResult.piece.notes.size()));
             }
         }
     }

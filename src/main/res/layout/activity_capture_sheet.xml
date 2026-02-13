@@ -29,13 +29,23 @@
             android:layout_marginTop="12dp"
             android:text="@string/capture_open_camera" />
 
-        <ImageView
-            android:id="@+id/image_preview"
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="240dp"
             android:layout_marginTop="12dp"
-            android:scaleType="centerCrop"
-            android:background="#EDEDED" />
+            android:background="#EDEDED">
+
+            <ImageView
+                android:id="@+id/image_preview"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop" />
+
+            <tatar.eljah.recorder.RecognitionOverlayView
+                android:id="@+id/image_notes_overlay"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/text_analysis"

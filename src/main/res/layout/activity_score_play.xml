@@ -11,22 +11,10 @@
         android:textStyle="bold"
         android:textSize="20sp" />
 
-    <HorizontalScrollView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp">
-
-        <LinearLayout
-            android:id="@+id/notes_holder"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal" />
-    </HorizontalScrollView>
-
     <tatar.eljah.recorder.PitchOverlayView
         android:id="@+id/pitch_overlay"
         android:layout_width="match_parent"
-        android:layout_height="200dp"
+        android:layout_height="300dp"
         android:layout_marginTop="12dp" />
 
     <TextView
