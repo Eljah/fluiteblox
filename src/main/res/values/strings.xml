@@ -3,6 +3,12 @@
     <string name="main_title">Fluitebox</string>
     <string name="main_capture">1) Сфотографировать ноты</string>
     <string name="main_library">2) Библиотека произведений</string>
+    <string name="main_settings">3) Настройки аудио</string>
+
+    <string name="settings_title">Настройки распознавания</string>
+    <string name="settings_threshold_value_default">Порог интенсивности: 0.030</string>
+    <string name="settings_threshold_value_template">Порог интенсивности: %.3f</string>
+    <string name="settings_hint">Тапните по графику интенсивности, чтобы задать порог выше шумов.</string>
 
     <string name="capture_title">Сканирование нотного стана</string>
     <string name="capture_piece_name_hint">Название произведения</string>
@@ -29,9 +35,15 @@
     <string name="play_microphone_denied">Доступ к микрофону не выдан. Без него режим игры недоступен.</string>
     <string name="play_mode_mic">Mic</string>
     <string name="play_mode_midi">Play Midi</string>
+    <string name="play_mode_tablature">Play Tablature</string>
     <string name="play_midi_started">MIDI-проигрывание запущено.</string>
     <string name="play_midi_note">MIDI: %1$s</string>
+    <string name="play_tablature_started">Поочередное проигрывание табулатуры запущено.</string>
+    <string name="play_tablature_note">Табулатура: %1$s</string>
+    <string name="play_tablature_finished">Проигрывание табулатуры завершено.</string>
     <string name="play_midi_finished">MIDI-проигрывание завершено.</string>
+    <string name="play_midi_failed">Не удалось запустить проигрывание на этом устройстве.</string>
+    <string name="play_waiting_intensity">Слишком тихо (порог: %.3f). Сыграйте громче или настройте порог.</string>
 
     <string name="hint_title">Подсказка аппликатуры</string>
     <string name="hint_expected">Нужно было: %1$s\nПальцы: %2$s</string>
