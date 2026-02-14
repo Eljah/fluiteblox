@@ -131,18 +131,74 @@ public class PitchAnalyzer {
     }
 
     private float estimatePitch(short[] buffer, int length, int sampleRate) {
-        int crossings = 0;
-        for (int i = 1; i < length; i++) {
-            short prev = buffer[i - 1];
-            short curr = buffer[i];
-            if ((prev >= 0 && curr < 0) || (prev < 0 && curr >= 0)) {
-                crossings++;
-            }
-        }
-        if (crossings == 0) {
+        if (buffer == null || length < 64 || sampleRate <= 0) {
             return 0f;
         }
-        float frequency = (sampleRate * crossings) / (2f * length);
+
+        // Remove DC offset and reject silence/noise-only fragments.
+        double mean = 0d;
+        for (int i = 0; i < length; i++) {
+            mean += buffer[i];
+        }
+        mean /= length;
+
+        double rms = 0d;
+        for (int i = 0; i < length; i++) {
+            double centered = buffer[i] - mean;
+            rms += centered * centered;
+        }
+        rms = Math.sqrt(rms / length);
+        if (rms < 250d) {
+            return 0f;
+        }
+
+        // Prefer autocorrelation to zero-crossing: it is much less sensitive
+        // to attack transients and upper harmonics (e.g. 2nd harmonic spikes).
+        int minLag = Math.max(4, sampleRate / 2600);
+        int maxLag = Math.min(length / 2, sampleRate / 120);
+        if (maxLag <= minLag) {
+            return 0f;
+        }
+
+        double[] corr = new double[maxLag + 1];
+        for (int lag = minLag; lag <= maxLag; lag++) {
+            double sum = 0d;
+            double energyA = 0d;
+            double energyB = 0d;
+            int limit = length - lag;
+            for (int i = 0; i < limit; i++) {
+                double a = buffer[i] - mean;
+                double b = buffer[i + lag] - mean;
+                sum += a * b;
+                energyA += a * a;
+                energyB += b * b;
+            }
+            if (energyA <= 0d || energyB <= 0d) {
+                continue;
+            }
+            corr[lag] = sum / Math.sqrt(energyA * energyB);
+        }
+
+        // Prefer the earliest valid local peak to avoid selecting a later
+        // multiple-period peak (subharmonic/octave-down error).
+        int bestLag = -1;
+        final double minCorr = 0.55d;
+        for (int lag = minLag + 1; lag < maxLag; lag++) {
+            double normalized = corr[lag];
+            if (normalized < minCorr) {
+                continue;
+            }
+            if (normalized > corr[lag - 1] && normalized >= corr[lag + 1]) {
+                bestLag = lag;
+                break;
+            }
+        }
+
+        if (bestLag <= 0) {
+            return 0f;
+        }
+
+        float frequency = sampleRate / (float) bestLag;
         if (frequency < 120f || frequency > 2600f) {
             return 0f;
         }
