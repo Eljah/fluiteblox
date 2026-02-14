@@ -161,8 +161,6 @@ public class PitchAnalyzer {
         }
 
         double[] corr = new double[maxLag + 1];
-        double bestCorr = 0d;
-        int bestLag = -1;
         for (int lag = minLag; lag <= maxLag; lag++) {
             double sum = 0d;
             double energyA = 0d;
@@ -178,17 +176,21 @@ public class PitchAnalyzer {
             if (energyA <= 0d || energyB <= 0d) {
                 continue;
             }
-            double normalized = sum / Math.sqrt(energyA * energyB);
-            corr[lag] = normalized;
-            // Take only local maxima to avoid half-period harmonic artifacts.
-            if (lag > minLag && lag < maxLag
-                    && normalized > corr[lag - 1]
-                    && normalized >= 0.55d
-                    && normalized >= corr[lag + 1]) {
-                if (normalized > bestCorr) {
-                    bestCorr = normalized;
-                    bestLag = lag;
-                }
+            corr[lag] = sum / Math.sqrt(energyA * energyB);
+        }
+
+        // Prefer the earliest valid local peak to avoid selecting a later
+        // multiple-period peak (subharmonic/octave-down error).
+        int bestLag = -1;
+        final double minCorr = 0.55d;
+        for (int lag = minLag + 1; lag < maxLag; lag++) {
+            double normalized = corr[lag];
+            if (normalized < minCorr) {
+                continue;
+            }
+            if (normalized > corr[lag - 1] && normalized >= corr[lag + 1]) {
+                bestLag = lag;
+                break;
             }
         }
 
