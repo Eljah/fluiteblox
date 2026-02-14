@@ -231,6 +231,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         tablaturePlaybackRequested = true;
         pointer = 0;
         overlayView.setPointer(pointer);
+        analyzeTablatureFrequencies();
         if (tablatureThread != null && tablatureThread.isAlive()) {
             return;
         }
@@ -332,6 +333,9 @@ public class ScorePlayActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
+                        if (!midiMode) {
+                            pointer = idx;
+                        }
                         overlayView.setPointer(idx);
                         status.setText(getString(midiMode ? R.string.play_midi_note : R.string.play_tablature_note,
                                 MusicNotation.toEuropeanLabel(note.noteName, note.octave)));
@@ -462,6 +466,23 @@ public class ScorePlayActivity extends AppCompatActivity {
             return mappedFrequency;
         }
         return midiToFrequency(MusicNotation.midiFor(note.noteName, note.octave));
+    }
+
+    private void analyzeTablatureFrequencies() {
+        if (piece == null || piece.notes.isEmpty()) {
+            return;
+        }
+        int exactMatches = 0;
+        for (NoteEvent note : piece.notes) {
+            String expected = note.fullName();
+            String synthesized = mapper.fromFrequency((float) resolveTablatureFrequency(note));
+            if (expected.equals(synthesized)) {
+                exactMatches++;
+            } else {
+                Log.w(TAG, "Tablature frequency label mismatch: expected=" + expected + ", synthesized=" + synthesized);
+            }
+        }
+        Log.i(TAG, "Tablature frequency pre-check: " + exactMatches + "/" + piece.notes.size() + " labels match mapper mapping");
     }
 
     private double midiToFrequency(int midi) {

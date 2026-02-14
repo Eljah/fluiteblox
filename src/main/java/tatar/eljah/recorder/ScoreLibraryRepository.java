@@ -8,13 +8,14 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
 public class ScoreLibraryRepository {
     private static final String PREFS = "recorder_library";
     private static final String KEY_ITEMS = "items";
+    private static final String PRELOADED_ETUDE_ID = "preloaded-etude-20-stankevich";
+    private static final String PRELOADED_ETUDE_TITLE = "Этюд № 20 И. Станкевича";
 
     private final SharedPreferences sharedPreferences;
 
@@ -62,9 +63,31 @@ public class ScoreLibraryRepository {
                 result.add(piece);
             }
         } catch (JSONException ignored) {
-            return Collections.emptyList();
+            result.clear();
+        }
+        if (!containsPiece(result, PRELOADED_ETUDE_ID)) {
+            result.add(buildPreloadedEtudePiece());
         }
         return result;
+    }
+
+
+    private boolean containsPiece(List<ScorePiece> pieces, String id) {
+        for (ScorePiece piece : pieces) {
+            if (id.equals(piece.id)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private ScorePiece buildPreloadedEtudePiece() {
+        ScorePiece piece = new ScorePiece();
+        piece.id = PRELOADED_ETUDE_ID;
+        piece.title = PRELOADED_ETUDE_TITLE;
+        piece.createdAt = 1L;
+        piece.notes.addAll(ReferenceComposition.expected54());
+        return piece;
     }
 
     public ScorePiece findById(String id) {
