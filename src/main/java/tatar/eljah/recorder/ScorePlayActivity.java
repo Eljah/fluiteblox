@@ -78,7 +78,7 @@ public class ScorePlayActivity extends AppCompatActivity {
                     startMidiPlayback();
                 } else if (checkedId == R.id.radio_mode_tablature) {
                     stopMidiPlayback();
-                    pitchAnalyzer.stop();
+                    ensureMicListening();
                     startTablaturePlayback();
                 } else {
                     stopMidiPlayback();
