@@ -13,6 +13,7 @@ import java.util.List;
 
 public class PitchOverlayView extends View {
     private static final float MAX_SPECTROGRAM_HZ = 3000f;
+    private static final float NOTE_LABEL_MIN_GAP_PX = 10f;
 
     private final Paint staffPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint notePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -116,6 +117,11 @@ public class PitchOverlayView extends View {
         float rightPad = 20f;
         float available = Math.max(1f, w - leftPad - rightPad);
 
+        List<LabelLayout> labelsToDraw = new ArrayList<LabelLayout>();
+        float[] lastLabelRightForRow = new float[]{Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY};
+        float labelRowTopY = firstLineY + lineGap * 5.7f;
+        float labelRowBottomY = firstLineY + lineGap * 6.9f;
+
         for (int i = 0; i < notes.size(); i++) {
             NoteEvent note = notes.get(i);
             float x = leftPad + available * ((float) i / Math.max(1, notes.size() - 1));
@@ -124,8 +130,34 @@ public class PitchOverlayView extends View {
                     i == pointer ? activeNotePaint : notePaint);
 
             if (i % 2 == 0) {
-                canvas.drawText(MusicNotation.toEuropeanLabel(note.noteName, note.octave), x - noteRadius, firstLineY - lineGap * 0.6f, labelPaint);
+                String label = MusicNotation.toEuropeanLabel(note.noteName, note.octave);
+                float textWidth = labelPaint.measureText(label);
+                float textLeft = x - textWidth / 2f;
+                float textRight = textLeft + textWidth;
+
+                int row = i % 4 == 0 ? 0 : 1;
+                if (textLeft > lastLabelRightForRow[row] + NOTE_LABEL_MIN_GAP_PX) {
+                    float textY = row == 0 ? labelRowTopY : labelRowBottomY;
+                    labelsToDraw.add(new LabelLayout(label, textLeft, textY));
+                    lastLabelRightForRow[row] = textRight;
+                }
             }
+        }
+
+        for (LabelLayout labelLayout : labelsToDraw) {
+            canvas.drawText(labelLayout.text, labelLayout.x, labelLayout.y, labelPaint);
+        }
+    }
+
+    private static final class LabelLayout {
+        private final String text;
+        private final float x;
+        private final float y;
+
+        private LabelLayout(String text, float x, float y) {
+            this.text = text;
+            this.x = x;
+            this.y = y;
         }
     }
 
