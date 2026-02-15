@@ -21,6 +21,7 @@ public class ScorePlayActivity extends AppCompatActivity {
     private static final String TAG = "ScorePlayActivity";
     private static final int SYNTH_SAMPLE_RATE = 22050;
     private static final int SAFE_SAMPLE_RATE = 44100;
+    private static final int ENVELOPE_FADE_MS = 8;
 
     private final PitchAnalyzer pitchAnalyzer = new PitchAnalyzer();
     private final RecorderNoteMapper mapper = new RecorderNoteMapper();
@@ -347,6 +348,7 @@ public class ScorePlayActivity extends AppCompatActivity {
                         : resolveTablatureFrequency(note);
                 int ms = durationMs(note.duration);
                 int totalSamples = sampleRate * ms / 1000;
+                int fadeSamples = Math.min(sampleRate * ENVELOPE_FADE_MS / 1000, totalSamples / 2);
                 int written = 0;
                 while (written < totalSamples && playbackRequested(midiMode)) {
                     if (Thread.currentThread().isInterrupted()) {
@@ -355,7 +357,8 @@ public class ScorePlayActivity extends AppCompatActivity {
                     int chunk = Math.min(buffer.length, totalSamples - written);
                     for (int s = 0; s < chunk; s++) {
                         double t = (written + s) / (double) sampleRate;
-                        buffer[s] = (short) (Math.sin(2d * Math.PI * freq * t) * 12000);
+                        float envelope = amplitudeEnvelope(written + s, totalSamples, fadeSamples);
+                        buffer[s] = (short) (Math.sin(2d * Math.PI * freq * t) * 12000 * envelope);
                     }
                     int result = track.write(buffer, 0, chunk);
                     if (result <= 0) {
@@ -457,6 +460,20 @@ public class ScorePlayActivity extends AppCompatActivity {
         if ("eighth".equals(duration)) return 240;
         if ("half".equals(duration)) return 900;
         return 450;
+    }
+
+    private float amplitudeEnvelope(int sampleIndex, int totalSamples, int fadeSamples) {
+        if (totalSamples <= 0 || fadeSamples <= 0) {
+            return 1f;
+        }
+        if (sampleIndex < fadeSamples) {
+            return sampleIndex / (float) fadeSamples;
+        }
+        int samplesToEnd = totalSamples - sampleIndex;
+        if (samplesToEnd <= fadeSamples) {
+            return Math.max(0f, samplesToEnd / (float) fadeSamples);
+        }
+        return 1f;
     }
 
     private double resolveTablatureFrequency(NoteEvent note) {
