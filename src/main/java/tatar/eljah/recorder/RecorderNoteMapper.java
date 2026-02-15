@@ -10,61 +10,43 @@ public class RecorderNoteMapper {
 
     static {
         Map<String, Float> frequencies = new LinkedHashMap<String, Float>();
-        // Equal temperament A4 = 440Hz. Includes recorder-centered range plus
-        // octave-4/Bb notes used by reference score and OCR fallback pieces.
-        frequencies.put("D4", 293.66f);
-        frequencies.put("E4", 329.63f);
-        frequencies.put("F4", 349.23f);
+        // Alto recorder in G, equal temperament A4 = 440Hz.
+        // Supported range: G4 (392Hz) .. A6 (1760Hz).
         frequencies.put("G4", 392.00f);
         frequencies.put("A4", 440.00f);
-        frequencies.put("Bb4", 466.16f);
         frequencies.put("B4", 493.88f);
         frequencies.put("C5", 523.25f);
         frequencies.put("D5", 587.33f);
         frequencies.put("E5", 659.25f);
-        frequencies.put("F5", 698.46f);
+        frequencies.put("F#5", 739.99f);
         frequencies.put("G5", 783.99f);
         frequencies.put("A5", 880.00f);
-        frequencies.put("Bb5", 932.33f);
         frequencies.put("B5", 987.77f);
         frequencies.put("C6", 1046.50f);
         frequencies.put("D6", 1174.66f);
         frequencies.put("E6", 1318.51f);
-        frequencies.put("F6", 1396.91f);
+        frequencies.put("F#6", 1479.98f);
         frequencies.put("G6", 1567.98f);
         frequencies.put("A6", 1760.00f);
-        frequencies.put("Bb6", 1864.66f);
-        frequencies.put("B6", 1975.53f);
-        frequencies.put("C7", 2093.00f);
-        frequencies.put("D7", 2349.32f);
         NOTE_FREQUENCIES = Collections.unmodifiableMap(frequencies);
 
         Map<String, String> fingerings = new LinkedHashMap<String, String>();
-        fingerings.put("D4", "●●●|●●○○");
-        fingerings.put("E4", "●●●|●○○○");
-        fingerings.put("F4", "●●●|○○○○");
         fingerings.put("G4", "●●○|○○○○");
         fingerings.put("A4", "●○○|○○○○");
-        fingerings.put("Bb4", "○○○|○○○○");
         fingerings.put("B4", "○○○|○○○○");
         fingerings.put("C5", "●●●|●●●○");
         fingerings.put("D5", "●●●|●●○○");
         fingerings.put("E5", "●●●|●○○○");
-        fingerings.put("F5", "●●●|○○○○");
+        fingerings.put("F#5", "●●●|○○○○");
         fingerings.put("G5", "●●○|○○○○");
         fingerings.put("A5", "●○○|○○○○");
-        fingerings.put("Bb5", "○○○|○○○○");
         fingerings.put("B5", "○○○|○○○○");
         fingerings.put("C6", "●●●|●●●○");
         fingerings.put("D6", "●●●|●●○○");
         fingerings.put("E6", "●●●|●○○○");
-        fingerings.put("F6", "●●●|○○○○");
+        fingerings.put("F#6", "●●●|○○○○");
         fingerings.put("G6", "●●○|○○○○");
         fingerings.put("A6", "●○○|○○○○");
-        fingerings.put("Bb6", "○○○|○○○○");
-        fingerings.put("B6", "○○○|○○○○");
-        fingerings.put("C7", "●●●|●●●○");
-        fingerings.put("D7", "●●●|●●○○");
         FINGERINGS = Collections.unmodifiableMap(fingerings);
     }
 
