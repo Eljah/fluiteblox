@@ -14,6 +14,7 @@ import java.util.List;
 public class PitchOverlayView extends View {
     private static final float MAX_SPECTROGRAM_HZ = 3000f;
     private static final float NOTE_LABEL_MIN_GAP_PX = 2f;
+    private static final float SPECTROGRAM_TOP_PADDING_PX = 34f;
 
     private final Paint staffPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint notePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -199,7 +200,7 @@ public class PitchOverlayView extends View {
     }
 
     private void drawSpectrogram(Canvas canvas, float w, float h, float topH) {
-        float startY = topH + 12f;
+        float startY = topH + SPECTROGRAM_TOP_PADDING_PX;
         float bottom = h - 8f;
         if (bottom <= startY) {
             return;

@@ -68,6 +68,10 @@ public class ScorePlayActivity extends AppCompatActivity {
         ((TextView) findViewById(R.id.text_piece_title)).setText(piece.title);
         overlayView.setNotes(piece.notes);
         overlayView.setPointer(pointer);
+        if (!piece.notes.isEmpty()) {
+            NoteEvent firstExpected = piece.notes.get(pointer);
+            overlayView.setFrequencies(mapper.frequencyFor(firstExpected.fullName()), 0f);
+        }
 
         RadioGroup modeGroup = findViewById(R.id.group_play_mode);
         modeGroup.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
@@ -189,6 +193,8 @@ public class ScorePlayActivity extends AppCompatActivity {
         pointer++;
         if (pointer < piece.notes.size()) {
             overlayView.setPointer(pointer);
+            NoteEvent nextExpected = piece.notes.get(pointer);
+            overlayView.setFrequencies(mapper.frequencyFor(nextExpected.fullName()), 0f);
         } else {
             status.setText(R.string.play_done);
             stopTablaturePlayback();
