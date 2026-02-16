@@ -70,7 +70,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         overlayView.setPointer(pointer);
         if (!piece.notes.isEmpty()) {
             NoteEvent firstExpected = piece.notes.get(pointer);
-            overlayView.setFrequencies(mapper.frequencyFor(firstExpected.fullName()), 0f);
+            overlayView.setFrequencies(expectedFrequencyFor(firstExpected), 0f);
         }
 
         RadioGroup modeGroup = findViewById(R.id.group_play_mode);
@@ -167,7 +167,7 @@ public class ScorePlayActivity extends AppCompatActivity {
 
         NoteEvent expected = piece.notes.get(pointer);
         String expectedName = expected.fullName();
-        float expectedFrequency = mapper.frequencyFor(expectedName);
+        float expectedFrequency = expectedFrequencyFor(expected);
 
         if (currentInputIntensity < intensityThreshold) {
             overlayView.setFrequencies(expectedFrequency, 0f);
@@ -194,11 +194,24 @@ public class ScorePlayActivity extends AppCompatActivity {
         if (pointer < piece.notes.size()) {
             overlayView.setPointer(pointer);
             NoteEvent nextExpected = piece.notes.get(pointer);
-            overlayView.setFrequencies(mapper.frequencyFor(nextExpected.fullName()), 0f);
+            overlayView.setFrequencies(expectedFrequencyFor(nextExpected), 0f);
         } else {
             status.setText(R.string.play_done);
             stopTablaturePlayback();
         }
+    }
+
+
+    private float expectedFrequencyFor(NoteEvent note) {
+        if (note == null) {
+            return 0f;
+        }
+        float mapped = mapper.frequencyFor(note.fullName());
+        if (mapped > 0f) {
+            return mapped;
+        }
+        int midi = MusicNotation.midiFor(note.noteName, note.octave);
+        return (float) (440.0 * Math.pow(2.0, (midi - 69) / 12.0));
     }
 
     private float normalizeDetectedPitch(float detectedHz, float expectedFrequency) {
@@ -207,7 +220,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         }
 
         float halvedHz = detectedHz / 2f;
-        float minMappedHz = mapper.frequencyFor("G4");
+        float minMappedHz = mapper.frequencyFor("D4");
         float maxMappedHz = mapper.frequencyFor("A6");
 
         boolean directInRange = detectedHz >= minMappedHz && detectedHz <= maxMappedHz;
