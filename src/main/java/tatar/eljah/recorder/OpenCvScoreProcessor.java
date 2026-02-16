@@ -412,7 +412,7 @@ public class OpenCvScoreProcessor {
     }
 
     private void enforceReferencePiece(ScorePiece piece, List<Blob> noteHeads, int w, int h) {
-        List<NoteEvent> reference = ReferenceComposition.expected54();
+        List<NoteEvent> reference = ReferenceComposition.expectedReferenceNotes();
         if (reference.isEmpty()) {
             return;
         }

@@ -13,7 +13,7 @@ import java.util.List;
 
 public class PitchOverlayView extends View {
     private static final float MAX_SPECTROGRAM_HZ = 3000f;
-    private static final float NOTE_LABEL_MIN_GAP_PX = 10f;
+    private static final float NOTE_LABEL_MIN_GAP_PX = 2f;
 
     private final Paint staffPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint notePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -118,11 +118,13 @@ public class PitchOverlayView extends View {
         float available = Math.max(1f, w - leftPad - rightPad);
 
         List<LabelLayout> labelsToDraw = new ArrayList<LabelLayout>();
-        float[] lastLabelRightForRow = new float[]{Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY};
+        float[] lastLabelRightForRow = new float[]{Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY};
         float spectrogramTopY = topH + 12f;
-        float labelRowTopY = firstLineY + lineGap * 5.4f;
-        float preferredBottomRowY = firstLineY + lineGap * 6.2f;
-        float labelRowBottomY = Math.min(preferredBottomRowY, spectrogramTopY - 6f);
+        float[] labelRows = new float[]{
+                firstLineY + lineGap * 5.2f,
+                firstLineY + lineGap * 5.8f,
+                Math.min(firstLineY + lineGap * 6.4f, spectrogramTopY - 6f)
+        };
 
         for (int i = 0; i < notes.size(); i++) {
             NoteEvent note = notes.get(i);
@@ -131,18 +133,15 @@ public class PitchOverlayView extends View {
             canvas.drawOval(new RectF(x - noteRadius, y - noteRadius * 0.75f, x + noteRadius, y + noteRadius * 0.75f),
                     i == pointer ? activeNotePaint : notePaint);
 
-            if (i % 2 == 0) {
-                String label = MusicNotation.toEuropeanLabel(note.noteName, note.octave);
-                float textWidth = labelPaint.measureText(label);
-                float textLeft = x - textWidth / 2f;
-                float textRight = textLeft + textWidth;
+            String label = MusicNotation.toEuropeanLabel(note.noteName, note.octave);
+            float textWidth = labelPaint.measureText(label);
+            float textLeft = x - textWidth / 2f;
+            float textRight = textLeft + textWidth;
 
-                int row = i % 4 == 0 ? 0 : 1;
-                if (textLeft > lastLabelRightForRow[row] + NOTE_LABEL_MIN_GAP_PX) {
-                    float textY = row == 0 ? labelRowTopY : labelRowBottomY;
-                    labelsToDraw.add(new LabelLayout(label, textLeft, textY));
-                    lastLabelRightForRow[row] = textRight;
-                }
+            int row = i % labelRows.length;
+            if (textLeft > lastLabelRightForRow[row] + NOTE_LABEL_MIN_GAP_PX) {
+                labelsToDraw.add(new LabelLayout(label, textLeft, labelRows[row]));
+                lastLabelRightForRow[row] = textRight;
             }
         }
 

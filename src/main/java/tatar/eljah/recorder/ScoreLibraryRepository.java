@@ -86,7 +86,7 @@ public class ScoreLibraryRepository {
         piece.id = PRELOADED_ETUDE_ID;
         piece.title = PRELOADED_ETUDE_TITLE;
         piece.createdAt = 1L;
-        piece.notes.addAll(ReferenceComposition.expected54());
+        piece.notes.addAll(ReferenceComposition.expectedReferenceNotes());
         return piece;
     }
 

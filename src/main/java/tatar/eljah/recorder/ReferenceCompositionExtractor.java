@@ -121,33 +121,41 @@ public final class ReferenceCompositionExtractor {
                     r.readVarLen();
                     int statusOrData = r.readUnsignedByte();
                     int status;
-                    int data1;
                     if ((statusOrData & 0x80) != 0) {
                         status = statusOrData;
                         runningStatus = status;
-                        data1 = r.readUnsignedByte();
+                        if (status == 0xFF) {
+                            r.readUnsignedByte();
+                            int metaLen = r.readVarLen();
+                            r.skip(metaLen);
+                            continue;
+                        }
+                        if (status == 0xF0 || status == 0xF7) {
+                            int syxLen = r.readVarLen();
+                            r.skip(syxLen);
+                            continue;
+                        }
+                        int data1 = r.readUnsignedByte();
+                        int type = status & 0xF0;
+                        if (type == 0x80 || type == 0x90 || type == 0xA0 || type == 0xB0 || type == 0xE0) {
+                            int data2 = r.readUnsignedByte();
+                            if (type == 0x90 && data2 > 0) {
+                                out.add(data1);
+                            }
+                        } else if (type != 0xC0 && type != 0xD0) {
+                            throw new IOException("Unsupported MIDI status: " + status);
+                        }
                     } else {
+                        if (runningStatus == 0) {
+                            throw new IOException("Running status used before status byte");
+                        }
                         status = runningStatus;
-                        data1 = statusOrData;
-                    }
-
-                    int type = status & 0xF0;
-                    if (type == 0x80 || type == 0x90 || type == 0xA0 || type == 0xB0 || type == 0xE0) {
+                        int data1 = statusOrData;
+                        int type = status & 0xF0;
                         int data2 = r.readUnsignedByte();
                         if (type == 0x90 && data2 > 0) {
                             out.add(data1);
                         }
-                    } else if (type == 0xC0 || type == 0xD0) {
-                        // one data byte only
-                    } else if (status == 0xFF) {
-                        r.readUnsignedByte();
-                        int metaLen = r.readVarLen();
-                        r.skip(metaLen);
-                    } else if (status == 0xF0 || status == 0xF7) {
-                        int syxLen = r.readVarLen();
-                        r.skip(syxLen);
-                    } else {
-                        throw new IOException("Unsupported MIDI status: " + status);
                     }
                 }
             }
