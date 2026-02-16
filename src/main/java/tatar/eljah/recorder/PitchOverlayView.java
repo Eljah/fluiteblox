@@ -13,12 +13,12 @@ import java.util.List;
 
 public class PitchOverlayView extends View {
     private static final float MAX_SPECTROGRAM_HZ = 3000f;
-    private static final float NOTE_LABEL_MIN_GAP_PX = 2f;
 
     private final Paint staffPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint notePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint activeNotePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint activeLabelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint expectedPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint spectrogramGridPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint heatPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -31,6 +31,7 @@ public class PitchOverlayView extends View {
     private float actualHz;
     private int pointer;
     private int lastSpectrumSampleRate = 22050;
+    private boolean micMode = true;
 
     public PitchOverlayView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -43,8 +44,11 @@ public class PitchOverlayView extends View {
         labelPaint.setColor(Color.parseColor("#424242"));
         labelPaint.setTextSize(28f);
 
-        expectedPaint.setColor(Color.parseColor("#C62828"));
-        expectedPaint.setStrokeWidth(2f);
+        activeLabelPaint.setColor(Color.parseColor("#2E7D32"));
+        activeLabelPaint.setTextSize(28f);
+
+        expectedPaint.setColor(Color.parseColor("#8E24AA"));
+        expectedPaint.setStrokeWidth(1.5f);
 
         spectrogramGridPaint.setColor(Color.LTGRAY);
         spectrogramGridPaint.setStrokeWidth(2f);
@@ -71,6 +75,11 @@ public class PitchOverlayView extends View {
         if (history.size() > maxPoints) {
             history.remove(0);
         }
+        invalidate();
+    }
+
+    public void setMicMode(boolean micMode) {
+        this.micMode = micMode;
         invalidate();
     }
 
@@ -112,19 +121,14 @@ public class PitchOverlayView extends View {
             return;
         }
 
-        float noteRadius = Math.max(8f, lineGap * 0.35f);
         float leftPad = 26f;
         float rightPad = 20f;
         float available = Math.max(1f, w - leftPad - rightPad);
+        float noteStep = notes.size() <= 1 ? available : available / (notes.size() - 1);
+        float noteRadius = Math.max(2.5f, Math.min(lineGap * 0.35f, noteStep * 0.42f));
 
         List<LabelLayout> labelsToDraw = new ArrayList<LabelLayout>();
-        float[] lastLabelRightForRow = new float[]{Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY};
-        float spectrogramTopY = topH + 12f;
-        float[] labelRows = new float[]{
-                firstLineY + lineGap * 5.2f,
-                firstLineY + lineGap * 5.8f,
-                Math.min(firstLineY + lineGap * 6.4f, spectrogramTopY - 6f)
-        };
+        float[] labelRows = new float[]{firstLineY + lineGap * 5.7f};
 
         for (int i = 0; i < notes.size(); i++) {
             NoteEvent note = notes.get(i);
@@ -136,17 +140,14 @@ public class PitchOverlayView extends View {
             String label = MusicNotation.toEuropeanLabel(note.noteName, note.octave);
             float textWidth = labelPaint.measureText(label);
             float textLeft = x - textWidth / 2f;
-            float textRight = textLeft + textWidth;
 
             int row = i % labelRows.length;
-            if (textLeft > lastLabelRightForRow[row] + NOTE_LABEL_MIN_GAP_PX) {
-                labelsToDraw.add(new LabelLayout(label, textLeft, labelRows[row]));
-                lastLabelRightForRow[row] = textRight;
-            }
+            labelsToDraw.add(new LabelLayout(label, textLeft, labelRows[row], i == pointer));
         }
 
         for (LabelLayout labelLayout : labelsToDraw) {
-            canvas.drawText(labelLayout.text, labelLayout.x, labelLayout.y, labelPaint);
+            canvas.drawText(labelLayout.text, labelLayout.x, labelLayout.y,
+                    labelLayout.active ? activeLabelPaint : labelPaint);
         }
     }
 
@@ -154,11 +155,13 @@ public class PitchOverlayView extends View {
         private final String text;
         private final float x;
         private final float y;
+        private final boolean active;
 
-        private LabelLayout(String text, float x, float y) {
+        private LabelLayout(String text, float x, float y, boolean active) {
             this.text = text;
             this.x = x;
             this.y = y;
+            this.active = active;
         }
     }
 
@@ -172,8 +175,11 @@ public class PitchOverlayView extends View {
         drawSpectrogramGrid(canvas, w, startY, bottom);
         drawSpectrogramHeatmap(canvas, w, startY, bottom);
 
-        float expectedY = yForFrequency(expectedHz, startY, bottom);
-        canvas.drawLine(0, expectedY, w, expectedY, expectedPaint);
+        if (micMode && expectedHz > 0f) {
+            float secondHarmonicHz = expectedHz * 2f;
+            float expectedY = yForFrequency(secondHarmonicHz, startY, bottom);
+            canvas.drawLine(0, expectedY, w, expectedY, expectedPaint);
+        }
     }
 
     private void drawSpectrogramGrid(Canvas canvas, float w, float top, float bottom) {

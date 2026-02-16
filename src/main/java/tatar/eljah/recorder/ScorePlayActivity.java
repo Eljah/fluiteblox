@@ -74,14 +74,17 @@ public class ScorePlayActivity extends AppCompatActivity {
             @Override
             public void onCheckedChanged(RadioGroup group, int checkedId) {
                 if (checkedId == R.id.radio_mode_midi) {
+                    overlayView.setMicMode(false);
                     stopTablaturePlayback();
                     pitchAnalyzer.stop();
                     startMidiPlayback();
                 } else if (checkedId == R.id.radio_mode_tablature) {
+                    overlayView.setMicMode(false);
                     stopMidiPlayback();
                     ensureMicListening();
                     startTablaturePlayback();
                 } else {
+                    overlayView.setMicMode(true);
                     stopMidiPlayback();
                     stopTablaturePlayback();
                     ensureMicListening();
@@ -89,6 +92,7 @@ public class ScorePlayActivity extends AppCompatActivity {
             }
         });
 
+        overlayView.setMicMode(true);
         ensureMicListening();
     }
 
