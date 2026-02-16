@@ -161,16 +161,17 @@ public class ScorePlayActivity extends AppCompatActivity {
             return;
         }
 
-        String detected = mapper.fromFrequency(hz);
+        float normalizedHz = hz / 2f;
+        String detected = mapper.fromFrequency(normalizedHz);
 
         NoteEvent expected = piece.notes.get(pointer);
         String expectedName = expected.fullName();
-        overlayView.setFrequencies(mapper.frequencyFor(expectedName), hz);
+        overlayView.setFrequencies(mapper.frequencyFor(expectedName), normalizedHz);
         overlayView.setPointer(pointer);
         status.setText(getString(R.string.play_status_template,
                 MusicNotation.toEuropeanLabel(expected.noteName, expected.octave),
                 toEuropeanLabelFromFull(detected),
-                (int) hz));
+                (int) normalizedHz));
 
         if (!detected.equals(expectedName)) {
             return;
