@@ -119,8 +119,10 @@ public class PitchOverlayView extends View {
 
         List<LabelLayout> labelsToDraw = new ArrayList<LabelLayout>();
         float[] lastLabelRightForRow = new float[]{Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY};
-        float labelRowTopY = firstLineY + lineGap * 5.7f;
-        float labelRowBottomY = firstLineY + lineGap * 6.9f;
+        float spectrogramTopY = topH + 12f;
+        float labelRowTopY = firstLineY + lineGap * 5.4f;
+        float preferredBottomRowY = firstLineY + lineGap * 6.2f;
+        float labelRowBottomY = Math.min(preferredBottomRowY, spectrogramTopY - 6f);
 
         for (int i = 0; i < notes.size(); i++) {
             NoteEvent note = notes.get(i);
