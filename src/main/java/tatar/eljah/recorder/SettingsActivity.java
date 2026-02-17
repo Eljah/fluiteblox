@@ -61,6 +61,7 @@ public class SettingsActivity extends AppCompatActivity {
                 int index = spinner.getSelectedItemPosition();
                 if (index >= 0 && index < LANG_CODES.length) {
                     AppLocaleManager.saveAndApply(SettingsActivity.this, LANG_CODES[index]);
+                    setResult(RESULT_OK);
                 }
                 recreate();
             }

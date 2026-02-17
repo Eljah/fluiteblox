@@ -19,7 +19,11 @@ public class PitchOverlayView extends View {
     private static final float STAFF_BOTTOM_PADDING_PX = 12f;
     private static final float NOTE_LABEL_BLOCK_GAP_PX = 14f;
     private static final float NOTE_LABEL_ROW_GAP_PX = 18f;
-    private static final float SPECTROGRAM_TOP_PADDING_PX = 24f;
+    private static final float PANEL_BOTTOM_PADDING_PX = 8f;
+    private static final float STAFF_PANEL_MIN_HEIGHT_PX = 92f;
+    private static final float LABEL_PANEL_MIN_HEIGHT_PX = 42f;
+    private static final float SPECTROGRAM_PANEL_MIN_HEIGHT_PX = 88f;
+    private static final float LABEL_BASELINE_BOTTOM_INSET_PX = 6f;
     private static final int REFERENCE_NOTE_COUNT = 56;
     private static final float LEDGER_STAFF_SPAN_IN_GAPS = 7f; // 1.5 above + 4 staff + 1.5 below
 
@@ -115,20 +119,48 @@ public class PitchOverlayView extends View {
         float w = getWidth();
         float h = getHeight();
 
-        float spectrogramBottom = h - 8f;
-        float spectrogramTopLimit = h * 0.58f;
-        float staffTop = STAFF_TOP_PADDING_PX;
-        float staffBottom = Math.max(staffTop + 70f, spectrogramTopLimit - STAFF_BOTTOM_PADDING_PX);
+        float availableHeight = Math.max(1f, h - STAFF_TOP_PADDING_PX - PANEL_BOTTOM_PADDING_PX);
+        int estimatedLabelRows = estimateLabelRows(w);
+        float desiredLabelHeight = Math.max(LABEL_PANEL_MIN_HEIGHT_PX, estimatedLabelRows * NOTE_LABEL_ROW_GAP_PX + 8f);
 
-        float labelsBottom = drawStaffAndNotes(canvas, w, staffTop, staffBottom);
-        float spectrogramTop = Math.max(labelsBottom + SPECTROGRAM_TOP_PADDING_PX, spectrogramTopLimit);
-        if (spectrogramTop >= spectrogramBottom) {
-            spectrogramTop = Math.max(staffBottom + NOTE_LABEL_BLOCK_GAP_PX, spectrogramBottom - 40f);
+        float staffHeight = Math.max(STAFF_PANEL_MIN_HEIGHT_PX, availableHeight * 0.30f);
+        float spectrogramHeight = Math.max(SPECTROGRAM_PANEL_MIN_HEIGHT_PX, availableHeight * 0.34f);
+        float gapBudget = NOTE_LABEL_BLOCK_GAP_PX + NOTE_LABEL_BLOCK_GAP_PX;
+        float totalNeeded = staffHeight + desiredLabelHeight + spectrogramHeight + gapBudget;
+
+        if (totalNeeded > availableHeight) {
+            float overflow = totalNeeded - availableHeight;
+            float staffShrink = Math.min(overflow * 0.45f, Math.max(0f, staffHeight - STAFF_PANEL_MIN_HEIGHT_PX));
+            staffHeight -= staffShrink;
+            overflow -= staffShrink;
+
+            float spectrogramShrink = Math.min(overflow * 0.65f, Math.max(0f, spectrogramHeight - SPECTROGRAM_PANEL_MIN_HEIGHT_PX));
+            spectrogramHeight -= spectrogramShrink;
+            overflow -= spectrogramShrink;
+
+            float labelMinForRows = Math.max(LABEL_PANEL_MIN_HEIGHT_PX, estimatedLabelRows * (NOTE_LABEL_ROW_GAP_PX * 0.66f));
+            float labelShrink = Math.min(Math.max(0f, overflow), Math.max(0f, desiredLabelHeight - labelMinForRows));
+            desiredLabelHeight -= labelShrink;
         }
+
+        float staffTop = STAFF_TOP_PADDING_PX;
+        float staffBottom = staffTop + staffHeight;
+        float labelTop = staffBottom + NOTE_LABEL_BLOCK_GAP_PX;
+        float labelBottom = Math.min(h - PANEL_BOTTOM_PADDING_PX - spectrogramHeight - NOTE_LABEL_BLOCK_GAP_PX, labelTop + desiredLabelHeight);
+        if (labelBottom < labelTop + LABEL_PANEL_MIN_HEIGHT_PX) {
+            labelBottom = labelTop + LABEL_PANEL_MIN_HEIGHT_PX;
+        }
+        float spectrogramTop = labelBottom + NOTE_LABEL_BLOCK_GAP_PX;
+        float spectrogramBottom = h - PANEL_BOTTOM_PADDING_PX;
+        if (spectrogramBottom - spectrogramTop < SPECTROGRAM_PANEL_MIN_HEIGHT_PX) {
+            spectrogramTop = Math.max(labelBottom, spectrogramBottom - SPECTROGRAM_PANEL_MIN_HEIGHT_PX);
+        }
+
+        drawStaffAndNotes(canvas, w, staffTop, staffBottom, labelTop, labelBottom);
         drawSpectrogram(canvas, w, spectrogramTop, spectrogramBottom);
     }
 
-    private float drawStaffAndNotes(Canvas canvas, float w, float staffTop, float staffBottom) {
+    private void drawStaffAndNotes(Canvas canvas, float w, float staffTop, float staffBottom, float labelTop, float labelBottom) {
         float drawableStaffHeight = Math.max(1f, staffBottom - staffTop);
         float lineGap = drawableStaffHeight / LEDGER_STAFF_SPAN_IN_GAPS;
         float firstLineY = staffTop + lineGap * 1.5f;
@@ -139,7 +171,8 @@ public class PitchOverlayView extends View {
         }
 
         if (notes.isEmpty()) {
-            return bottomLineY + NOTE_LABEL_BLOCK_GAP_PX;
+            noteDrawInfos.clear();
+            return;
         }
 
         float leftPad = 26f;
@@ -150,8 +183,6 @@ public class PitchOverlayView extends View {
         float noteRadius = Math.max(8f, Math.min(lineGap * 0.58f, referenceStep * 0.48f)) * 2f;
 
         List<LabelLayout> labelsToDraw = new ArrayList<LabelLayout>();
-        float labelStartY = bottomLineY + NOTE_LABEL_BLOCK_GAP_PX;
-        float labelRowGap = Math.max(NOTE_LABEL_ROW_GAP_PX, lineGap * 0.72f);
         List<Float> lastLabelRight = new ArrayList<Float>();
 
         noteDrawInfos.clear();
@@ -170,7 +201,7 @@ public class PitchOverlayView extends View {
             float stemOffsetX = stemOffsetForIndex(i, noteStep, noteRadius);
             drawDurationAwareNote(canvas, note, x, y, noteRadius, stemOffsetX, stemUp, circlePaint);
 
-            String label = MusicNotation.toEuropeanLabel(note.noteName, note.octave);
+            String label = MusicNotation.toLocalizedLabel(getContext(), note.noteName, note.octave);
             float textWidth = labelPaint.measureText(label);
             float textLeft = Math.max(0f, Math.min(w - textWidth, x - textWidth / 2f));
 
@@ -183,18 +214,36 @@ public class PitchOverlayView extends View {
             textLeft = Math.max(0f, Math.min(w - textWidth, textLeft));
             lastLabelRight.set(row, textLeft + textWidth);
 
-            float textY = labelStartY + row * labelRowGap;
-            labelsToDraw.add(new LabelLayout(label, textLeft, textY, i == pointer, mismatch, durationMismatch));
+            labelsToDraw.add(new LabelLayout(label, textLeft, row, i == pointer, mismatch, durationMismatch));
             noteDrawInfos.add(new NoteDrawInfo(i, x, y, Math.max(noteRadius * 2f, 28f)));
         }
 
+        int maxRow = Math.max(0, lastLabelRight.size() - 1);
+        float availableLabelHeight = Math.max(LABEL_PANEL_MIN_HEIGHT_PX, labelBottom - labelTop);
+        float labelRowGap = maxRow == 0 ? 0f : Math.max(10f, availableLabelHeight / (float) (maxRow + 1));
+        float firstBaselineY = labelTop + labelRowGap;
+        float maxBaselineY = labelBottom - LABEL_BASELINE_BOTTOM_INSET_PX;
+
         for (LabelLayout labelLayout : labelsToDraw) {
             Paint textPaint = labelLayout.mismatch ? mismatchLabelPaint : (labelLayout.durationMismatch ? durationMismatchNotePaint : (labelLayout.active ? activeLabelPaint : labelPaint));
-            canvas.drawText(labelLayout.text, labelLayout.x, labelLayout.y, textPaint);
+            float textY = Math.min(maxBaselineY, firstBaselineY + labelLayout.y * labelRowGap);
+            canvas.drawText(labelLayout.text, labelLayout.x, textY, textPaint);
         }
+    }
 
-        int maxRow = Math.max(0, lastLabelRight.size() - 1);
-        return labelStartY + maxRow * labelRowGap;
+
+    private int estimateLabelRows(float w) {
+        if (notes.isEmpty()) {
+            return 1;
+        }
+        float maxLabelWidth = 0f;
+        for (NoteEvent note : notes) {
+            String label = MusicNotation.toLocalizedLabel(getContext(), note.noteName, note.octave);
+            maxLabelWidth = Math.max(maxLabelWidth, labelPaint.measureText(label));
+        }
+        float usableWidth = Math.max(1f, w - 46f);
+        int labelsPerRow = Math.max(1, (int) Math.floor(usableWidth / Math.max(1f, maxLabelWidth + NOTE_LABEL_MIN_GAP_PX)));
+        return Math.max(1, (int) Math.ceil((double) notes.size() / (double) labelsPerRow));
     }
 
     private int selectLabelRow(float textLeft, float textWidth, List<Float> lastLabelRight) {
