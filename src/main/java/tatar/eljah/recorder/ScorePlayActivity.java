@@ -1,6 +1,7 @@
 package tatar.eljah.recorder;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioManager;
@@ -9,6 +10,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.View;
+import android.widget.Button;
 import android.widget.RadioGroup;
 import android.widget.TextView;
 
@@ -67,11 +70,31 @@ public class ScorePlayActivity extends AppCompatActivity {
 
         ((TextView) findViewById(R.id.text_piece_title)).setText(piece.title);
         overlayView.setNotes(piece.notes);
-        overlayView.setPointer(pointer);
+        overlayView.setPointer(-1);
         if (!piece.notes.isEmpty()) {
             NoteEvent firstExpected = piece.notes.get(pointer);
             overlayView.setFrequencies(expectedFrequencyFor(firstExpected), 0f);
         }
+        overlayView.setOnMismatchNoteClickListener(new PitchOverlayView.OnMismatchNoteClickListener() {
+            @Override
+            public void onMismatchNoteClick(int index, String expectedFullName, String actualFullName) {
+                if (actualFullName == null) {
+                    return;
+                }
+                Intent intent = new Intent(ScorePlayActivity.this, FingeringHintActivity.class);
+                intent.putExtra("expected", expectedFullName);
+                intent.putExtra("actual", actualFullName);
+                startActivity(intent);
+            }
+        });
+
+        Button restartButton = findViewById(R.id.btn_restart);
+        restartButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                restartProgress();
+            }
+        });
 
         RadioGroup modeGroup = findViewById(R.id.group_play_mode);
         modeGroup.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
@@ -171,7 +194,6 @@ public class ScorePlayActivity extends AppCompatActivity {
 
         if (currentInputIntensity < intensityThreshold) {
             overlayView.setFrequencies(expectedFrequency, 0f);
-            overlayView.setPointer(pointer);
             status.setText(getString(R.string.play_waiting_intensity, intensityThreshold));
             return;
         }
@@ -187,9 +209,11 @@ public class ScorePlayActivity extends AppCompatActivity {
                 (int) normalizedHz));
 
         if (!detected.equals(expectedName)) {
+            overlayView.markMismatch(pointer, detected);
             return;
         }
 
+        overlayView.clearMismatch(pointer);
         pointer++;
         if (pointer < piece.notes.size()) {
             overlayView.setPointer(pointer);
@@ -201,6 +225,22 @@ public class ScorePlayActivity extends AppCompatActivity {
         }
     }
 
+
+    private void restartProgress() {
+        stopMidiPlayback();
+        stopTablaturePlayback();
+        pointer = 0;
+        if (piece != null) {
+            for (int i = 0; i < piece.notes.size(); i++) {
+                overlayView.clearMismatch(i);
+            }
+        }
+        overlayView.setPointer(-1);
+        if (piece != null && !piece.notes.isEmpty()) {
+            overlayView.setFrequencies(expectedFrequencyFor(piece.notes.get(0)), 0f);
+        }
+        status.setText(R.string.play_restarted);
+    }
 
     private float expectedFrequencyFor(NoteEvent note) {
         if (note == null) {

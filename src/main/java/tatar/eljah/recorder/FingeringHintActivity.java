@@ -12,11 +12,41 @@ public class FingeringHintActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_fingering_hint);
 
-        String expected = getIntent().getStringExtra("expected");
-        String actual = getIntent().getStringExtra("actual");
+        String expectedFullName = sanitizeNoteKey(getIntent().getStringExtra("expected"));
+        String actualFullName = sanitizeNoteKey(getIntent().getStringExtra("actual"));
         RecorderNoteMapper mapper = new RecorderNoteMapper();
 
-        ((TextView) findViewById(R.id.text_expected_note)).setText(getString(R.string.hint_expected, expected, mapper.fingeringFor(expected)));
-        ((TextView) findViewById(R.id.text_actual_note)).setText(getString(R.string.hint_actual, actual, mapper.fingeringFor(actual)));
+        String expectedLabel = toEuropean(expectedFullName);
+        String actualLabel = toEuropean(actualFullName);
+
+        ((TextView) findViewById(R.id.text_expected_note)).setText(getString(
+                R.string.hint_expected,
+                expectedLabel,
+                mapper.fingeringFor(expectedFullName)));
+        ((TextView) findViewById(R.id.text_actual_note)).setText(getString(
+                R.string.hint_actual,
+                actualLabel,
+                mapper.fingeringFor(actualFullName)));
+    }
+
+    private String sanitizeNoteKey(String fullName) {
+        if (fullName == null) {
+            return "";
+        }
+        return fullName.trim();
+    }
+
+    private String toEuropean(String fullName) {
+        if (fullName == null || fullName.length() < 2) {
+            return "?";
+        }
+        String note = fullName.substring(0, fullName.length() - 1);
+        int octave;
+        try {
+            octave = Integer.parseInt(fullName.substring(fullName.length() - 1));
+        } catch (NumberFormatException ex) {
+            return fullName;
+        }
+        return MusicNotation.toEuropeanLabel(note, octave);
     }
 }

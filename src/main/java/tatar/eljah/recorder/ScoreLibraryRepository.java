@@ -65,20 +65,23 @@ public class ScoreLibraryRepository {
         } catch (JSONException ignored) {
             result.clear();
         }
-        if (!containsPiece(result, PRELOADED_ETUDE_ID)) {
-            result.add(buildPreloadedEtudePiece());
-        }
+        upsertPreloadedPiece(result);
         return result;
     }
 
 
-    private boolean containsPiece(List<ScorePiece> pieces, String id) {
-        for (ScorePiece piece : pieces) {
-            if (id.equals(piece.id)) {
-                return true;
+    private void upsertPreloadedPiece(List<ScorePiece> pieces) {
+        for (int i = 0; i < pieces.size(); i++) {
+            ScorePiece piece = pieces.get(i);
+            if (!PRELOADED_ETUDE_ID.equals(piece.id)) {
+                continue;
             }
+            if (piece.notes == null || piece.notes.size() != ReferenceComposition.EXPECTED_NOTES) {
+                pieces.set(i, buildPreloadedEtudePiece());
+            }
+            return;
         }
-        return false;
+        pieces.add(buildPreloadedEtudePiece());
     }
 
     private ScorePiece buildPreloadedEtudePiece() {

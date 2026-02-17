@@ -427,9 +427,19 @@ public class OpenCvScoreProcessor {
             NoteEvent expected = reference.get(i);
             float x;
             float y;
-            if (detected > 0) {
-                int idx = Math.min(detected - 1, (int) Math.round(i * (detected - 1f) / (reference.size() - 1f)));
-                Blob b = noteHeads.get(idx);
+            if (detected > 1) {
+                float scaled = i * (detected - 1f) / Math.max(1, reference.size() - 1f);
+                int leftIdx = Math.max(0, Math.min(detected - 1, (int) Math.floor(scaled)));
+                int rightIdx = Math.max(0, Math.min(detected - 1, (int) Math.ceil(scaled)));
+                Blob left = noteHeads.get(leftIdx);
+                Blob right = noteHeads.get(rightIdx);
+                float blend = scaled - leftIdx;
+                float cx = left.cx() + (right.cx() - left.cx()) * blend;
+                float cy = left.cy() + (right.cy() - left.cy()) * blend;
+                x = cx / (float) Math.max(1, w - 1);
+                y = cy / (float) Math.max(1, h - 1);
+            } else if (detected == 1) {
+                Blob b = noteHeads.get(0);
                 x = b.cx() / (float) Math.max(1, w - 1);
                 y = b.cy() / (float) Math.max(1, h - 1);
             } else {
