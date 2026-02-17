@@ -38,9 +38,10 @@ public class PitchOverlayView extends View {
     private final Paint mismatchNotePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mismatchLabelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-    private OnMismatchNoteClickListener mismatchNoteClickListener;
+    private OnPlayedNoteClickListener playedNoteClickListener;
     private final List<String> mismatchActualByIndex = new ArrayList<String>();
     private final List<Boolean> matchedByIndex = new ArrayList<Boolean>();
+    private final List<String> matchedActualByIndex = new ArrayList<String>();
 
     private float expectedHz;
     private float actualHz;
@@ -80,9 +81,11 @@ public class PitchOverlayView extends View {
         }
         mismatchActualByIndex.clear();
         matchedByIndex.clear();
+        matchedActualByIndex.clear();
         for (int i = 0; i < notes.size(); i++) {
             mismatchActualByIndex.add(null);
             matchedByIndex.add(false);
+            matchedActualByIndex.add(null);
         }
         invalidate();
     }
@@ -105,12 +108,13 @@ public class PitchOverlayView extends View {
         invalidate();
     }
 
-    public void markMatched(int index) {
+    public void markMatched(int index, String actualFullName) {
         if (index < 0 || index >= notes.size()) {
             return;
         }
         ensureMatchedCapacity();
         matchedByIndex.set(index, true);
+        matchedActualByIndex.set(index, actualFullName);
         invalidate();
     }
 
@@ -120,11 +124,12 @@ public class PitchOverlayView extends View {
         }
         ensureMatchedCapacity();
         matchedByIndex.set(index, false);
+        matchedActualByIndex.set(index, null);
         invalidate();
     }
 
-    public void setOnMismatchNoteClickListener(OnMismatchNoteClickListener listener) {
-        this.mismatchNoteClickListener = listener;
+    public void setOnPlayedNoteClickListener(OnPlayedNoteClickListener listener) {
+        this.playedNoteClickListener = listener;
     }
 
     public void setPointer(int pointer) {
@@ -287,6 +292,9 @@ public class PitchOverlayView extends View {
         while (matchedByIndex.size() < notes.size()) {
             matchedByIndex.add(false);
         }
+        while (matchedActualByIndex.size() < notes.size()) {
+            matchedActualByIndex.add(null);
+        }
     }
 
     @Override
@@ -294,30 +302,34 @@ public class PitchOverlayView extends View {
         if (event.getAction() != MotionEvent.ACTION_UP) {
             return true;
         }
-        if (mismatchNoteClickListener == null) {
+        if (playedNoteClickListener == null) {
             return true;
         }
 
         float touchX = event.getX();
         float touchY = event.getY();
         for (NoteDrawInfo info : noteDrawInfos) {
-            if (!hasMismatch(info.index)) {
+            boolean mismatch = hasMismatch(info.index);
+            boolean matched = isMatched(info.index);
+            if (!mismatch && !matched) {
                 continue;
             }
             float dx = touchX - info.cx;
             float dy = touchY - info.cy;
             if (dx * dx + dy * dy <= info.hitRadius * info.hitRadius) {
-                String actual = mismatchActualByIndex.get(info.index);
+                String actual = mismatch
+                        ? mismatchActualByIndex.get(info.index)
+                        : matchedActualByIndex.get(info.index);
                 NoteEvent expected = notes.get(info.index);
-                mismatchNoteClickListener.onMismatchNoteClick(info.index, expected.fullName(), actual);
+                playedNoteClickListener.onPlayedNoteClick(info.index, expected.fullName(), actual);
                 return true;
             }
         }
         return true;
     }
 
-    public interface OnMismatchNoteClickListener {
-        void onMismatchNoteClick(int index, String expectedFullName, String actualFullName);
+    public interface OnPlayedNoteClickListener {
+        void onPlayedNoteClick(int index, String expectedFullName, String actualFullName);
     }
 
     private static final class LabelLayout {

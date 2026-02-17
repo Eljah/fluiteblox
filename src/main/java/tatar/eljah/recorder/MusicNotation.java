@@ -31,23 +31,37 @@ public final class MusicNotation {
     }
 
     public static String toEuropeanLabel(String noteName, int octave) {
+        if (noteName == null || noteName.length() == 0) {
+            return "?";
+        }
+
+        String baseName = noteName.substring(0, 1);
+        String accidental = noteName.length() > 1 ? noteName.substring(1) : "";
+
         String base;
-        if ("C".equals(noteName)) {
-            base = "Do";
-        } else if ("D".equals(noteName)) {
-            base = "Re";
-        } else if ("E".equals(noteName)) {
-            base = "Mi";
-        } else if ("F".equals(noteName)) {
-            base = "Fa";
-        } else if ("G".equals(noteName)) {
-            base = "Sol";
-        } else if ("A".equals(noteName)) {
-            base = "La";
-        } else if ("B".equals(noteName) || "H".equals(noteName)) {
-            base = "Si";
+        if ("C".equals(baseName)) {
+            base = "До";
+        } else if ("D".equals(baseName)) {
+            base = "Ре";
+        } else if ("E".equals(baseName)) {
+            base = "Ми";
+        } else if ("F".equals(baseName)) {
+            base = "Фа";
+        } else if ("G".equals(baseName)) {
+            base = "Соль";
+        } else if ("A".equals(baseName)) {
+            base = "Ля";
+        } else if ("B".equals(baseName) || "H".equals(baseName)) {
+            base = "Си";
         } else {
             base = noteName;
+        }
+
+        if ("#".equals(accidental)) {
+            return base + "♯" + octave;
+        }
+        if ("b".equals(accidental)) {
+            return base + "♭" + octave;
         }
         return base + octave;
     }

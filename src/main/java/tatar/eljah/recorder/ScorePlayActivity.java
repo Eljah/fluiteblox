@@ -75,12 +75,9 @@ public class ScorePlayActivity extends AppCompatActivity {
             NoteEvent firstExpected = piece.notes.get(pointer);
             overlayView.setFrequencies(expectedFrequencyFor(firstExpected), 0f);
         }
-        overlayView.setOnMismatchNoteClickListener(new PitchOverlayView.OnMismatchNoteClickListener() {
+        overlayView.setOnPlayedNoteClickListener(new PitchOverlayView.OnPlayedNoteClickListener() {
             @Override
-            public void onMismatchNoteClick(int index, String expectedFullName, String actualFullName) {
-                if (actualFullName == null) {
-                    return;
-                }
+            public void onPlayedNoteClick(int index, String expectedFullName, String actualFullName) {
                 Intent intent = new Intent(ScorePlayActivity.this, FingeringHintActivity.class);
                 intent.putExtra("expected", expectedFullName);
                 intent.putExtra("actual", actualFullName);
@@ -208,13 +205,13 @@ public class ScorePlayActivity extends AppCompatActivity {
                 toEuropeanLabelFromFull(detected),
                 (int) normalizedHz));
 
-        if (!detected.equals(expectedName)) {
+        if (!samePitch(detected, expectedName)) {
             overlayView.markMismatch(pointer, detected);
             return;
         }
 
         overlayView.clearMismatch(pointer);
-        overlayView.markMatched(pointer);
+        overlayView.markMatched(pointer, detected);
         pointer++;
         if (pointer < piece.notes.size()) {
             overlayView.setPointer(pointer);
@@ -594,7 +591,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         for (NoteEvent note : piece.notes) {
             String expected = note.fullName();
             String synthesized = mapper.fromFrequency((float) resolveTablatureFrequency(note));
-            if (expected.equals(synthesized)) {
+            if (samePitch(expected, synthesized)) {
                 exactMatches++;
             } else {
                 Log.w(TAG, "Tablature frequency label mismatch: expected=" + expected + ", synthesized=" + synthesized);
@@ -605,6 +602,27 @@ public class ScorePlayActivity extends AppCompatActivity {
 
     private double midiToFrequency(int midi) {
         return 440.0 * Math.pow(2.0, (midi - 69) / 12.0);
+    }
+
+    private boolean samePitch(String firstFullName, String secondFullName) {
+        if (firstFullName == null || secondFullName == null) {
+            return false;
+        }
+        if (firstFullName.equals(secondFullName)) {
+            return true;
+        }
+        if (firstFullName.length() < 2 || secondFullName.length() < 2) {
+            return false;
+        }
+        try {
+            String firstNote = firstFullName.substring(0, firstFullName.length() - 1);
+            int firstOctave = Integer.parseInt(firstFullName.substring(firstFullName.length() - 1));
+            String secondNote = secondFullName.substring(0, secondFullName.length() - 1);
+            int secondOctave = Integer.parseInt(secondFullName.substring(secondFullName.length() - 1));
+            return MusicNotation.midiFor(firstNote, firstOctave) == MusicNotation.midiFor(secondNote, secondOctave);
+        } catch (NumberFormatException ex) {
+            return false;
+        }
     }
 
     private String toEuropeanLabelFromFull(String fullName) {
