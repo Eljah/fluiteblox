@@ -12,8 +12,8 @@ public class FingeringHintActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_fingering_hint);
 
-        String expectedFullName = getIntent().getStringExtra("expected");
-        String actualFullName = getIntent().getStringExtra("actual");
+        String expectedFullName = sanitizeNoteKey(getIntent().getStringExtra("expected"));
+        String actualFullName = sanitizeNoteKey(getIntent().getStringExtra("actual"));
         RecorderNoteMapper mapper = new RecorderNoteMapper();
 
         String expectedLabel = toEuropean(expectedFullName);
@@ -27,6 +27,13 @@ public class FingeringHintActivity extends AppCompatActivity {
                 R.string.hint_actual,
                 actualLabel,
                 mapper.fingeringFor(actualFullName)));
+    }
+
+    private String sanitizeNoteKey(String fullName) {
+        if (fullName == null) {
+            return "";
+        }
+        return fullName.trim();
     }
 
     private String toEuropean(String fullName) {

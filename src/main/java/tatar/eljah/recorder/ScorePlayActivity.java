@@ -10,6 +10,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.View;
+import android.widget.Button;
 import android.widget.RadioGroup;
 import android.widget.TextView;
 
@@ -68,7 +70,7 @@ public class ScorePlayActivity extends AppCompatActivity {
 
         ((TextView) findViewById(R.id.text_piece_title)).setText(piece.title);
         overlayView.setNotes(piece.notes);
-        overlayView.setPointer(pointer);
+        overlayView.setPointer(-1);
         if (!piece.notes.isEmpty()) {
             NoteEvent firstExpected = piece.notes.get(pointer);
             overlayView.setFrequencies(expectedFrequencyFor(firstExpected), 0f);
@@ -83,6 +85,14 @@ public class ScorePlayActivity extends AppCompatActivity {
                 intent.putExtra("expected", expectedFullName);
                 intent.putExtra("actual", actualFullName);
                 startActivity(intent);
+            }
+        });
+
+        Button restartButton = findViewById(R.id.btn_restart);
+        restartButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                restartProgress();
             }
         });
 
@@ -184,7 +194,6 @@ public class ScorePlayActivity extends AppCompatActivity {
 
         if (currentInputIntensity < intensityThreshold) {
             overlayView.setFrequencies(expectedFrequency, 0f);
-            overlayView.setPointer(pointer);
             status.setText(getString(R.string.play_waiting_intensity, intensityThreshold));
             return;
         }
@@ -216,6 +225,22 @@ public class ScorePlayActivity extends AppCompatActivity {
         }
     }
 
+
+    private void restartProgress() {
+        stopMidiPlayback();
+        stopTablaturePlayback();
+        pointer = 0;
+        if (piece != null) {
+            for (int i = 0; i < piece.notes.size(); i++) {
+                overlayView.clearMismatch(i);
+            }
+        }
+        overlayView.setPointer(-1);
+        if (piece != null && !piece.notes.isEmpty()) {
+            overlayView.setFrequencies(expectedFrequencyFor(piece.notes.get(0)), 0f);
+        }
+        status.setText(R.string.play_restarted);
+    }
 
     private float expectedFrequencyFor(NoteEvent note) {
         if (note == null) {
