@@ -21,6 +21,12 @@ public class MidiRecognitionRegressionTest {
     private static final int MIN_MATCH_HOLD_MS = 110;
     private static final float MIN_MATCH_HOLD_DURATION_FRACTION = 0.45f;
 
+    private static class RecognitionResult {
+        int recognizedCount;
+        boolean[] matched;
+        boolean[] mismatch;
+    }
+
     public void synthesizedReferenceScoreShouldRecognizeAllNotes() throws Exception {
         List<NoteEvent> notes = parseReferenceScore(new File("src/main/assets/reference_score.xml"));
         if (notes.isEmpty()) {
@@ -31,9 +37,17 @@ public class MidiRecognitionRegressionTest {
         File outWav = new File("target/reference_score_synth.wav");
         writeWav(pcm, SAMPLE_RATE, outWav);
 
-        int recognized = runRecognition(notes, pcm);
-        if (recognized != notes.size()) {
-            throw new AssertionError("All notes should be recognized sequentially: " + recognized + "/" + notes.size());
+        RecognitionResult result = runRecognition(notes, pcm);
+        if (result.recognizedCount != notes.size()) {
+            throw new AssertionError("All notes should be recognized sequentially: " + result.recognizedCount + "/" + notes.size());
+        }
+        for (int i = 0; i < notes.size(); i++) {
+            if (!result.matched[i]) {
+                throw new AssertionError("Note " + (i + 1) + " is not marked as matched (green)");
+            }
+            if (result.mismatch[i]) {
+                throw new AssertionError("Note " + (i + 1) + " remains mismatched (not green)");
+            }
         }
     }
 
@@ -116,10 +130,13 @@ public class MidiRecognitionRegressionTest {
         return pcm;
     }
 
-    private int runRecognition(List<NoteEvent> notes, short[] pcm) {
+    private RecognitionResult runRecognition(List<NoteEvent> notes, short[] pcm) {
         RecorderNoteMapper mapper = new RecorderNoteMapper();
         int pointer = 0;
         long lastMatchAcceptedAtMs = -1L;
+        RecognitionResult result = new RecognitionResult();
+        result.matched = new boolean[notes.size()];
+        result.mismatch = new boolean[notes.size()];
 
         for (int pos = 0; pos + FRAME_SIZE <= pcm.length && pointer < notes.size(); pos += HOP_SIZE) {
             NoteEvent expected = notes.get(pointer);
@@ -128,6 +145,7 @@ public class MidiRecognitionRegressionTest {
             detectedHz = normalizeDetectedPitch(detectedHz, expectedHz, mapper);
             String detected = mapper.fromFrequency(detectedHz);
             if (!samePitch(detected, expected.fullName())) {
+                result.mismatch[pointer] = true;
                 continue;
             }
 
@@ -138,10 +156,13 @@ public class MidiRecognitionRegressionTest {
                 continue;
             }
             lastMatchAcceptedAtMs = nowMs;
+            result.mismatch[pointer] = false;
+            result.matched[pointer] = true;
             pointer++;
         }
 
-        return pointer;
+        result.recognizedCount = pointer;
+        return result;
     }
 
     private float expectedFrequencyFor(NoteEvent note, RecorderNoteMapper mapper) {
