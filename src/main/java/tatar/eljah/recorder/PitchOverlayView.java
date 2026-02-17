@@ -27,7 +27,8 @@ public class PitchOverlayView extends View {
     private static final int REFERENCE_NOTE_COUNT = 56;
     private static final float BASE_LABEL_TEXT_SIZE_PX = 28f;
     private static final float MIN_LABEL_TEXT_SIZE_PX = 14f;
-    private static final float PROGRESS_BOUNDARY_GAP_UNITS = 0.7f;
+    private static final float BOUNDARY_GAP_ONE_AWAY_NOTE_DIAMETERS = 1f;
+    private static final float BOUNDARY_GAP_TWO_AWAY_NOTE_DIAMETERS = 0.5f;
 
     private final Paint staffPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint notePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -224,18 +225,21 @@ public class PitchOverlayView extends View {
         float leftPad = 26f;
         float rightPad = 20f;
         float available = Math.max(1f, w - leftPad - rightPad);
-        float noteStep = notes.size() <= 1 ? available : available / (notes.size() - 1);
         float referenceStep = available / Math.max(1, REFERENCE_NOTE_COUNT - 1);
         float noteRadius = Math.max(8f, Math.min(lineGap * 0.58f, referenceStep * 0.48f)) * 2f;
 
+        PositionLayout positionLayout = buildPositionLayout(leftPad, available, noteRadius);
+        float[] noteXs = positionLayout.noteXs;
+        float noteStep = positionLayout.noteStep;
+
         List<LabelLayout> labelsToDraw = new ArrayList<LabelLayout>();
-        List<Float> lastLabelRight = new ArrayList<Float>();
+        List<List<RectF>> labelRowBounds = new ArrayList<List<RectF>>();
 
         noteDrawInfos.clear();
         labelHitInfos.clear();
         for (int i = 0; i < notes.size(); i++) {
             NoteEvent note = notes.get(i);
-            float x = xForIndex(i, leftPad, available);
+            float x = noteXs[i];
             int step = diatonicStepFromBottomLineE4(note.noteName, note.octave);
             float y = yForStaffStep(step, bottomLineY, lineGap);
             drawLedgerLines(canvas, x, step, lineGap, bottomLineY, noteRadius);
@@ -250,22 +254,21 @@ public class PitchOverlayView extends View {
 
             String label = MusicNotation.toLocalizedLabel(getContext(), note.noteName, note.octave);
             float textWidth = labelPaint.measureText(label);
-            float textLeft = Math.max(0f, Math.min(w - textWidth, x - textWidth / 2f));
+            float columnCenterX = positionLayout.labelColumnXs[i];
+            float textLeft = Math.max(0f, Math.min(w - textWidth, columnCenterX - textWidth / 2f));
+            float textRight = textLeft + textWidth;
 
-            int row = selectLabelRow(textLeft, textWidth, lastLabelRight);
-            while (lastLabelRight.size() <= row) {
-                lastLabelRight.add(Float.NEGATIVE_INFINITY);
+            int row = selectLabelRow(textLeft, textRight, labelRowBounds);
+            while (labelRowBounds.size() <= row) {
+                labelRowBounds.add(new ArrayList<RectF>());
             }
-            float minAllowedLeft = lastLabelRight.get(row) + NOTE_LABEL_MIN_GAP_PX;
-            textLeft = Math.max(textLeft, minAllowedLeft);
-            textLeft = Math.max(0f, Math.min(w - textWidth, textLeft));
-            lastLabelRight.set(row, textLeft + textWidth);
+            labelRowBounds.get(row).add(new RectF(textLeft, 0f, textRight, 0f));
 
             labelsToDraw.add(new LabelLayout(i, label, textLeft, row, (matched || i == pointer), mismatch, durationMismatch));
             noteDrawInfos.add(new NoteDrawInfo(i, x, y, Math.max(noteRadius * 2f, 28f)));
         }
 
-        int rowCount = Math.max(1, lastLabelRight.size());
+        int rowCount = Math.max(1, labelRowBounds.size());
         float textHeight = labelTextHeight();
         float baselineStep = textHeight * 2f;
         float requiredHeight = requiredLabelPanelHeight(rowCount, textHeight);
@@ -318,36 +321,69 @@ public class PitchOverlayView extends View {
         return Math.max(1, (int) Math.ceil((double) notes.size() / (double) labelsPerRow));
     }
 
-    private int selectLabelRow(float textLeft, float textWidth, List<Float> lastLabelRight) {
-        for (int row = 0; row < lastLabelRight.size(); row++) {
-            float right = lastLabelRight.get(row);
-            if (textLeft >= right + NOTE_LABEL_MIN_GAP_PX) {
+    private int selectLabelRow(float textLeft, float textRight, List<List<RectF>> labelRowBounds) {
+        for (int row = 0; row < labelRowBounds.size(); row++) {
+            if (fitsInRow(textLeft, textRight, labelRowBounds.get(row))) {
                 return row;
             }
         }
-        return lastLabelRight.size();
+        return labelRowBounds.size();
     }
 
-    private float xForIndex(int index, float leftPad, float available) {
+    private boolean fitsInRow(float left, float right, List<RectF> rowBounds) {
+        for (RectF bounds : rowBounds) {
+            if (left < bounds.right + NOTE_LABEL_MIN_GAP_PX && right > bounds.left - NOTE_LABEL_MIN_GAP_PX) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private PositionLayout buildPositionLayout(float leftPad, float available, float noteRadius) {
         int count = notes.size();
-        if (count <= 1) {
-            return leftPad + available * 0.5f;
+        float[] noteXs = new float[count];
+        float[] labelColumnXs = new float[count];
+        if (count <= 0) {
+            return new PositionLayout(noteXs, labelColumnXs, available);
+        }
+        if (count == 1) {
+            float centerX = leftPad + available * 0.5f;
+            noteXs[0] = centerX;
+            labelColumnXs[0] = centerX;
+            return new PositionLayout(noteXs, labelColumnXs, available);
         }
 
-        float extraGap = progressBoundaryGapUnits();
-        float weightedIndex = index;
-        if (extraGap > 0f && index > pointer) {
-            weightedIndex += extraGap;
+        float noteDiameter = noteRadius * 2f;
+        float[] extraGapBySegment = new float[count - 1];
+        applyBoundaryGap(extraGapBySegment, pointer - 2, noteDiameter * BOUNDARY_GAP_TWO_AWAY_NOTE_DIAMETERS);
+        applyBoundaryGap(extraGapBySegment, pointer - 1, noteDiameter * BOUNDARY_GAP_ONE_AWAY_NOTE_DIAMETERS);
+        applyBoundaryGap(extraGapBySegment, pointer, noteDiameter * BOUNDARY_GAP_TWO_AWAY_NOTE_DIAMETERS);
+
+        float totalExtra = 0f;
+        for (float extra : extraGapBySegment) {
+            totalExtra += extra;
         }
-        float denominator = (count - 1) + extraGap;
-        return leftPad + available * (weightedIndex / Math.max(1f, denominator));
+
+        float usableForBase = Math.max(1f, available - totalExtra);
+        float baseStep = usableForBase / (count - 1);
+
+        noteXs[0] = leftPad;
+        labelColumnXs[0] = leftPad;
+        float currentX = leftPad;
+        for (int i = 1; i < count; i++) {
+            currentX += baseStep + extraGapBySegment[i - 1];
+            noteXs[i] = currentX;
+            labelColumnXs[i] = currentX;
+        }
+
+        return new PositionLayout(noteXs, labelColumnXs, baseStep);
     }
 
-    private float progressBoundaryGapUnits() {
-        if (pointer < 0 || pointer >= notes.size() - 1) {
-            return 0f;
+    private void applyBoundaryGap(float[] extraGapBySegment, int segmentIndex, float extraGap) {
+        if (segmentIndex < 0 || segmentIndex >= extraGapBySegment.length || extraGap <= 0f) {
+            return;
         }
-        return PROGRESS_BOUNDARY_GAP_UNITS;
+        extraGapBySegment[segmentIndex] += extraGap;
     }
 
     private void drawLedgerLines(Canvas canvas, float x, int step, float lineGap, float bottomLineY, float noteRadius) {
@@ -446,6 +482,18 @@ public class PitchOverlayView extends View {
         float maxOffset = noteRadius * 0.65f;
         float computedOffset = Math.min(maxOffset, overlap * 0.5f);
         return index % 2 == 0 ? -computedOffset : computedOffset;
+    }
+
+    private static final class PositionLayout {
+        private final float[] noteXs;
+        private final float[] labelColumnXs;
+        private final float noteStep;
+
+        private PositionLayout(float[] noteXs, float[] labelColumnXs, float noteStep) {
+            this.noteXs = noteXs;
+            this.labelColumnXs = labelColumnXs;
+            this.noteStep = noteStep;
+        }
     }
 
     private static final class LabelLayout { private final int index; private final String text; private final float x; private final float y; private final boolean active; private final boolean mismatch; private final boolean durationMismatch;

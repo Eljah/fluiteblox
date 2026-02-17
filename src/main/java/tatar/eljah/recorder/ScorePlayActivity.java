@@ -44,7 +44,6 @@ public class ScorePlayActivity extends AppCompatActivity {
 
     private TextView status;
     private PitchOverlayView overlayView;
-    private TextView currentFingeringView;
     private AudioManager audioManager;
 
     private volatile boolean midiPlaybackRequested;
@@ -77,7 +76,6 @@ public class ScorePlayActivity extends AppCompatActivity {
 
         status = findViewById(R.id.text_status);
         overlayView = findViewById(R.id.pitch_overlay);
-        currentFingeringView = findViewById(R.id.text_current_fingering);
         audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
 
         if (piece == null || piece.notes.isEmpty()) {
@@ -278,21 +276,13 @@ public class ScorePlayActivity extends AppCompatActivity {
 
     private void updateCurrentFingeringHint() {
         if (piece == null || piece.notes == null || piece.notes.isEmpty() || pointer < 0 || pointer >= piece.notes.size()) {
-            if (currentFingeringView != null) {
-                currentFingeringView.setText(getString(R.string.play_current_fingering_idle));
-            }
             setTitle(getString(R.string.app_name));
             return;
         }
 
         NoteEvent currentNote = piece.notes.get(pointer);
-        String localizedNote = MusicNotation.toLocalizedLabel(this, currentNote.noteName, currentNote.octave);
         String fingering = mapper.fingeringFor(currentNote.fullName());
-        String hintText = getString(R.string.play_current_fingering_template, localizedNote, fingering);
-        if (currentFingeringView != null) {
-            currentFingeringView.setText(hintText);
-        }
-        setTitle(getString(R.string.play_header_with_fingering, hintText));
+        setTitle(getString(R.string.play_header_with_fingering, fingering));
     }
 
     private void updateDurationMismatchForPrevious(int currentIndex) {
