@@ -15,17 +15,19 @@ import java.util.List;
 public class PitchOverlayView extends View {
     private static final float MAX_SPECTROGRAM_HZ = 3000f;
     private static final float NOTE_LABEL_MIN_GAP_PX = 2f;
-    private static final float STAFF_TOP_PADDING_PX = 10f;
+    private static final float STAFF_TOP_PADDING_PX = 28f;
     private static final float STAFF_BOTTOM_PADDING_PX = 12f;
     private static final float NOTE_LABEL_BLOCK_GAP_PX = 14f;
     private static final float PANEL_BOTTOM_PADDING_PX = 8f;
     private static final float LEDGER_STAFF_SPAN_IN_GAPS = 7f; // 1.5 above + 4 staff + 1.5 below
-    private static final float STAFF_LINE_GAP_FOR_12_NOTES_PX = 18f;
+    private static final float STAFF_LINE_GAP_FOR_12_NOTES_PX = 36f;
     private static final float STAFF_PANEL_MIN_HEIGHT_PX = STAFF_LINE_GAP_FOR_12_NOTES_PX * LEDGER_STAFF_SPAN_IN_GAPS;
     private static final float LABEL_PANEL_MIN_HEIGHT_PX = 42f;
     private static final float SPECTROGRAM_PANEL_MIN_HEIGHT_PX = 88f;
-    private static final float SPECTROGRAM_FIXED_HEIGHT_MULTIPLIER = 1.5f;
+    private static final float SPECTROGRAM_FIXED_HEIGHT_MULTIPLIER = 2f;
     private static final int REFERENCE_NOTE_COUNT = 56;
+    private static final float BASE_LABEL_TEXT_SIZE_PX = 28f;
+    private static final float MIN_LABEL_TEXT_SIZE_PX = 14f;
 
     private final Paint staffPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint notePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -70,16 +72,16 @@ public class PitchOverlayView extends View {
         mismatchNotePaint.setColor(Color.parseColor("#C62828"));
 
         labelPaint.setColor(Color.parseColor("#424242"));
-        labelPaint.setTextSize(28f);
+        labelPaint.setTextSize(BASE_LABEL_TEXT_SIZE_PX);
 
         activeLabelPaint.setColor(Color.parseColor("#2E7D32"));
-        activeLabelPaint.setTextSize(28f);
+        activeLabelPaint.setTextSize(BASE_LABEL_TEXT_SIZE_PX);
 
         mismatchLabelPaint.setColor(Color.parseColor("#C62828"));
-        mismatchLabelPaint.setTextSize(28f);
+        mismatchLabelPaint.setTextSize(BASE_LABEL_TEXT_SIZE_PX);
 
         durationMismatchNotePaint.setColor(Color.parseColor("#FB8C00"));
-        durationMismatchNotePaint.setTextSize(28f);
+        durationMismatchNotePaint.setTextSize(BASE_LABEL_TEXT_SIZE_PX);
 
         noteStrokePaint.setColor(Color.BLACK);
         noteStrokePaint.setStrokeWidth(3f);
@@ -122,34 +124,38 @@ public class PitchOverlayView extends View {
         float h = getHeight();
 
         int estimatedLabelRows = estimateLabelRows(w);
-        float noteLabelTextHeight = labelTextHeight();
-        float labelHeight = Math.max(LABEL_PANEL_MIN_HEIGHT_PX,
-                requiredLabelPanelHeight(estimatedLabelRows, noteLabelTextHeight));
+        float baseTextHeight = textHeightForSize(BASE_LABEL_TEXT_SIZE_PX);
+        float desiredLabelHeight = Math.max(LABEL_PANEL_MIN_HEIGHT_PX,
+                requiredLabelPanelHeight(estimatedLabelRows, baseTextHeight));
 
         float staffHeight = STAFF_PANEL_MIN_HEIGHT_PX;
         float spectrogramHeight = SPECTROGRAM_PANEL_MIN_HEIGHT_PX * SPECTROGRAM_FIXED_HEIGHT_MULTIPLIER;
 
         float requiredHeight = STAFF_TOP_PADDING_PX + staffHeight
-                + NOTE_LABEL_BLOCK_GAP_PX + labelHeight
+                + NOTE_LABEL_BLOCK_GAP_PX + desiredLabelHeight
                 + NOTE_LABEL_BLOCK_GAP_PX + spectrogramHeight
                 + PANEL_BOTTOM_PADDING_PX;
 
-        ensureOverlayHeight(requiredHeight);
-        float contentHeight = Math.max(h, requiredHeight);
+        float rootHeight = getRootView() == null ? h : getRootView().getHeight();
+        float maxAllowedHeight = Math.max(h, rootHeight);
+        float targetHeight = Math.min(requiredHeight, maxAllowedHeight);
+        ensureOverlayHeight(targetHeight);
+        float contentHeight = Math.max(h, targetHeight);
 
         float staffTop = STAFF_TOP_PADDING_PX;
         float staffBottom = staffTop + staffHeight;
         float labelTop = staffBottom + NOTE_LABEL_BLOCK_GAP_PX;
+
+        float maxLabelHeight = Math.max(1f, contentHeight
+                - PANEL_BOTTOM_PADDING_PX
+                - spectrogramHeight
+                - NOTE_LABEL_BLOCK_GAP_PX
+                - labelTop);
+        float labelHeight = Math.min(desiredLabelHeight, maxLabelHeight);
         float labelBottom = labelTop + labelHeight;
+
         float spectrogramTop = labelBottom + NOTE_LABEL_BLOCK_GAP_PX;
         float spectrogramBottom = spectrogramTop + spectrogramHeight;
-
-        if (spectrogramBottom > contentHeight - PANEL_BOTTOM_PADDING_PX) {
-            float shift = spectrogramBottom - (contentHeight - PANEL_BOTTOM_PADDING_PX);
-            spectrogramTop -= shift;
-            spectrogramBottom -= shift;
-            labelBottom = spectrogramTop - NOTE_LABEL_BLOCK_GAP_PX;
-        }
 
         drawStaffAndNotes(canvas, w, staffTop, staffBottom, labelTop, labelBottom);
         drawSpectrogram(canvas, w, spectrogramTop, spectrogramBottom);
@@ -168,6 +174,31 @@ public class PitchOverlayView extends View {
         }
     }
 
+    private void applyLabelTextSize(float sizePx) {
+        float size = Math.max(MIN_LABEL_TEXT_SIZE_PX, Math.min(BASE_LABEL_TEXT_SIZE_PX, sizePx));
+        labelPaint.setTextSize(size);
+        activeLabelPaint.setTextSize(size);
+        mismatchLabelPaint.setTextSize(size);
+        durationMismatchNotePaint.setTextSize(size);
+    }
+
+    private float textHeightForSize(float textSizePx) {
+        Paint probe = new Paint(labelPaint);
+        probe.setTextSize(textSizePx);
+        Paint.FontMetrics fm = probe.getFontMetrics();
+        return fm.descent - fm.ascent;
+    }
+
+    private float fittedLabelTextSize(float availableLabelHeight, int rowCount) {
+        float baseHeight = textHeightForSize(BASE_LABEL_TEXT_SIZE_PX);
+        float needed = requiredLabelPanelHeight(rowCount, baseHeight);
+        if (needed <= 0f) {
+            return BASE_LABEL_TEXT_SIZE_PX;
+        }
+        float scale = Math.min(1f, availableLabelHeight / needed);
+        return BASE_LABEL_TEXT_SIZE_PX * scale;
+    }
+
     private void drawStaffAndNotes(Canvas canvas, float w, float staffTop, float staffBottom, float labelTop, float labelBottom) {
         float drawableStaffHeight = Math.max(1f, staffBottom - staffTop);
         float lineGap = drawableStaffHeight / LEDGER_STAFF_SPAN_IN_GAPS;
@@ -183,6 +214,10 @@ public class PitchOverlayView extends View {
             labelHitInfos.clear();
             return;
         }
+
+        int estimatedRows = estimateLabelRows(w);
+        float availableLabelHeightForText = Math.max(1f, labelBottom - labelTop);
+        applyLabelTextSize(fittedLabelTextSize(availableLabelHeightForText, estimatedRows));
 
         float leftPad = 26f;
         float rightPad = 20f;
