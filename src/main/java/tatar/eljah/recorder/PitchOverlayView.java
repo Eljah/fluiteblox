@@ -37,11 +37,14 @@ public class PitchOverlayView extends View {
 
     private final Paint mismatchNotePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mismatchLabelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint durationMismatchNotePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint durationPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private OnPlayedNoteClickListener playedNoteClickListener;
     private final List<String> mismatchActualByIndex = new ArrayList<String>();
     private final List<Boolean> matchedByIndex = new ArrayList<Boolean>();
     private final List<String> matchedActualByIndex = new ArrayList<String>();
+    private final List<Boolean> durationMismatchByIndex = new ArrayList<Boolean>();
 
     private float expectedHz;
     private float actualHz;
@@ -67,6 +70,11 @@ public class PitchOverlayView extends View {
         mismatchLabelPaint.setColor(Color.parseColor("#C62828"));
         mismatchLabelPaint.setTextSize(28f);
 
+        durationMismatchNotePaint.setColor(Color.parseColor("#FB8C00"));
+
+        durationPaint.setColor(Color.parseColor("#6D4C41"));
+        durationPaint.setTextSize(22f);
+
         expectedPaint.setColor(Color.parseColor("#8E24AA"));
         expectedPaint.setStrokeWidth(1.5f);
 
@@ -82,10 +90,12 @@ public class PitchOverlayView extends View {
         mismatchActualByIndex.clear();
         matchedByIndex.clear();
         matchedActualByIndex.clear();
+        durationMismatchByIndex.clear();
         for (int i = 0; i < notes.size(); i++) {
             mismatchActualByIndex.add(null);
             matchedByIndex.add(false);
             matchedActualByIndex.add(null);
+            durationMismatchByIndex.add(false);
         }
         invalidate();
     }
@@ -125,6 +135,24 @@ public class PitchOverlayView extends View {
         ensureMatchedCapacity();
         matchedByIndex.set(index, false);
         matchedActualByIndex.set(index, null);
+        invalidate();
+    }
+
+    public void markDurationMismatch(int index) {
+        if (index < 0 || index >= notes.size()) {
+            return;
+        }
+        ensureDurationMismatchCapacity();
+        durationMismatchByIndex.set(index, true);
+        invalidate();
+    }
+
+    public void clearDurationMismatch(int index) {
+        if (index < 0 || index >= notes.size()) {
+            return;
+        }
+        ensureDurationMismatchCapacity();
+        durationMismatchByIndex.set(index, false);
         invalidate();
     }
 
@@ -205,7 +233,7 @@ public class PitchOverlayView extends View {
         float rightPad = 20f;
         float available = Math.max(1f, w - leftPad - rightPad);
         float noteStep = notes.size() <= 1 ? available : available / (notes.size() - 1);
-        float noteRadius = Math.max(8f, Math.min(lineGap * 0.58f, noteStep * 0.48f)) * 3f;
+        float noteRadius = Math.max(8f, Math.min(lineGap * 0.58f, noteStep * 0.48f)) * 2f;
 
         List<LabelLayout> labelsToDraw = new ArrayList<LabelLayout>();
         float labelStartY = bottomLineY + NOTE_LABEL_BLOCK_GAP_PX;
@@ -225,10 +253,14 @@ public class PitchOverlayView extends View {
             float y = yForStaffStep(note, bottomLineY, lineGap);
             boolean mismatch = hasMismatch(i);
             boolean matched = isMatched(i);
-            Paint circlePaint = mismatch ? mismatchNotePaint : ((matched || i == pointer) ? activeNotePaint : notePaint);
+            boolean durationMismatch = hasDurationMismatch(i);
+            Paint circlePaint = mismatch
+                    ? mismatchNotePaint
+                    : (durationMismatch ? durationMismatchNotePaint : ((matched || i == pointer) ? activeNotePaint : notePaint));
             canvas.drawOval(new RectF(x - noteRadius, y - noteRadius * 0.75f, x + noteRadius, y + noteRadius * 0.75f), circlePaint);
 
             String label = MusicNotation.toEuropeanLabel(note.noteName, note.octave);
+            String durationLabel = durationShortLabel(note.duration);
             float textWidth = labelPaint.measureText(label);
             float textLeft = x - textWidth / 2f;
             float minLeft = 0f;
@@ -258,7 +290,7 @@ public class PitchOverlayView extends View {
             }
 
             textLeft = Math.max(minLeft, Math.min(maxLeft, textLeft));
-            labelsToDraw.add(new LabelLayout(label, textLeft, labelRows[selectedRow], i == pointer, mismatch));
+            labelsToDraw.add(new LabelLayout(label, durationLabel, textLeft, labelRows[selectedRow], i == pointer, mismatch, durationMismatch));
             noteDrawInfos.add(new NoteDrawInfo(i, x, y, Math.max(noteRadius * 2f, 28f)));
             lastLabelRight[selectedRow] = textLeft + textWidth;
         }
@@ -266,8 +298,9 @@ public class PitchOverlayView extends View {
         for (LabelLayout labelLayout : labelsToDraw) {
             Paint textPaint = labelLayout.mismatch
                     ? mismatchLabelPaint
-                    : (labelLayout.active ? activeLabelPaint : labelPaint);
+                    : (labelLayout.durationMismatch ? durationMismatchNotePaint : (labelLayout.active ? activeLabelPaint : labelPaint));
             canvas.drawText(labelLayout.text, labelLayout.x, labelLayout.y, textPaint);
+            canvas.drawText(labelLayout.durationText, labelLayout.x, labelLayout.y + 16f, durationPaint);
         }
         return labelRows[labelRows.length - 1];
     }
@@ -282,9 +315,20 @@ public class PitchOverlayView extends View {
         return index >= 0 && index < matchedByIndex.size() && matchedByIndex.get(index);
     }
 
+    private boolean hasDurationMismatch(int index) {
+        ensureDurationMismatchCapacity();
+        return index >= 0 && index < durationMismatchByIndex.size() && durationMismatchByIndex.get(index);
+    }
+
     private void ensureMismatchCapacity() {
         while (mismatchActualByIndex.size() < notes.size()) {
             mismatchActualByIndex.add(null);
+        }
+    }
+
+    private void ensureDurationMismatchCapacity() {
+        while (durationMismatchByIndex.size() < notes.size()) {
+            durationMismatchByIndex.add(false);
         }
     }
 
@@ -334,17 +378,21 @@ public class PitchOverlayView extends View {
 
     private static final class LabelLayout {
         private final String text;
+        private final String durationText;
         private final float x;
         private final float y;
         private final boolean active;
         private final boolean mismatch;
+        private final boolean durationMismatch;
 
-        private LabelLayout(String text, float x, float y, boolean active, boolean mismatch) {
+        private LabelLayout(String text, String durationText, float x, float y, boolean active, boolean mismatch, boolean durationMismatch) {
             this.text = text;
+            this.durationText = durationText;
             this.x = x;
             this.y = y;
             this.active = active;
             this.mismatch = mismatch;
+            this.durationMismatch = durationMismatch;
         }
     }
 
@@ -456,6 +504,15 @@ public class PitchOverlayView extends View {
         if (letter == "G".charAt(0)) return 4;
         if (letter == "A".charAt(0)) return 5;
         return 6;
+    }
+
+    private String durationShortLabel(String duration) {
+        if ("whole".equals(duration)) return "1";
+        if ("half".equals(duration)) return "1/2";
+        if ("quarter".equals(duration)) return "1/4";
+        if ("eighth".equals(duration)) return "1/8";
+        if ("16th".equals(duration)) return "1/16";
+        return duration == null ? "?" : duration;
     }
 
     private static final class NoteDrawInfo {

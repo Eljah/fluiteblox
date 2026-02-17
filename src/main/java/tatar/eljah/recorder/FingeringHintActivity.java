@@ -14,10 +14,15 @@ public class FingeringHintActivity extends AppCompatActivity {
 
         String expectedFullName = sanitizeNoteKey(getIntent().getStringExtra("expected"));
         String actualFullName = sanitizeNoteKey(getIntent().getStringExtra("actual"));
+        int noteIndex = getIntent().getIntExtra("note_index", -1);
         RecorderNoteMapper mapper = new RecorderNoteMapper();
 
         String expectedLabel = toEuropean(expectedFullName);
         String actualLabel = toEuropean(actualFullName);
+
+        if (noteIndex > 0) {
+            ((TextView) findViewById(R.id.text_note_index)).setText(getString(R.string.hint_note_index, noteIndex));
+        }
 
         ((TextView) findViewById(R.id.text_expected_note)).setText(getString(
                 R.string.hint_expected,

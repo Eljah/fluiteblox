@@ -46,8 +46,10 @@
     <string name="play_waiting_intensity">Слишком тихо (порог: %.3f). Сыграйте громче или настройте порог.</string>
     <string name="play_restart">Начать заново</string>
     <string name="play_restarted">Прогресс сброшен. Начинайте с первой ноты.</string>
+    <string name="play_simplified_mode">Упрощенный режим (#/b = та же нота)</string>
 
     <string name="hint_title">Подсказка аппликатуры</string>
+    <string name="hint_note_index">Нота №%1$d</string>
     <string name="hint_expected">Нужно было: %1$s\nПальцы: %2$s</string>
     <string name="hint_actual">Сыграно: %1$s\nПальцы по факту: %2$s</string>
 </resources>

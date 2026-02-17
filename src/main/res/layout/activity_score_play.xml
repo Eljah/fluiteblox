@@ -47,12 +47,26 @@
         android:layout_marginTop="12dp" />
 
 
-    <Button
-        android:id="@+id/btn_restart"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="@string/play_restart" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_restart"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/play_restart" />
+
+        <RadioButton
+            android:id="@+id/radio_simplified_mode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:text="@string/play_simplified_mode" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/text_status"
