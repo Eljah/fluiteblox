@@ -158,7 +158,7 @@ public class ScorePlayActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        if (currentInputIntensity < intensityThreshold) {
+                        if (!tablaturePlaybackRequested && currentInputIntensity < intensityThreshold) {
                             overlayView.setSpectrum(new float[magnitudes.length], sampleRate);
                         } else {
                             overlayView.setSpectrum(magnitudes, sampleRate);
@@ -195,7 +195,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         String expectedName = expected.fullName();
         float expectedFrequency = expectedFrequencyFor(expected);
 
-        if (currentInputIntensity < intensityThreshold) {
+        if (!tablaturePlaybackRequested && currentInputIntensity < intensityThreshold) {
             overlayView.setFrequencies(expectedFrequency, 0f);
             status.setText(getString(R.string.play_waiting_intensity, intensityThreshold));
             return;
@@ -480,9 +480,7 @@ public class ScorePlayActivity extends AppCompatActivity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        if (!midiMode) {
-                            setPointerWithTracking(idx);
-                        } else {
+                        if (midiMode) {
                             pointer = idx;
                             overlayView.setPointer(idx);
                         }
