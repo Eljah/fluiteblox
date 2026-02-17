@@ -24,6 +24,7 @@ public class PitchOverlayView extends View {
     private static final float STAFF_PANEL_MIN_HEIGHT_PX = STAFF_LINE_GAP_FOR_12_NOTES_PX * LEDGER_STAFF_SPAN_IN_GAPS;
     private static final float LABEL_PANEL_MIN_HEIGHT_PX = 42f;
     private static final float SPECTROGRAM_PANEL_MIN_HEIGHT_PX = 88f;
+    private static final float SPECTROGRAM_FIXED_HEIGHT_MULTIPLIER = 1.5f;
     private static final int REFERENCE_NOTE_COUNT = 56;
 
     private final Paint staffPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -120,25 +121,51 @@ public class PitchOverlayView extends View {
         float w = getWidth();
         float h = getHeight();
 
-        float availableHeight = Math.max(1f, h - STAFF_TOP_PADDING_PX - PANEL_BOTTOM_PADDING_PX);
+        int estimatedLabelRows = estimateLabelRows(w);
+        float noteLabelTextHeight = labelTextHeight();
+        float labelHeight = Math.max(LABEL_PANEL_MIN_HEIGHT_PX,
+                requiredLabelPanelHeight(estimatedLabelRows, noteLabelTextHeight));
 
-        // Fixed heights for staff and spectrogram (independent from note count).
-        float staffHeight = Math.max(STAFF_PANEL_MIN_HEIGHT_PX, availableHeight * 0.30f);
-        float spectrogramHeight = Math.max(SPECTROGRAM_PANEL_MIN_HEIGHT_PX, availableHeight * 0.34f);
+        float staffHeight = STAFF_PANEL_MIN_HEIGHT_PX;
+        float spectrogramHeight = SPECTROGRAM_PANEL_MIN_HEIGHT_PX * SPECTROGRAM_FIXED_HEIGHT_MULTIPLIER;
+
+        float requiredHeight = STAFF_TOP_PADDING_PX + staffHeight
+                + NOTE_LABEL_BLOCK_GAP_PX + labelHeight
+                + NOTE_LABEL_BLOCK_GAP_PX + spectrogramHeight
+                + PANEL_BOTTOM_PADDING_PX;
+
+        ensureOverlayHeight(requiredHeight);
+        float contentHeight = Math.max(h, requiredHeight);
 
         float staffTop = STAFF_TOP_PADDING_PX;
         float staffBottom = staffTop + staffHeight;
-
-        float spectrogramBottom = h - PANEL_BOTTOM_PADDING_PX;
-        float spectrogramTop = Math.max(staffBottom + NOTE_LABEL_BLOCK_GAP_PX,
-                spectrogramBottom - spectrogramHeight);
-
-        // Elastic middle panel: takes all remaining height between fixed panels.
         float labelTop = staffBottom + NOTE_LABEL_BLOCK_GAP_PX;
-        float labelBottom = Math.max(labelTop, spectrogramTop - NOTE_LABEL_BLOCK_GAP_PX);
+        float labelBottom = labelTop + labelHeight;
+        float spectrogramTop = labelBottom + NOTE_LABEL_BLOCK_GAP_PX;
+        float spectrogramBottom = spectrogramTop + spectrogramHeight;
+
+        if (spectrogramBottom > contentHeight - PANEL_BOTTOM_PADDING_PX) {
+            float shift = spectrogramBottom - (contentHeight - PANEL_BOTTOM_PADDING_PX);
+            spectrogramTop -= shift;
+            spectrogramBottom -= shift;
+            labelBottom = spectrogramTop - NOTE_LABEL_BLOCK_GAP_PX;
+        }
 
         drawStaffAndNotes(canvas, w, staffTop, staffBottom, labelTop, labelBottom);
         drawSpectrogram(canvas, w, spectrogramTop, spectrogramBottom);
+    }
+
+    private void ensureOverlayHeight(float minHeightPx) {
+        android.view.ViewGroup.LayoutParams lp = getLayoutParams();
+        if (lp == null) {
+            return;
+        }
+        int needed = (int) Math.ceil(minHeightPx);
+        if (lp.height != needed) {
+            lp.height = needed;
+            setLayoutParams(lp);
+            requestLayout();
+        }
     }
 
     private void drawStaffAndNotes(Canvas canvas, float w, float staffTop, float staffBottom, float labelTop, float labelBottom) {
