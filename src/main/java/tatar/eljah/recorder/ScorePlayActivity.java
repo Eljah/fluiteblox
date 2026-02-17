@@ -214,6 +214,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         }
 
         overlayView.clearMismatch(pointer);
+        overlayView.markMatched(pointer);
         pointer++;
         if (pointer < piece.notes.size()) {
             overlayView.setPointer(pointer);
@@ -233,6 +234,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         if (piece != null) {
             for (int i = 0; i < piece.notes.size(); i++) {
                 overlayView.clearMismatch(i);
+                overlayView.clearMatched(i);
             }
         }
         overlayView.setPointer(-1);

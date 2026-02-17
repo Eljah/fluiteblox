@@ -40,6 +40,7 @@ public class PitchOverlayView extends View {
 
     private OnMismatchNoteClickListener mismatchNoteClickListener;
     private final List<String> mismatchActualByIndex = new ArrayList<String>();
+    private final List<Boolean> matchedByIndex = new ArrayList<Boolean>();
 
     private float expectedHz;
     private float actualHz;
@@ -78,8 +79,10 @@ public class PitchOverlayView extends View {
             notes.addAll(pieceNotes);
         }
         mismatchActualByIndex.clear();
+        matchedByIndex.clear();
         for (int i = 0; i < notes.size(); i++) {
             mismatchActualByIndex.add(null);
+            matchedByIndex.add(false);
         }
         invalidate();
     }
@@ -99,6 +102,24 @@ public class PitchOverlayView extends View {
         }
         ensureMismatchCapacity();
         mismatchActualByIndex.set(index, null);
+        invalidate();
+    }
+
+    public void markMatched(int index) {
+        if (index < 0 || index >= notes.size()) {
+            return;
+        }
+        ensureMatchedCapacity();
+        matchedByIndex.set(index, true);
+        invalidate();
+    }
+
+    public void clearMatched(int index) {
+        if (index < 0 || index >= notes.size()) {
+            return;
+        }
+        ensureMatchedCapacity();
+        matchedByIndex.set(index, false);
         invalidate();
     }
 
@@ -179,7 +200,7 @@ public class PitchOverlayView extends View {
         float rightPad = 20f;
         float available = Math.max(1f, w - leftPad - rightPad);
         float noteStep = notes.size() <= 1 ? available : available / (notes.size() - 1);
-        float noteRadius = Math.max(8f, Math.min(lineGap * 0.58f, noteStep * 0.48f));
+        float noteRadius = Math.max(8f, Math.min(lineGap * 0.58f, noteStep * 0.48f)) * 3f;
 
         List<LabelLayout> labelsToDraw = new ArrayList<LabelLayout>();
         float labelStartY = bottomLineY + NOTE_LABEL_BLOCK_GAP_PX;
@@ -198,7 +219,8 @@ public class PitchOverlayView extends View {
             float x = leftPad + available * ((float) i / Math.max(1, notes.size() - 1));
             float y = yForStaffStep(note, bottomLineY, lineGap);
             boolean mismatch = hasMismatch(i);
-            Paint circlePaint = mismatch ? mismatchNotePaint : (i == pointer ? activeNotePaint : notePaint);
+            boolean matched = isMatched(i);
+            Paint circlePaint = mismatch ? mismatchNotePaint : ((matched || i == pointer) ? activeNotePaint : notePaint);
             canvas.drawOval(new RectF(x - noteRadius, y - noteRadius * 0.75f, x + noteRadius, y + noteRadius * 0.75f), circlePaint);
 
             String label = MusicNotation.toEuropeanLabel(note.noteName, note.octave);
@@ -250,9 +272,20 @@ public class PitchOverlayView extends View {
         return index >= 0 && index < mismatchActualByIndex.size() && mismatchActualByIndex.get(index) != null;
     }
 
+    private boolean isMatched(int index) {
+        ensureMatchedCapacity();
+        return index >= 0 && index < matchedByIndex.size() && matchedByIndex.get(index);
+    }
+
     private void ensureMismatchCapacity() {
         while (mismatchActualByIndex.size() < notes.size()) {
             mismatchActualByIndex.add(null);
+        }
+    }
+
+    private void ensureMatchedCapacity() {
+        while (matchedByIndex.size() < notes.size()) {
+            matchedByIndex.add(false);
         }
     }
 
