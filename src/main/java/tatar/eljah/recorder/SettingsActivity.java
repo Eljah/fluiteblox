@@ -63,7 +63,7 @@ public class SettingsActivity extends AppCompatActivity {
                     AppLocaleManager.saveAndApply(SettingsActivity.this, LANG_CODES[index]);
                     setResult(RESULT_OK);
                 }
-                recreate();
+                finish();
             }
         });
     }

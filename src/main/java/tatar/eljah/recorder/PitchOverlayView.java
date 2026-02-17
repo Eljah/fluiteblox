@@ -18,12 +18,10 @@ public class PitchOverlayView extends View {
     private static final float STAFF_TOP_PADDING_PX = 10f;
     private static final float STAFF_BOTTOM_PADDING_PX = 12f;
     private static final float NOTE_LABEL_BLOCK_GAP_PX = 14f;
-    private static final float NOTE_LABEL_ROW_GAP_PX = 18f;
     private static final float PANEL_BOTTOM_PADDING_PX = 8f;
     private static final float STAFF_PANEL_MIN_HEIGHT_PX = 92f;
     private static final float LABEL_PANEL_MIN_HEIGHT_PX = 42f;
     private static final float SPECTROGRAM_PANEL_MIN_HEIGHT_PX = 88f;
-    private static final float LABEL_BASELINE_BOTTOM_INSET_PX = 6f;
     private static final int REFERENCE_NOTE_COUNT = 56;
     private static final float LEDGER_STAFF_SPAN_IN_GAPS = 7f; // 1.5 above + 4 staff + 1.5 below
 
@@ -121,7 +119,8 @@ public class PitchOverlayView extends View {
 
         float availableHeight = Math.max(1f, h - STAFF_TOP_PADDING_PX - PANEL_BOTTOM_PADDING_PX);
         int estimatedLabelRows = estimateLabelRows(w);
-        float desiredLabelHeight = Math.max(LABEL_PANEL_MIN_HEIGHT_PX, estimatedLabelRows * NOTE_LABEL_ROW_GAP_PX + 8f);
+        float noteLabelTextHeight = labelTextHeight();
+        float desiredLabelHeight = Math.max(LABEL_PANEL_MIN_HEIGHT_PX, requiredLabelPanelHeight(estimatedLabelRows, noteLabelTextHeight));
 
         float staffHeight = Math.max(STAFF_PANEL_MIN_HEIGHT_PX, availableHeight * 0.30f);
         float spectrogramHeight = Math.max(SPECTROGRAM_PANEL_MIN_HEIGHT_PX, availableHeight * 0.34f);
@@ -138,7 +137,7 @@ public class PitchOverlayView extends View {
             spectrogramHeight -= spectrogramShrink;
             overflow -= spectrogramShrink;
 
-            float labelMinForRows = Math.max(LABEL_PANEL_MIN_HEIGHT_PX, estimatedLabelRows * (NOTE_LABEL_ROW_GAP_PX * 0.66f));
+            float labelMinForRows = Math.max(LABEL_PANEL_MIN_HEIGHT_PX, requiredLabelPanelHeight(estimatedLabelRows, noteLabelTextHeight));
             float labelShrink = Math.min(Math.max(0f, overflow), Math.max(0f, desiredLabelHeight - labelMinForRows));
             desiredLabelHeight -= labelShrink;
         }
@@ -218,17 +217,36 @@ public class PitchOverlayView extends View {
             noteDrawInfos.add(new NoteDrawInfo(i, x, y, Math.max(noteRadius * 2f, 28f)));
         }
 
-        int maxRow = Math.max(0, lastLabelRight.size() - 1);
+        int rowCount = Math.max(1, lastLabelRight.size());
+        float textHeight = labelTextHeight();
+        float baselineStep = textHeight * 2f;
+        float requiredHeight = requiredLabelPanelHeight(rowCount, textHeight);
         float availableLabelHeight = Math.max(LABEL_PANEL_MIN_HEIGHT_PX, labelBottom - labelTop);
-        float labelRowGap = maxRow == 0 ? 0f : Math.max(10f, availableLabelHeight / (float) (maxRow + 1));
-        float firstBaselineY = labelTop + labelRowGap;
-        float maxBaselineY = labelBottom - LABEL_BASELINE_BOTTOM_INSET_PX;
+        float topInset = textHeight + Math.max(0f, (availableLabelHeight - requiredHeight) * 0.5f);
+        Paint.FontMetrics fm = labelPaint.getFontMetrics();
+        float baselineOffset = -fm.ascent;
+        float firstBaselineY = labelTop + topInset + baselineOffset;
 
         for (LabelLayout labelLayout : labelsToDraw) {
             Paint textPaint = labelLayout.mismatch ? mismatchLabelPaint : (labelLayout.durationMismatch ? durationMismatchNotePaint : (labelLayout.active ? activeLabelPaint : labelPaint));
-            float textY = Math.min(maxBaselineY, firstBaselineY + labelLayout.y * labelRowGap);
+            float textY = firstBaselineY + labelLayout.y * baselineStep;
             canvas.drawText(labelLayout.text, labelLayout.x, textY, textPaint);
         }
+    }
+
+
+    private float labelTextHeight() {
+        Paint.FontMetrics fm = labelPaint.getFontMetrics();
+        return fm.descent - fm.ascent;
+    }
+
+    private float requiredLabelPanelHeight(int rowCount, float textHeight) {
+        int rows = Math.max(1, rowCount);
+        float topPadding = textHeight;
+        float bottomPadding = textHeight;
+        float totalTextHeight = rows * textHeight;
+        float gapsBetweenRows = (rows - 1) * textHeight;
+        return topPadding + totalTextHeight + gapsBetweenRows + bottomPadding;
     }
 
 
