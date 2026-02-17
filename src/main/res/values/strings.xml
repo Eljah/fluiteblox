@@ -53,7 +53,7 @@
     <string name="hint_expected">Нужно было: %1$s\nПальцы: %2$s</string>
     <string name="hint_actual">Сыграно: %1$s\nПальцы по факту: %2$s</string>
     <string name="hint_duration_mismatch">Ошибка длительности: ожидалась %1$s, фактически %2$s (%3$d мс).</string>
-    <string name="hint_duration_ok">Длительность: без ошибки (ожидалась %1$s, фактически %2$s).</string>
+    <string name="hint_duration_ok">Длительность без ошибки: ожидалась %1$s, фактически %2$d мс (в пределах допуска).</string>
     <string name="hint_duration_whole">целая</string>
     <string name="hint_duration_half">половина</string>
     <string name="hint_duration_quarter">четверть</string>

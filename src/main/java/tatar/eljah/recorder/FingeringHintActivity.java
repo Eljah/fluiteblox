@@ -29,12 +29,21 @@ public class FingeringHintActivity extends AppCompatActivity {
 
         TextView durationHintView = findViewById(R.id.text_duration_hint);
         String expectedDurationLabel = durationLabel(expectedDuration);
-        String actualDurationLabel = actualDurationMs > 0L ? durationLabel(durationFromMs(actualDurationMs)) : getString(R.string.hint_duration_unknown);
+        String actualDurationLabel = actualDurationMs > 0L
+                ? durationLabel(durationFromMs(actualDurationMs))
+                : getString(R.string.hint_duration_unknown);
         long safeActualDurationMs = Math.max(0L, actualDurationMs);
         if (durationMismatch) {
-            durationHintView.setText(getString(R.string.hint_duration_mismatch, expectedDurationLabel, actualDurationLabel, safeActualDurationMs));
+            durationHintView.setText(getString(
+                    R.string.hint_duration_mismatch,
+                    expectedDurationLabel,
+                    actualDurationLabel,
+                    safeActualDurationMs));
         } else {
-            durationHintView.setText(getString(R.string.hint_duration_ok, expectedDurationLabel, actualDurationLabel));
+            durationHintView.setText(getString(
+                    R.string.hint_duration_ok,
+                    expectedDurationLabel,
+                    safeActualDurationMs));
         }
 
         ((TextView) findViewById(R.id.text_expected_note)).setText(getString(
