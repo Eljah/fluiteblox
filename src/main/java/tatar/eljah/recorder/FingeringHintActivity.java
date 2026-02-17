@@ -91,16 +91,11 @@ public class FingeringHintActivity extends AppCompatActivity {
     }
 
     private String toEuropean(String fullName) {
-        if (fullName == null || fullName.length() < 2) {
-            return "?";
+        String normalized = MusicNotation.normalizeNoteKey(fullName);
+        MusicNotation.ParsedNote parsed = MusicNotation.parseNormalizedNoteKey(normalized);
+        if (parsed == null) {
+            return fullName == null ? "?" : fullName;
         }
-        String note = fullName.substring(0, fullName.length() - 1);
-        int octave;
-        try {
-            octave = Integer.parseInt(fullName.substring(fullName.length() - 1));
-        } catch (NumberFormatException ex) {
-            return fullName;
-        }
-        return MusicNotation.toEuropeanLabel(note, octave);
+        return MusicNotation.toLocalizedLabel(this, parsed.noteName, parsed.octave);
     }
 }

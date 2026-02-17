@@ -11,6 +11,7 @@ import tatar.eljah.recorder.CaptureSheetActivity;
 import tatar.eljah.recorder.LibraryActivity;
 
 public class MainActivity extends AppCompatActivity {
+    private static final int REQ_SETTINGS = 1001;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -39,8 +40,16 @@ public class MainActivity extends AppCompatActivity {
         settingsButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, SettingsActivity.class));
+                startActivityForResult(new Intent(MainActivity.this, SettingsActivity.class), REQ_SETTINGS);
             }
         });
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_SETTINGS && resultCode == RESULT_OK) {
+            recreate();
+        }
     }
 }

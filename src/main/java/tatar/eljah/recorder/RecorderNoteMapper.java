@@ -1,17 +1,23 @@
 package tatar.eljah.recorder;
 
+import android.util.Log;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class RecorderNoteMapper {
+    private static final String TAG = "RecorderNoteMapper";
     private static final Map<String, Float> NOTE_FREQUENCIES;
     private static final Map<String, String> FINGERINGS;
 
     static {
         Map<String, Float> frequencies = new LinkedHashMap<String, Float>();
         // Alto recorder in G, equal temperament A4 = 440Hz.
-        // Supported range: D4 (293.66Hz) .. A6 (1760Hz), full chromatic scale.
+        // Supported range: C4 (261.63Hz) .. A6 (1760Hz), chromatic scale with recorder-oriented fallbacks.
+        frequencies.put("C4", 261.63f);
+        frequencies.put("C#4", 277.18f);
+        frequencies.put("Db4", 277.18f);
         frequencies.put("D4", 293.66f);
         frequencies.put("D#4", 311.13f);
         frequencies.put("Eb4", 311.13f);
@@ -60,6 +66,9 @@ public class RecorderNoteMapper {
         NOTE_FREQUENCIES = Collections.unmodifiableMap(frequencies);
 
         Map<String, String> fingerings = new LinkedHashMap<String, String>();
+        fingerings.put("C4", "●●●|●●●●");
+        fingerings.put("C#4", "●●●|●●●◐");
+        fingerings.put("Db4", "●●●|●●●◐");
         fingerings.put("D4", "●●●|●●●●");
         fingerings.put("D#4", "●●●|●●●◐");
         fingerings.put("Eb4", "●●●|●●●◐");
@@ -123,14 +132,56 @@ public class RecorderNoteMapper {
     }
 
     public float frequencyFor(String note) {
-        Float frequency = NOTE_FREQUENCIES.get(note);
+        String normalized = MusicNotation.normalizeNoteKey(note);
+        if (normalized == null) {
+            Log.w(TAG, "frequencyFor: unparseable note key='" + note + "'");
+            return 0f;
+        }
+        Float frequency = NOTE_FREQUENCIES.get(normalized);
         return frequency == null ? 0f : frequency;
     }
 
     public String fingeringFor(String note) {
-        if (FINGERINGS.containsKey(note)) {
-            return FINGERINGS.get(note);
+        String normalized = MusicNotation.normalizeNoteKey(note);
+        if (normalized == null) {
+            Log.w(TAG, "fingeringFor: unparseable note key='" + note + "'");
+            return "нет данных";
         }
-        return "нет данных";
+        if (FINGERINGS.containsKey(normalized)) {
+            return FINGERINGS.get(normalized);
+        }
+        String fallback = nearestFingering(normalized);
+        if (fallback == null) {
+            Log.w(TAG, "fingeringFor: no exact/fallback fingering for note='" + note + "' normalized='" + normalized + "'");
+            return "нет данных";
+        }
+        Log.w(TAG, "fingeringFor: using nearest fingering for note='" + note + "' normalized='" + normalized + "'");
+        return fallback;
+    }
+
+    private String nearestFingering(String note) {
+        MusicNotation.ParsedNote parsed = MusicNotation.parseNormalizedNoteKey(note);
+        if (parsed == null) {
+            return null;
+        }
+
+        int targetMidi = MusicNotation.midiFor(parsed.noteName, parsed.octave);
+        String closestKey = null;
+        int minDistance = Integer.MAX_VALUE;
+        for (String key : FINGERINGS.keySet()) {
+            if (key.length() < 2) continue;
+            try {
+                MusicNotation.ParsedNote keyParsed = MusicNotation.parseNormalizedNoteKey(key);
+                if (keyParsed == null) continue;
+                int keyMidi = MusicNotation.midiFor(keyParsed.noteName, keyParsed.octave);
+                int distance = Math.abs(keyMidi - targetMidi);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestKey = key;
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return closestKey == null ? null : FINGERINGS.get(closestKey);
     }
 }

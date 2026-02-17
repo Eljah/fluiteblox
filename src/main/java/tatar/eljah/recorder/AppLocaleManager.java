@@ -25,7 +25,7 @@ public final class AppLocaleManager {
 
     public static void saveAndApply(Context context, String lang) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        prefs.edit().putString(KEY_LANG, lang).apply();
+        prefs.edit().putString(KEY_LANG, lang).commit();
         applyLocale(context, lang);
     }
 
@@ -40,6 +40,7 @@ public final class AppLocaleManager {
         Configuration config = new Configuration(resources.getConfiguration());
         if (Build.VERSION.SDK_INT >= 17) {
             config.setLocale(locale);
+            config.setLayoutDirection(locale);
             context.createConfigurationContext(config);
         }
         resources.updateConfiguration(config, resources.getDisplayMetrics());

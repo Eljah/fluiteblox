@@ -240,7 +240,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         overlayView.setFrequencies(expectedFrequency, normalizedHz);
         overlayView.setPointer(pointer);
         status.setText(getString(R.string.play_status_template,
-                MusicNotation.toEuropeanLabel(expected.noteName, expected.octave),
+                MusicNotation.toLocalizedLabel(ScorePlayActivity.this, expected.noteName, expected.octave),
                 toEuropeanLabelFromFull(detected),
                 (int) normalizedHz));
 
@@ -579,7 +579,7 @@ public class ScorePlayActivity extends AppCompatActivity {
                             overlayView.setPointer(idx);
                         }
                         status.setText(getString(midiMode ? R.string.play_midi_note : R.string.play_tablature_note,
-                                MusicNotation.toEuropeanLabel(note.noteName, note.octave)));
+                                MusicNotation.toLocalizedLabel(ScorePlayActivity.this, note.noteName, note.octave)));
                     }
                 });
 
@@ -749,17 +749,12 @@ public class ScorePlayActivity extends AppCompatActivity {
     }
 
     private String toEuropeanLabelFromFull(String fullName) {
-        if (fullName == null || fullName.length() < 2) {
+        String normalized = MusicNotation.normalizeNoteKey(fullName);
+        MusicNotation.ParsedNote parsed = MusicNotation.parseNormalizedNoteKey(normalized);
+        if (parsed == null) {
             return fullName;
         }
-        String note = fullName.substring(0, fullName.length() - 1);
-        int octave;
-        try {
-            octave = Integer.parseInt(fullName.substring(fullName.length() - 1));
-        } catch (NumberFormatException ex) {
-            return fullName;
-        }
-        return MusicNotation.toEuropeanLabel(note, octave);
+        return MusicNotation.toLocalizedLabel(this, parsed.noteName, parsed.octave);
     }
 
     @Override
