@@ -31,7 +31,7 @@ public class ScorePlayActivity extends AppCompatActivity {
     private static final int TABLATURE_MISMATCH_CONFIRMATION_FRAMES = 2;
     private static final int MIN_MATCH_HOLD_MS = 110;
     private static final float MIN_MATCH_HOLD_DURATION_FRACTION = 0.45f;
-    private static final float DURATION_MISMATCH_TOLERANCE_FRACTION = 0.35f;
+    private static final float DURATION_MISMATCH_TOLERANCE_FRACTION = 0.60f;
 
     private final PitchAnalyzer pitchAnalyzer = new PitchAnalyzer();
     private final RecorderNoteMapper mapper = new RecorderNoteMapper();
@@ -95,6 +95,10 @@ public class ScorePlayActivity extends AppCompatActivity {
                 intent.putExtra("expected", expectedFullName);
                 intent.putExtra("actual", actualFullName);
                 intent.putExtra("note_index", index + 1);
+                intent.putExtra("duration_mismatch", overlayView.isDurationMismatch(index));
+                if (piece != null && index >= 0 && index < piece.notes.size()) {
+                    intent.putExtra("expected_duration", piece.notes.get(index).duration);
+                }
                 startActivity(intent);
             }
         });
@@ -245,7 +249,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         if (!canAdvanceToNextNote(expected)) {
             return;
         }
-        updateDurationMismatchForCurrent(expected);
+        updateDurationMismatchForPrevious(pointer);
         lastMatchAcceptedAtMs = SystemClock.elapsedRealtime();
         pointer++;
         if (pointer < piece.notes.size()) {
@@ -257,23 +261,26 @@ public class ScorePlayActivity extends AppCompatActivity {
             stopTablaturePlayback();
         }
     }
-
-
-
-    private void updateDurationMismatchForCurrent(NoteEvent note) {
-        long now = SystemClock.elapsedRealtime();
-        if (lastMatchAcceptedAtMs <= 0L) {
-            overlayView.clearDurationMismatch(pointer);
+    private void updateDurationMismatchForPrevious(int currentIndex) {
+        if (currentIndex <= 0 || piece == null || currentIndex - 1 >= piece.notes.size()) {
             return;
         }
+
+        long now = SystemClock.elapsedRealtime();
+        if (lastMatchAcceptedAtMs <= 0L) {
+            overlayView.clearDurationMismatch(currentIndex - 1);
+            return;
+        }
+
+        NoteEvent previousNote = piece.notes.get(currentIndex - 1);
         long actualDurationMs = now - lastMatchAcceptedAtMs;
-        long expectedDurationMs = durationMs(note.duration);
+        long expectedDurationMs = durationMs(previousNote.duration);
         long allowedDeviation = (long) (expectedDurationMs * DURATION_MISMATCH_TOLERANCE_FRACTION);
         long deviation = Math.abs(actualDurationMs - expectedDurationMs);
         if (deviation > allowedDeviation) {
-            overlayView.markDurationMismatch(pointer);
+            overlayView.markDurationMismatch(currentIndex - 1);
         } else {
-            overlayView.clearDurationMismatch(pointer);
+            overlayView.clearDurationMismatch(currentIndex - 1);
         }
     }
 
@@ -330,17 +337,22 @@ public class ScorePlayActivity extends AppCompatActivity {
         overlayView.setPointer(newPointer);
     }
 
+    private void clearAllNoteStates() {
+        if (piece == null) {
+            return;
+        }
+        for (int i = 0; i < piece.notes.size(); i++) {
+            overlayView.clearMismatch(i);
+            overlayView.clearMatched(i);
+            overlayView.clearDurationMismatch(i);
+        }
+    }
+
     private void restartProgress() {
         stopMidiPlayback();
         stopTablaturePlayback();
         pointer = 0;
-        if (piece != null) {
-            for (int i = 0; i < piece.notes.size(); i++) {
-                overlayView.clearMismatch(i);
-                overlayView.clearMatched(i);
-                overlayView.clearDurationMismatch(i);
-            }
-        }
+        clearAllNoteStates();
         resetMatchCadenceTracking();
         setPointerWithTracking(-1);
         if (piece != null && !piece.notes.isEmpty()) {
@@ -399,6 +411,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         }
         midiFocusToken = focusToken;
         midiPlaybackRequested = true;
+        clearAllNoteStates();
         resetMatchCadenceTracking();
         pointer = 0;
         setPointerWithTracking(pointer);
@@ -437,6 +450,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         }
         tablatureFocusToken = focusToken;
         tablaturePlaybackRequested = true;
+        clearAllNoteStates();
         resetMatchCadenceTracking();
         pointer = 0;
         setPointerWithTracking(pointer);
@@ -665,8 +679,10 @@ public class ScorePlayActivity extends AppCompatActivity {
     }
 
     private int durationMs(String duration) {
+        if ("16th".equals(duration)) return 120;
         if ("eighth".equals(duration)) return 240;
         if ("half".equals(duration)) return 900;
+        if ("whole".equals(duration)) return 1800;
         return 450;
     }
 

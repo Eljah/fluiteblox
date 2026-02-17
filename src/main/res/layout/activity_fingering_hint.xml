@@ -19,6 +19,13 @@
         android:textSize="18sp" />
 
     <TextView
+        android:id="@+id/text_duration_hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="18sp" />
+
+    <TextView
         android:id="@+id/text_expected_note"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

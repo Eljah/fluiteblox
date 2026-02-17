@@ -39,6 +39,7 @@ public class PitchOverlayView extends View {
     private final Paint mismatchLabelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint durationMismatchNotePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint durationPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint noteStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private OnPlayedNoteClickListener playedNoteClickListener;
     private final List<String> mismatchActualByIndex = new ArrayList<String>();
@@ -74,6 +75,10 @@ public class PitchOverlayView extends View {
 
         durationPaint.setColor(Color.parseColor("#6D4C41"));
         durationPaint.setTextSize(22f);
+
+        noteStrokePaint.setColor(Color.BLACK);
+        noteStrokePaint.setStrokeWidth(3f);
+        noteStrokePaint.setStyle(Paint.Style.STROKE);
 
         expectedPaint.setColor(Color.parseColor("#8E24AA"));
         expectedPaint.setStrokeWidth(1.5f);
@@ -154,6 +159,10 @@ public class PitchOverlayView extends View {
         ensureDurationMismatchCapacity();
         durationMismatchByIndex.set(index, false);
         invalidate();
+    }
+
+    public boolean isDurationMismatch(int index) {
+        return hasDurationMismatch(index);
     }
 
     public void setOnPlayedNoteClickListener(OnPlayedNoteClickListener listener) {
@@ -257,10 +266,9 @@ public class PitchOverlayView extends View {
             Paint circlePaint = mismatch
                     ? mismatchNotePaint
                     : (durationMismatch ? durationMismatchNotePaint : ((matched || i == pointer) ? activeNotePaint : notePaint));
-            canvas.drawOval(new RectF(x - noteRadius, y - noteRadius * 0.75f, x + noteRadius, y + noteRadius * 0.75f), circlePaint);
+            drawDurationAwareNote(canvas, note, x, y, noteRadius, circlePaint);
 
             String label = MusicNotation.toEuropeanLabel(note.noteName, note.octave);
-            String durationLabel = durationShortLabel(note.duration);
             float textWidth = labelPaint.measureText(label);
             float textLeft = x - textWidth / 2f;
             float minLeft = 0f;
@@ -290,7 +298,7 @@ public class PitchOverlayView extends View {
             }
 
             textLeft = Math.max(minLeft, Math.min(maxLeft, textLeft));
-            labelsToDraw.add(new LabelLayout(label, durationLabel, textLeft, labelRows[selectedRow], i == pointer, mismatch, durationMismatch));
+            labelsToDraw.add(new LabelLayout(label, textLeft, labelRows[selectedRow], i == pointer, mismatch, durationMismatch));
             noteDrawInfos.add(new NoteDrawInfo(i, x, y, Math.max(noteRadius * 2f, 28f)));
             lastLabelRight[selectedRow] = textLeft + textWidth;
         }
@@ -300,7 +308,6 @@ public class PitchOverlayView extends View {
                     ? mismatchLabelPaint
                     : (labelLayout.durationMismatch ? durationMismatchNotePaint : (labelLayout.active ? activeLabelPaint : labelPaint));
             canvas.drawText(labelLayout.text, labelLayout.x, labelLayout.y, textPaint);
-            canvas.drawText(labelLayout.durationText, labelLayout.x, labelLayout.y + 16f, durationPaint);
         }
         return labelRows[labelRows.length - 1];
     }
@@ -376,18 +383,49 @@ public class PitchOverlayView extends View {
         void onPlayedNoteClick(int index, String expectedFullName, String actualFullName);
     }
 
+    private void drawDurationAwareNote(Canvas canvas, NoteEvent note, float x, float y, float noteRadius, Paint fillPaint) {
+        RectF oval = new RectF(x - noteRadius, y - noteRadius * 0.75f, x + noteRadius, y + noteRadius * 0.75f);
+        String duration = note == null ? null : note.duration;
+        boolean whole = "whole".equals(duration);
+        boolean half = "half".equals(duration);
+        boolean hollow = whole || half;
+
+        if (hollow) {
+            noteStrokePaint.setColor(fillPaint.getColor());
+            canvas.drawOval(oval, noteStrokePaint);
+        } else {
+            canvas.drawOval(oval, fillPaint);
+        }
+
+        if (whole) {
+            return;
+        }
+
+        float stemX = x + noteRadius * 0.9f;
+        float stemTop = y - noteRadius * 2.6f;
+        float stemBottom = y;
+        canvas.drawLine(stemX, stemBottom, stemX, stemTop, fillPaint);
+
+        int flags = flagCountForDuration(duration);
+        for (int f = 0; f < flags; f++) {
+            float flagStartY = stemTop + f * (noteRadius * 0.75f);
+            float flagControlX = stemX + noteRadius * 0.9f;
+            float flagEndX = stemX + noteRadius * 1.6f;
+            float flagEndY = flagStartY + noteRadius * 0.55f;
+            canvas.drawLine(stemX, flagStartY, flagEndX, flagEndY, fillPaint);
+        }
+    }
+
     private static final class LabelLayout {
         private final String text;
-        private final String durationText;
         private final float x;
         private final float y;
         private final boolean active;
         private final boolean mismatch;
         private final boolean durationMismatch;
 
-        private LabelLayout(String text, String durationText, float x, float y, boolean active, boolean mismatch, boolean durationMismatch) {
+        private LabelLayout(String text, float x, float y, boolean active, boolean mismatch, boolean durationMismatch) {
             this.text = text;
-            this.durationText = durationText;
             this.x = x;
             this.y = y;
             this.active = active;
@@ -505,14 +543,10 @@ public class PitchOverlayView extends View {
         if (letter == "A".charAt(0)) return 5;
         return 6;
     }
-
-    private String durationShortLabel(String duration) {
-        if ("whole".equals(duration)) return "1";
-        if ("half".equals(duration)) return "1/2";
-        if ("quarter".equals(duration)) return "1/4";
-        if ("eighth".equals(duration)) return "1/8";
-        if ("16th".equals(duration)) return "1/16";
-        return duration == null ? "?" : duration;
+    private int flagCountForDuration(String duration) {
+        if ("eighth".equals(duration)) return 1;
+        if ("16th".equals(duration)) return 2;
+        return 0;
     }
 
     private static final class NoteDrawInfo {

@@ -20,11 +20,18 @@ public class MidiRecognitionRegressionTest {
     private static final int HOP_SIZE = 512;
     private static final int MIN_MATCH_HOLD_MS = 110;
     private static final float MIN_MATCH_HOLD_DURATION_FRACTION = 0.45f;
+    private static final float DURATION_MISMATCH_TOLERANCE_FRACTION = 0.60f;
+
+    private enum RecognitionMode {
+        MIDI,
+        TABLATURE
+    }
 
     private static class RecognitionResult {
         int recognizedCount;
         boolean[] matched;
         boolean[] mismatch;
+        boolean[] durationMismatch;
     }
 
     public void synthesizedReferenceScoreShouldRecognizeAllNotes() throws Exception {
@@ -33,11 +40,11 @@ public class MidiRecognitionRegressionTest {
             throw new AssertionError("reference score must not be empty");
         }
 
-        short[] pcm = synthesizeScore(notes);
+        short[] pcm = synthesizeScore(notes, false);
         File outWav = new File("target/reference_score_synth.wav");
         writeWav(pcm, SAMPLE_RATE, outWav);
 
-        RecognitionResult result = runRecognition(notes, pcm);
+        RecognitionResult result = runRecognition(notes, pcm, RecognitionMode.TABLATURE);
         if (result.recognizedCount != notes.size()) {
             throw new AssertionError("All notes should be recognized sequentially: " + result.recognizedCount + "/" + notes.size());
         }
@@ -48,7 +55,42 @@ public class MidiRecognitionRegressionTest {
             if (result.mismatch[i]) {
                 throw new AssertionError("Note " + (i + 1) + " remains mismatched (not green)");
             }
+            if (result.durationMismatch[i]) {
+                throw new AssertionError("Note " + (i + 1) + " unexpectedly has duration mismatch (orange) in tablature mode");
+            }
         }
+    }
+
+    public void tablatureModeShouldDetectDurationMismatches() throws Exception {
+        List<NoteEvent> notes = parseReferenceScore(new File("src/main/assets/reference_score.xml"));
+        if (notes.isEmpty()) {
+            throw new AssertionError("reference score must not be empty");
+        }
+
+        short[] alteredDurationPcm = synthesizeScore(notes, true);
+        File outWav = new File("target/reference_score_synth_altered_duration.wav");
+        writeWav(alteredDurationPcm, SAMPLE_RATE, outWav);
+
+        RecognitionResult tablature = runRecognition(notes, alteredDurationPcm, RecognitionMode.TABLATURE);
+        int durationMismatchCount = countTrue(tablature.durationMismatch);
+        if (durationMismatchCount == 0) {
+            throw new AssertionError("Tablature mode must mark at least one note with duration mismatch when note lengths are distorted");
+        }
+
+        RecognitionResult midi = runRecognition(notes, alteredDurationPcm, RecognitionMode.MIDI);
+        if (countTrue(midi.durationMismatch) != 0) {
+            throw new AssertionError("MIDI mode must not produce orange duration mismatches");
+        }
+    }
+
+    private int countTrue(boolean[] values) {
+        int c = 0;
+        for (boolean value : values) {
+            if (value) {
+                c++;
+            }
+        }
+        return c;
     }
 
     private List<NoteEvent> parseReferenceScore(File xmlFile) throws Exception {
@@ -97,10 +139,14 @@ public class MidiRecognitionRegressionTest {
         return list.item(0).getTextContent();
     }
 
-    private short[] synthesizeScore(List<NoteEvent> notes) {
+    private short[] synthesizeScore(List<NoteEvent> notes, boolean alterDurations) {
         List<Short> out = new ArrayList<Short>();
-        for (NoteEvent note : notes) {
+        for (int idx = 0; idx < notes.size(); idx++) {
+            NoteEvent note = notes.get(idx);
             int ms = durationMs(note.duration);
+            if (alterDurations && idx >= 2 && idx % 4 == 0) {
+                ms = Math.max(80, (int) (ms * 2.20f));
+            }
             int totalSamples = SAMPLE_RATE * ms / 1000;
             int fadeSamples = Math.min((int) (SAMPLE_RATE * 0.008f), totalSamples / 2);
             int midi = MusicNotation.midiFor(note.noteName, note.octave);
@@ -130,13 +176,14 @@ public class MidiRecognitionRegressionTest {
         return pcm;
     }
 
-    private RecognitionResult runRecognition(List<NoteEvent> notes, short[] pcm) {
+    private RecognitionResult runRecognition(List<NoteEvent> notes, short[] pcm, RecognitionMode mode) {
         RecorderNoteMapper mapper = new RecorderNoteMapper();
         int pointer = 0;
         long lastMatchAcceptedAtMs = -1L;
         RecognitionResult result = new RecognitionResult();
         result.matched = new boolean[notes.size()];
         result.mismatch = new boolean[notes.size()];
+        result.durationMismatch = new boolean[notes.size()];
 
         for (int pos = 0; pos + FRAME_SIZE <= pcm.length && pointer < notes.size(); pos += HOP_SIZE) {
             NoteEvent expected = notes.get(pointer);
@@ -155,6 +202,16 @@ public class MidiRecognitionRegressionTest {
             if (lastMatchAcceptedAtMs >= 0L && nowMs - lastMatchAcceptedAtMs < minHoldMs) {
                 continue;
             }
+
+            if (mode == RecognitionMode.TABLATURE && lastMatchAcceptedAtMs >= 0L && pointer > 0) {
+                long actualDurationMs = nowMs - lastMatchAcceptedAtMs;
+                NoteEvent previous = notes.get(pointer - 1);
+                long expectedDurationMs = durationMs(previous.duration);
+                long allowedDeviation = (long) (expectedDurationMs * DURATION_MISMATCH_TOLERANCE_FRACTION);
+                long deviation = Math.abs(actualDurationMs - expectedDurationMs);
+                result.durationMismatch[pointer - 1] = deviation > allowedDeviation;
+            }
+
             lastMatchAcceptedAtMs = nowMs;
             result.mismatch[pointer] = false;
             result.matched[pointer] = true;
@@ -296,11 +353,17 @@ public class MidiRecognitionRegressionTest {
     }
 
     private int durationMs(String duration) {
+        if ("16th".equals(duration)) {
+            return 120;
+        }
         if ("eighth".equals(duration)) {
             return 240;
         }
         if ("half".equals(duration)) {
             return 900;
+        }
+        if ("whole".equals(duration)) {
+            return 1800;
         }
         return 450;
     }
@@ -326,6 +389,7 @@ public class MidiRecognitionRegressionTest {
     public static void main(String[] args) throws Exception {
         MidiRecognitionRegressionTest test = new MidiRecognitionRegressionTest();
         test.synthesizedReferenceScoreShouldRecognizeAllNotes();
+        test.tablatureModeShouldDetectDurationMismatches();
         System.out.println("recognized=OK");
     }
 }
