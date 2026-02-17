@@ -85,6 +85,7 @@ public class ScorePlayActivity extends AppCompatActivity {
 
         ((TextView) findViewById(R.id.text_piece_title)).setText(piece.title);
         overlayView.setNotes(piece.notes);
+        updateCurrentFingeringHint();
         actualDurationMsByIndex = new long[piece.notes.size()];
         for (int i = 0; i < actualDurationMsByIndex.length; i++) {
             actualDurationMsByIndex[i] = -1L;
@@ -269,8 +270,21 @@ public class ScorePlayActivity extends AppCompatActivity {
         } else {
             status.setText(R.string.play_done);
             stopTablaturePlayback();
+            updateCurrentFingeringHint();
         }
     }
+
+    private void updateCurrentFingeringHint() {
+        if (piece == null || piece.notes == null || piece.notes.isEmpty() || pointer < 0 || pointer >= piece.notes.size()) {
+            setTitle(getString(R.string.app_name));
+            return;
+        }
+
+        NoteEvent currentNote = piece.notes.get(pointer);
+        String fingering = mapper.fingeringFor(currentNote.fullName());
+        setTitle(getString(R.string.play_header_with_fingering, fingering));
+    }
+
     private void updateDurationMismatchForPrevious(int currentIndex) {
         if (currentIndex <= 0 || piece == null || currentIndex - 1 >= piece.notes.size()) {
             return;
@@ -348,6 +362,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         pointerUpdatedAtMs = SystemClock.elapsedRealtime();
         resetTablatureMismatchTracking();
         overlayView.setPointer(newPointer);
+        updateCurrentFingeringHint();
     }
 
     private void clearAllNoteStates() {
@@ -377,6 +392,7 @@ public class ScorePlayActivity extends AppCompatActivity {
             overlayView.setFrequencies(expectedFrequencyFor(piece.notes.get(0)), 0f);
         }
         status.setText(R.string.play_restarted);
+        updateCurrentFingeringHint();
     }
 
     private float expectedFrequencyFor(NoteEvent note) {

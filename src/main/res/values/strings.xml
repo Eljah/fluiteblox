@@ -73,6 +73,7 @@
     <string name="play_restart">Начать заново</string>
     <string name="play_restarted">Прогресс сброшен. Начинайте с первой ноты.</string>
     <string name="play_simplified_mode">Упрощенный режим (#/b = та же нота)</string>
+    <string name="play_header_with_fingering">Fluiteblox — %1$s</string>
 
     <string name="hint_title">Подсказка аппликатуры</string>
     <string name="hint_note_index">Нота №%1$d</string>
