@@ -6,9 +6,10 @@ import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 
 import tatar.eljah.fluitblox.R;
-import tatar.eljah.recorder.SettingsActivity;
+import tatar.eljah.recorder.AchievementsActivity;
 import tatar.eljah.recorder.CaptureSheetActivity;
 import tatar.eljah.recorder.LibraryActivity;
+import tatar.eljah.recorder.SettingsActivity;
 
 public class MainActivity extends AppCompatActivity {
     private static final int REQ_SETTINGS = 1001;
@@ -22,6 +23,7 @@ public class MainActivity extends AppCompatActivity {
         View captureButton = findViewById(R.id.btn_capture_score);
         View libraryButton = findViewById(R.id.btn_open_library);
         View settingsButton = findViewById(R.id.btn_audio_settings);
+        View achievementsButton = findViewById(R.id.btn_achievements);
 
         captureButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -41,6 +43,13 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 startActivityForResult(new Intent(MainActivity.this, SettingsActivity.class), REQ_SETTINGS);
+            }
+        });
+
+        achievementsButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, AchievementsActivity.class));
             }
         });
     }

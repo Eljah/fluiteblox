@@ -66,6 +66,16 @@ public class ScorePlayActivity extends AppCompatActivity {
     private long[] actualDurationMsByIndex;
     private boolean simplifiedMode;
 
+    private int attemptHitCount;
+    private int attemptMissCount;
+    private boolean waitingRecoveryAfterMiss;
+    private int attemptsSinceMiss;
+    private int recoverySamples;
+    private int recoveryEvents;
+    private int durationMatchCount;
+    private int durationMeasuredCount;
+    private int userAdvancedNotesCount;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -91,6 +101,8 @@ public class ScorePlayActivity extends AppCompatActivity {
             actualDurationMsByIndex[i] = -1L;
         }
         resetMatchCadenceTracking();
+        resetAttemptMetrics();
+        recordAttemptStart();
         setPointerWithTracking(-1);
         if (!piece.notes.isEmpty()) {
             NoteEvent firstExpected = piece.notes.get(pointer);
@@ -237,6 +249,7 @@ public class ScorePlayActivity extends AppCompatActivity {
 
         float normalizedHz = normalizeDetectedPitch(hz, expectedFrequency);
         String detected = mapper.fromFrequency(normalizedHz);
+        registerNoteAttempt();
 
         overlayView.setFrequencies(expectedFrequency, normalizedHz);
         overlayView.setPointer(pointer);
@@ -250,9 +263,11 @@ public class ScorePlayActivity extends AppCompatActivity {
                 return;
             }
             overlayView.markMismatch(pointer, detected);
+            recordMissAttempt();
             return;
         }
 
+        recordSuccessfulAttempt();
         resetTablatureMismatchTracking();
         overlayView.clearMismatch(pointer);
         overlayView.markMatched(pointer, detected);
@@ -262,12 +277,14 @@ public class ScorePlayActivity extends AppCompatActivity {
         }
         updateDurationMismatchForPrevious(pointer);
         lastMatchAcceptedAtMs = SystemClock.elapsedRealtime();
+        userAdvancedNotesCount++;
         pointer++;
         if (pointer < piece.notes.size()) {
             setPointerWithTracking(pointer);
             NoteEvent nextExpected = piece.notes.get(pointer);
             overlayView.setFrequencies(expectedFrequencyFor(nextExpected), 0f);
         } else {
+            saveCompletedAttempt();
             status.setText(R.string.play_done);
             stopTablaturePlayback();
             updateCurrentFingeringHint();
@@ -304,9 +321,11 @@ public class ScorePlayActivity extends AppCompatActivity {
         long expectedDurationMs = durationMs(previousNote.duration);
         long allowedDeviation = (long) (expectedDurationMs * DURATION_MISMATCH_TOLERANCE_FRACTION);
         long deviation = Math.abs(actualDurationMs - expectedDurationMs);
+        durationMeasuredCount++;
         if (deviation > allowedDeviation) {
             overlayView.markDurationMismatch(currentIndex - 1);
         } else {
+            durationMatchCount++;
             overlayView.clearDurationMismatch(currentIndex - 1);
         }
     }
@@ -387,12 +406,86 @@ public class ScorePlayActivity extends AppCompatActivity {
         pointer = 0;
         clearAllNoteStates();
         resetMatchCadenceTracking();
+        resetAttemptMetrics();
+        recordAttemptStart();
         setPointerWithTracking(-1);
         if (piece != null && !piece.notes.isEmpty()) {
             overlayView.setFrequencies(expectedFrequencyFor(piece.notes.get(0)), 0f);
         }
         status.setText(R.string.play_restarted);
         updateCurrentFingeringHint();
+    }
+
+    private void recordAttemptStart() {
+        if (piece == null || piece.id == null) {
+            return;
+        }
+        new PerformanceMetricsStore(this).incrementStartedAttempt(piece.id);
+    }
+
+    private void resetAttemptMetrics() {
+        attemptHitCount = 0;
+        attemptMissCount = 0;
+        waitingRecoveryAfterMiss = false;
+        attemptsSinceMiss = 0;
+        recoverySamples = 0;
+        recoveryEvents = 0;
+        durationMatchCount = 0;
+        durationMeasuredCount = 0;
+        userAdvancedNotesCount = 0;
+    }
+
+    private void registerNoteAttempt() {
+        if (waitingRecoveryAfterMiss) {
+            attemptsSinceMiss++;
+        }
+    }
+
+    private void recordMissAttempt() {
+        attemptMissCount++;
+        if (!waitingRecoveryAfterMiss) {
+            waitingRecoveryAfterMiss = true;
+            attemptsSinceMiss = 0;
+        }
+    }
+
+    private void recordSuccessfulAttempt() {
+        attemptHitCount++;
+        if (waitingRecoveryAfterMiss) {
+            recoverySamples += attemptsSinceMiss;
+            recoveryEvents++;
+            waitingRecoveryAfterMiss = false;
+            attemptsSinceMiss = 0;
+        }
+    }
+
+    private void saveCompletedAttempt() {
+        if (piece == null || piece.id == null) {
+            return;
+        }
+        if (userAdvancedNotesCount < piece.notes.size()) {
+            return;
+        }
+
+        int totalAttempts = attemptHitCount + attemptMissCount;
+        float hitRatio = totalAttempts > 0 ? (attemptHitCount / (float) totalAttempts) : 0f;
+        float recoveryRatio;
+        if (recoveryEvents <= 0) {
+            recoveryRatio = attemptMissCount > 0 ? 0f : 1f;
+        } else {
+            float avgAttemptsToRecover = recoverySamples / (float) recoveryEvents;
+            recoveryRatio = 1f / (1f + avgAttemptsToRecover);
+        }
+        float durationRatio = durationMeasuredCount > 0
+                ? durationMatchCount / (float) durationMeasuredCount
+                : 1f;
+
+        PerformanceMetricsStore.PerformanceAttempt attempt = new PerformanceMetricsStore.PerformanceAttempt();
+        attempt.hitRatio = hitRatio;
+        attempt.recoveryRatio = recoveryRatio;
+        attempt.durationRatio = durationRatio;
+        attempt.savedAt = System.currentTimeMillis();
+        new PerformanceMetricsStore(this).saveCompletedAttempt(piece.id, attempt);
     }
 
     private float expectedFrequencyFor(NoteEvent note) {
@@ -447,6 +540,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         midiPlaybackRequested = true;
         clearAllNoteStates();
         resetMatchCadenceTracking();
+        resetAttemptMetrics();
         pointer = 0;
         setPointerWithTracking(pointer);
         status.setText(R.string.play_midi_started);
@@ -486,6 +580,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         tablaturePlaybackRequested = true;
         clearAllNoteStates();
         resetMatchCadenceTracking();
+        resetAttemptMetrics();
         pointer = 0;
         setPointerWithTracking(pointer);
         analyzeTablatureFrequencies();

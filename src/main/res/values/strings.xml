@@ -4,6 +4,7 @@
     <string name="main_capture">1) Сфотографировать ноты</string>
     <string name="main_library">2) Библиотека произведений</string>
     <string name="main_settings">3) Настройки</string>
+    <string name="main_achievements">4) Достижения и прогресс</string>
 
     <string name="settings_title">Настройки распознавания</string>
     <string name="settings_threshold_value_default">Порог интенсивности: 0.030</string>
@@ -74,6 +75,19 @@
     <string name="play_restarted">Прогресс сброшен. Начинайте с первой ноты.</string>
     <string name="play_simplified_mode">Упрощенный режим (#/b = та же нота)</string>
     <string name="play_header_with_fingering">Fluiteblox — %1$s</string>
+
+
+    <string name="achievements_title">Достижения по произведениям</string>
+    <string name="achievements_no_pieces">Нет произведений для отображения.</string>
+    <string name="achievements_empty">Завершенных попыток пока нет. Доведите произведение до конца.</string>
+    <string name="achievements_overall_empty">Общая статистика пока недоступна.</string>
+    <string name="achievements_overall_template">Общая статистика:
+а) произведений доведено до конца: %1$d
+б) попыток начать играть: %2$d
+в) доведено до конца без ошибок нот: %3$d
+г) доведено до конца без ошибок длительности: %4$d</string>
+    <string name="achievements_summary_template">Завершенных попыток: %1$d
+Последняя попытка — попадания: %2$s, продолжение: %3$s, длительность: %4$s</string>
 
     <string name="hint_title">Подсказка аппликатуры</string>
     <string name="hint_note_index">Нота №%1$d</string>
