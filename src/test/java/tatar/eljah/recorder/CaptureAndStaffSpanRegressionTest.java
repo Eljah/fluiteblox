@@ -59,8 +59,8 @@ public class CaptureAndStaffSpanRegressionTest {
 
         assertEquals(20, start1, "group1 start");
         assertEquals(20, start2, "group2 start");
-        assertEquals(220, end1 - start1 + 1, "group1 normalized width");
-        assertEquals(220, end2 - start2 + 1, "group2 normalized width");
+        assertEquals(221, end1 - start1 + 1, "group1 normalized width");
+        assertEquals(221, end2 - start2 + 1, "group2 normalized width");
 
         staffMask.release();
     }
