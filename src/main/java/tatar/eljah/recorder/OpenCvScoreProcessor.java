@@ -66,17 +66,42 @@ public class OpenCvScoreProcessor {
         public final int barlines;
         public final int perpendicularScore;
         public final Bitmap debugOverlay;
+        public final List<StaffCorridor> staffCorridors;
 
         public ProcessingResult(ScorePiece piece,
                                 int staffRows,
                                 int barlines,
                                 int perpendicularScore,
                                 Bitmap debugOverlay) {
+            this(piece, staffRows, barlines, perpendicularScore, debugOverlay, new ArrayList<StaffCorridor>());
+        }
+
+        public ProcessingResult(ScorePiece piece,
+                                int staffRows,
+                                int barlines,
+                                int perpendicularScore,
+                                Bitmap debugOverlay,
+                                List<StaffCorridor> staffCorridors) {
             this.piece = piece;
             this.staffRows = staffRows;
             this.barlines = barlines;
             this.perpendicularScore = perpendicularScore;
             this.debugOverlay = debugOverlay;
+            this.staffCorridors = staffCorridors == null ? new ArrayList<StaffCorridor>() : staffCorridors;
+        }
+    }
+
+    public static class StaffCorridor {
+        public final float left;
+        public final float top;
+        public final float right;
+        public final float bottom;
+
+        public StaffCorridor(float left, float top, float right, float bottom) {
+            this.left = left;
+            this.top = top;
+            this.right = right;
+            this.bottom = bottom;
         }
     }
 
@@ -189,7 +214,7 @@ public class OpenCvScoreProcessor {
         fillNotes(piece, noteHeads, staffSpacing, w, h);
 
         Bitmap debugOverlay = safeBuildDebugOverlay(binary, staffMask, symbolMask, w, h);
-        return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay);
+        return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay, new ArrayList<StaffCorridor>());
     }
 
     private ProcessingResult processWithOpenCv(int w, int h, int[] argb, String title, ProcessingOptions options) {
@@ -242,9 +267,10 @@ public class OpenCvScoreProcessor {
             int staffRows = Math.max(1, Math.min(10, staffGroups.size()));
             int barlines = estimateBarsFromMask(binary, w, h, staffSpacing);
             int perpendicular = estimatePerpendicular(argb, w, h);
+            List<StaffCorridor> corridors = buildStaffCorridors(staffGroups, w, h);
 
             Bitmap debugOverlay = safeBuildDebugOverlayFromMats(binary, staffMask, symbolMask, w, h);
-            return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay);
+            return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay, corridors);
         } finally {
             if (gray != null) gray.release();
             if (contrast != null) contrast.release();
@@ -779,6 +805,23 @@ public class OpenCvScoreProcessor {
 
         Core.bitwise_and(symbolMask, corridorMask, symbolMask);
         corridorMask.release();
+    }
+
+    private List<StaffCorridor> buildStaffCorridors(List<StaffGroup> groups, int w, int h) {
+        List<StaffCorridor> out = new ArrayList<StaffCorridor>();
+        if (groups == null || groups.isEmpty()) {
+            return out;
+        }
+        for (StaffGroup g : groups) {
+            int xPad = Math.max(6, Math.round(g.spacing * 2.0f));
+            int yPad = Math.max(6, Math.round(g.spacing * 2.0f));
+            float x0 = Math.max(0, g.xStart - xPad) / (float) Math.max(1, w - 1);
+            float x1 = Math.min(w - 1, g.xEnd + xPad) / (float) Math.max(1, w - 1);
+            float y0 = Math.max(0, Math.round(g.top() - yPad)) / (float) Math.max(1, h - 1);
+            float y1 = Math.min(h - 1, Math.round(g.bottom() + yPad)) / (float) Math.max(1, h - 1);
+            out.add(new StaffCorridor(x0, y0, x1, y1));
+        }
+        return out;
     }
 
     private List<Blob> detectNoteHeadsOpenCv(Mat symbolMask, int w, int h, int staffSpacing, float noiseLevel, List<StaffGroup> groups) {

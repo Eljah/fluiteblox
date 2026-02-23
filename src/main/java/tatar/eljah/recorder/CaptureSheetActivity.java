@@ -283,6 +283,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                             preview.setImageBitmap(previewBitmap);
                             updateOverlayBounds(preview, previewBitmap);
                             notesOverlay.setRecognizedNotes(result.piece.notes);
+                            notesOverlay.setStaffCorridors(result.staffCorridors);
                             analysisText.setText(getString(R.string.capture_analysis_template,
                                     result.perpendicularScore,
                                     result.staffRows,
