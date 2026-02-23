@@ -3,6 +3,8 @@ package tatar.eljah.recorder;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
@@ -16,11 +18,14 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.InputStream;
+
 import tatar.eljah.fluitblox.R;
 
 public class CaptureSheetActivity extends AppCompatActivity {
     private static final int REQ_CAMERA = 410;
     private static final int REQ_CAMERA_PERMISSION = 411;
+    private static final int REQ_PICK_IMAGE = 412;
 
     private Bitmap capturedBitmap;
     private TextView analysisText;
@@ -94,6 +99,13 @@ public class CaptureSheetActivity extends AppCompatActivity {
             }
         });
 
+        findViewById(R.id.btn_pick_gallery).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openGallery();
+            }
+        });
+
         findViewById(R.id.btn_save_piece).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -144,6 +156,13 @@ public class CaptureSheetActivity extends AppCompatActivity {
         startActivityForResult(intent, REQ_CAMERA);
     }
 
+    private void openGallery() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType("image/*");
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(Intent.createChooser(intent, getString(R.string.capture_pick_gallery)), REQ_PICK_IMAGE);
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -165,6 +184,22 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 capturedBitmap = bmp;
                 sourceBitmapForProcessing = bmp;
                 rerunProcessing();
+            }
+        } else if (requestCode == REQ_PICK_IMAGE && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            Uri uri = data.getData();
+            try {
+                InputStream stream = getContentResolver().openInputStream(uri);
+                Bitmap bmp = BitmapFactory.decodeStream(stream);
+                if (stream != null) stream.close();
+                if (bmp != null) {
+                    capturedBitmap = bmp;
+                    sourceBitmapForProcessing = bmp;
+                    rerunProcessing();
+                } else {
+                    Toast.makeText(this, R.string.capture_gallery_load_failed, Toast.LENGTH_SHORT).show();
+                }
+            } catch (Exception e) {
+                Toast.makeText(this, R.string.capture_gallery_load_failed, Toast.LENGTH_SHORT).show();
             }
         }
     }
@@ -189,6 +224,8 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 latestResult.barlines,
                 latestResult.piece.notes.size()) + "\n"
                 + getString(R.string.capture_parameters_template, thresholdOffset, Math.round(noiseLevel * 100f)) + "\n"
+                + getString(R.string.capture_staff_knowledge_applied, latestResult.staffRows) + "\n"
+                + getString(R.string.capture_antiglare_applied) + "\n"
                 + getString(R.string.capture_debug_colors) + "\n"
                 + getString(R.string.capture_expected_notes));
     }

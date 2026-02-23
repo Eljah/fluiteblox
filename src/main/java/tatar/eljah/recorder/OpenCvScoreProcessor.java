@@ -9,6 +9,7 @@ import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint;
 import org.opencv.core.Rect;
 import org.opencv.core.Size;
+import org.opencv.imgproc.CLAHE;
 import org.opencv.imgproc.Imgproc;
 
 import java.util.ArrayList;
@@ -170,8 +171,12 @@ public class OpenCvScoreProcessor {
         int h = bitmap.getHeight();
         Mat gray = bitmapToGrayMat(bitmap);
 
+        Mat contrast = new Mat();
+        CLAHE clahe = Imgproc.createCLAHE(2.4, new Size(8, 8));
+        clahe.apply(gray, contrast);
+
         Mat norm = new Mat();
-        Imgproc.GaussianBlur(gray, norm, new Size(3, 3), 0);
+        Imgproc.medianBlur(contrast, norm, 3);
 
         Mat binary = new Mat();
         int blockSize = Math.max(15, (Math.min(w, h) / 20) | 1);
@@ -212,6 +217,8 @@ public class OpenCvScoreProcessor {
         Bitmap debugOverlay = buildDebugOverlayFromMats(binary, staffMask, symbolMask, w, h);
 
         gray.release();
+        contrast.release();
+        clahe.collectGarbage();
         norm.release();
         binary.release();
         staffMask.release();
@@ -540,8 +547,65 @@ public class OpenCvScoreProcessor {
         Mat mask = new Mat();
         Imgproc.morphologyEx(binary, mask, Imgproc.MORPH_OPEN, kernel);
         Imgproc.dilate(mask, mask, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(3, 1)));
+        enforceFiveStaffLines(mask, staffSpacing);
         kernel.release();
         return mask;
+    }
+
+    private void enforceFiveStaffLines(Mat staffMask, int staffSpacing) {
+        int h = staffMask.rows();
+        int w = staffMask.cols();
+        int[] energy = new int[h];
+        for (int y = 0; y < h; y++) {
+            int dark = 0;
+            for (int x = 0; x < w; x++) {
+                if (staffMask.get(y, x)[0] > 0) dark++;
+            }
+            energy[y] = dark;
+        }
+
+        List<Integer> peaks = new ArrayList<Integer>();
+        int minGap = Math.max(2, staffSpacing / 3);
+        for (int y = 1; y < h - 1; y++) {
+            if (energy[y] >= energy[y - 1] && energy[y] >= energy[y + 1] && energy[y] > w / 12) {
+                if (peaks.isEmpty() || y - peaks.get(peaks.size() - 1) >= minGap) {
+                    peaks.add(y);
+                }
+            }
+        }
+        if (peaks.isEmpty()) return;
+
+        Collections.sort(peaks, new Comparator<Integer>() {
+            @Override
+            public int compare(Integer a, Integer b) {
+                return energy[b] - energy[a];
+            }
+        });
+
+        List<Integer> top = new ArrayList<Integer>();
+        for (int i = 0; i < peaks.size() && top.size() < 5; i++) {
+            top.add(peaks.get(i));
+        }
+        if (top.isEmpty()) return;
+        Collections.sort(top);
+
+        double[] zero = new double[]{0};
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                staffMask.put(y, x, zero);
+            }
+        }
+        double[] full = new double[]{255};
+        for (int i = 0; i < top.size(); i++) {
+            int y = top.get(i);
+            int from = Math.max(0, y - 1);
+            int to = Math.min(h - 1, y + 1);
+            for (int row = from; row <= to; row++) {
+                for (int x = 0; x < w; x++) {
+                    staffMask.put(row, x, full);
+                }
+            }
+        }
     }
 
     private List<Blob> detectNoteHeadsOpenCv(Mat symbolMask, int w, int h, int staffSpacing, float noiseLevel) {
