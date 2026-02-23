@@ -67,13 +67,15 @@ public class OpenCvScoreProcessor {
         public final int perpendicularScore;
         public final Bitmap debugOverlay;
         public final List<StaffCorridor> staffCorridors;
+        public final String processingMode;
+        public final boolean openCvUsed;
 
         public ProcessingResult(ScorePiece piece,
                                 int staffRows,
                                 int barlines,
                                 int perpendicularScore,
                                 Bitmap debugOverlay) {
-            this(piece, staffRows, barlines, perpendicularScore, debugOverlay, new ArrayList<StaffCorridor>());
+            this(piece, staffRows, barlines, perpendicularScore, debugOverlay, new ArrayList<StaffCorridor>(), "legacy", false);
         }
 
         public ProcessingResult(ScorePiece piece,
@@ -82,12 +84,25 @@ public class OpenCvScoreProcessor {
                                 int perpendicularScore,
                                 Bitmap debugOverlay,
                                 List<StaffCorridor> staffCorridors) {
+            this(piece, staffRows, barlines, perpendicularScore, debugOverlay, staffCorridors, "opencv", true);
+        }
+
+        public ProcessingResult(ScorePiece piece,
+                                int staffRows,
+                                int barlines,
+                                int perpendicularScore,
+                                Bitmap debugOverlay,
+                                List<StaffCorridor> staffCorridors,
+                                String processingMode,
+                                boolean openCvUsed) {
             this.piece = piece;
             this.staffRows = staffRows;
             this.barlines = barlines;
             this.perpendicularScore = perpendicularScore;
             this.debugOverlay = debugOverlay;
             this.staffCorridors = staffCorridors == null ? new ArrayList<StaffCorridor>() : staffCorridors;
+            this.processingMode = processingMode == null ? "legacy" : processingMode;
+            this.openCvUsed = openCvUsed;
         }
     }
 
@@ -214,7 +229,7 @@ public class OpenCvScoreProcessor {
         fillNotes(piece, noteHeads, staffSpacing, w, h);
 
         Bitmap debugOverlay = safeBuildDebugOverlay(binary, staffMask, symbolMask, w, h);
-        return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay, new ArrayList<StaffCorridor>());
+        return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay, new ArrayList<StaffCorridor>(), "legacy", false);
     }
 
     private ProcessingResult processWithOpenCv(int w, int h, int[] argb, String title, ProcessingOptions options) {

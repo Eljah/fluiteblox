@@ -291,6 +291,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                                     result.piece.notes.size()) + "\n"
                                     + getString(R.string.capture_parameters_template, thresholdOffset, Math.round(noiseLevel * 100f)) + "\n"
                                     + getString(R.string.capture_staff_knowledge_applied, result.staffRows) + "\n"
+                                    + "Processing mode: " + formatProcessingMode(result) + "\n"
                                     + getString(R.string.capture_antiglare_applied) + "\n"
                                     + getString(R.string.capture_debug_colors) + "\n"
                                     + getString(R.string.capture_expected_notes));
@@ -311,6 +312,16 @@ public class CaptureSheetActivity extends AppCompatActivity {
             }
         }, "sheet-processing");
         processingThread.start();
+    }
+
+    private String formatProcessingMode(OpenCvScoreProcessor.ProcessingResult result) {
+        if (result == null) {
+            return "legacy";
+        }
+        if (result.openCvUsed) {
+            return "OpenCV";
+        }
+        return "legacy (fallback)";
     }
 
     private void updateOverlayBounds(ImageView preview, Bitmap shownBitmap) {
