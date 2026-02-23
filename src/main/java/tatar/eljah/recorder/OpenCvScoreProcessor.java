@@ -915,12 +915,24 @@ public class OpenCvScoreProcessor {
                 continue;
             }
             float ratio = (float) r.width / (float) r.height;
-            if (ratio < 0.35f || ratio > 2.6f) {
+            if (ratio < 0.5f || ratio > 2.0f) {
                 c.release();
                 continue;
             }
             float fill = (float) (area / Math.max(1.0, r.width * r.height));
-            if (fill < 0.16f || fill > 0.95f) {
+            if (fill < 0.18f || fill > 0.9f) {
+                c.release();
+                continue;
+            }
+            org.opencv.core.MatOfPoint2f curve = new org.opencv.core.MatOfPoint2f(c.toArray());
+            double perimeter = Imgproc.arcLength(curve, true);
+            curve.release();
+            if (perimeter <= 0.0) {
+                c.release();
+                continue;
+            }
+            double circularity = (4.0 * Math.PI * area) / (perimeter * perimeter);
+            if (circularity < 0.32 || circularity > 1.5) {
                 c.release();
                 continue;
             }
@@ -982,7 +994,7 @@ public class OpenCvScoreProcessor {
 
         java.util.HashMap<String, Blob> perSlot = new java.util.HashMap<String, Blob>();
         for (Blob b : keep) {
-            StaffGroup g = nearestGroupFor(b.cx(), groups);
+            StaffGroup g = nearestGroupForPoint(b.cx(), b.cy(), groups);
             int groupIdx = indexOfGroup(groups, g);
             float slotW = Math.max(7f, staffSpacing * 1.25f);
             int xSlot = Math.round(b.cx() / slotW);
@@ -1026,7 +1038,7 @@ public class OpenCvScoreProcessor {
             Blob b = noteHeads.get(i);
             float xNorm = b.cx() / (float) Math.max(1, w - 1);
             float yNorm = b.cy() / (float) Math.max(1, h - 1);
-            StaffGroup group = nearestGroupFor(b.cx(), groups);
+            StaffGroup group = nearestGroupForPoint(b.cx(), b.cy(), groups);
             int stepFromBottom = 0;
             if (group != null) {
                 stepFromBottom = Math.round((group.linesY[4] - b.cy()) / (group.spacing / 2f));
@@ -1047,7 +1059,7 @@ public class OpenCvScoreProcessor {
     }
 
     private boolean isAllowedNotePosition(float cx, float cy, List<StaffGroup> groups) {
-        StaffGroup g = nearestGroupFor(cx, groups);
+        StaffGroup g = nearestGroupForPoint(cx, cy, groups);
         if (g == null) return false;
         float xMargin = Math.max(2f, g.spacing * 0.7f);
         if (cx < g.xStart + xMargin || cx > g.xEnd - xMargin) return false;
@@ -1066,26 +1078,47 @@ public class OpenCvScoreProcessor {
             float d = Math.abs(cy - gapY);
             if (d < nearest) nearest = d;
         }
-        float above = g.linesY[0] - g.spacing * 1.2f;
-        float below = g.linesY[4] + g.spacing * 1.2f;
-        nearest = Math.min(nearest, Math.abs(cy - above));
-        nearest = Math.min(nearest, Math.abs(cy - below));
+        float above1 = g.linesY[0] - g.spacing * 1.0f;
+        float above2 = g.linesY[0] - g.spacing * 2.0f;
+        float below1 = g.linesY[4] + g.spacing * 1.0f;
+        float below2 = g.linesY[4] + g.spacing * 2.0f;
+        nearest = Math.min(nearest, Math.abs(cy - above1));
+        nearest = Math.min(nearest, Math.abs(cy - above2));
+        nearest = Math.min(nearest, Math.abs(cy - below1));
+        nearest = Math.min(nearest, Math.abs(cy - below2));
 
         return nearest <= Math.max(2f, halfStep * 0.95f);
     }
 
     private StaffGroup nearestGroupFor(float cx, List<StaffGroup> groups) {
+        return nearestGroupForPoint(cx, Float.NaN, groups);
+    }
+
+    private StaffGroup nearestGroupForPoint(float cx, float cy, List<StaffGroup> groups) {
         StaffGroup best = null;
         float bestDist = Float.MAX_VALUE;
         for (StaffGroup g : groups) {
             float spanMargin = Math.max(12f, g.spacing * 6f);
-            if (cx >= g.xStart && cx <= g.xEnd) {
-                return g;
-            }
             if (cx < g.xStart - spanMargin || cx > g.xEnd + spanMargin) {
                 continue;
             }
-            float d = Math.min(Math.abs(cx - g.xStart), Math.abs(cx - g.xEnd));
+            float xDist;
+            if (cx < g.xStart) {
+                xDist = g.xStart - cx;
+            } else if (cx > g.xEnd) {
+                xDist = cx - g.xEnd;
+            } else {
+                xDist = 0f;
+            }
+            float yDist = 0f;
+            if (!Float.isNaN(cy)) {
+                if (cy < g.top()) {
+                    yDist = g.top() - cy;
+                } else if (cy > g.bottom()) {
+                    yDist = cy - g.bottom();
+                }
+            }
+            float d = xDist + (yDist * 1.8f);
             if (d < bestDist) {
                 bestDist = d;
                 best = g;
