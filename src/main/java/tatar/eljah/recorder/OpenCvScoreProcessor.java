@@ -18,6 +18,11 @@ import java.util.Comparator;
 import java.util.List;
 
 public class OpenCvScoreProcessor {
+    private static final int COLOR_WHITE = 0xFFFFFFFF;
+    private static final int COLOR_BLACK = 0xFF000000;
+    private static final int COLOR_RED = 0xFFFF0000;
+    private static final int COLOR_GREEN = 0xFF00FF00;
+
     private static final boolean OPENCV_READY;
 
     static {
@@ -113,24 +118,39 @@ public class OpenCvScoreProcessor {
     }
 
     public ProcessingResult process(Bitmap bitmap, String title, ProcessingOptions options) {
+        int w = bitmap.getWidth();
+        int h = bitmap.getHeight();
+        int[] argb = new int[w * h];
+        int idx = 0;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                argb[idx++] = bitmap.getPixel(x, y);
+            }
+        }
+        return processArgb(w, h, argb, title, options);
+    }
+
+    public ProcessingResult processArgb(int width, int height, int[] argb, String title) {
+        return processArgb(width, height, argb, title, ProcessingOptions.defaults());
+    }
+
+    public ProcessingResult processArgb(int width, int height, int[] argb, String title, ProcessingOptions options) {
         if (OPENCV_READY) {
             try {
-                return processWithOpenCv(bitmap, title, options);
+                return processWithOpenCv(width, height, argb, title, options);
             } catch (Throwable ignored) {
                 // fallback to existing pure-java pipeline
             }
         }
 
-        return processLegacy(bitmap, title, options);
+        return processLegacy(width, height, argb, title, options);
     }
 
-    private ProcessingResult processLegacy(Bitmap bitmap, String title, ProcessingOptions options) {
+    private ProcessingResult processLegacy(int w, int h, int[] argb, String title, ProcessingOptions options) {
         ScorePiece piece = new ScorePiece();
         piece.title = title;
 
-        int w = bitmap.getWidth();
-        int h = bitmap.getHeight();
-        int[] gray = toGray(bitmap);
+        int[] gray = toGray(argb, w, h);
 
         int[] localMean = estimateLocalMean(gray, w, h);
         boolean[] binary = adaptiveBinarize(gray, localMean, options.thresholdOffset);
@@ -146,7 +166,7 @@ public class OpenCvScoreProcessor {
         List<Blob> noteHeads = filterNoteHeads(blobs, w, h, staffSpacing, options.noiseLevel);
 
         int barlines = estimateBars(binary, w, h, staffSpacing);
-        int perpendicular = estimatePerpendicular(bitmap);
+        int perpendicular = estimatePerpendicular(argb, w, h);
         fillNotes(piece, noteHeads, staffSpacing, w, h);
         enforceReferencePiece(piece, noteHeads, w, h);
 
@@ -159,17 +179,15 @@ public class OpenCvScoreProcessor {
             fallbackFill(piece, piece.notes.size(), missing, minRecognized);
         }
 
-        Bitmap debugOverlay = buildDebugOverlay(binary, staffMask, symbolMask, w, h);
+        Bitmap debugOverlay = safeBuildDebugOverlay(binary, staffMask, symbolMask, w, h);
         return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay);
     }
 
-    private ProcessingResult processWithOpenCv(Bitmap bitmap, String title, ProcessingOptions options) {
+    private ProcessingResult processWithOpenCv(int w, int h, int[] argb, String title, ProcessingOptions options) {
         ScorePiece piece = new ScorePiece();
         piece.title = title;
 
-        int w = bitmap.getWidth();
-        int h = bitmap.getHeight();
-        Mat gray = bitmapToGrayMat(bitmap);
+        Mat gray = bitmapToGrayMat(argb, w, h);
 
         Mat contrast = new Mat();
         CLAHE clahe = Imgproc.createCLAHE(2.4, new Size(8, 8));
@@ -203,7 +221,7 @@ public class OpenCvScoreProcessor {
 
         int staffRows = estimateStaffRowsFromMask(staffMask, w, h);
         int barlines = estimateBarsFromMask(binary, w, h, staffSpacing);
-        int perpendicular = estimatePerpendicular(bitmap);
+        int perpendicular = estimatePerpendicular(argb, w, h);
 
         int minRecognized = 8;
         int syntheticTarget = Math.max(minRecognized, Math.max(1, staffRows) * 10);
@@ -214,7 +232,7 @@ public class OpenCvScoreProcessor {
             fallbackFill(piece, piece.notes.size(), missing, minRecognized);
         }
 
-        Bitmap debugOverlay = buildDebugOverlayFromMats(binary, staffMask, symbolMask, w, h);
+        Bitmap debugOverlay = safeBuildDebugOverlayFromMats(binary, staffMask, symbolMask, w, h);
 
         gray.release();
         contrast.release();
@@ -228,31 +246,33 @@ public class OpenCvScoreProcessor {
         return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay);
     }
 
-    private int[] toGray(Bitmap bitmap) {
-        int w = bitmap.getWidth();
-        int h = bitmap.getHeight();
+    private int[] toGray(int[] argb, int w, int h) {
         int[] gray = new int[w * h];
         int idx = 0;
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                int px = bitmap.getPixel(x, y);
-                gray[idx++] = (Color.red(px) * 30 + Color.green(px) * 59 + Color.blue(px) * 11) / 100;
+                int px = argb[idx];
+                int r = (px >> 16) & 0xff;
+                int g = (px >> 8) & 0xff;
+                int b = px & 0xff;
+                gray[idx++] = (r * 30 + g * 59 + b * 11) / 100;
             }
         }
         return gray;
     }
 
-    private Mat bitmapToGrayMat(Bitmap bitmap) {
-        int w = bitmap.getWidth();
-        int h = bitmap.getHeight();
+    private Mat bitmapToGrayMat(int[] argb, int w, int h) {
         Mat gray = new Mat(h, w, CvType.CV_8UC1);
         byte[] data = new byte[w * h];
         int idx = 0;
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                int px = bitmap.getPixel(x, y);
-                int g = (Color.red(px) * 30 + Color.green(px) * 59 + Color.blue(px) * 11) / 100;
-                data[idx++] = (byte) (g & 0xff);
+                int px = argb[idx];
+                int r = (px >> 16) & 0xff;
+                int g = (px >> 8) & 0xff;
+                int b = px & 0xff;
+                int grayValue = (r * 30 + g * 59 + b * 11) / 100;
+                data[idx++] = (byte) (grayValue & 0xff);
             }
         }
         gray.put(0, 0, data);
@@ -799,14 +819,22 @@ public class OpenCvScoreProcessor {
                 boolean b = binary.get(y, x)[0] > 0;
                 boolean s = staffMask.get(y, x)[0] > 0;
                 boolean sym = symbolMask.get(y, x)[0] > 0;
-                int color = b ? Color.WHITE : Color.BLACK;
-                if (s) color = Color.RED;
-                else if (sym) color = Color.GREEN;
+                int color = b ? COLOR_WHITE : COLOR_BLACK;
+                if (s) color = COLOR_RED;
+                else if (sym) color = COLOR_GREEN;
                 pixels[idx++] = color;
             }
         }
         out.setPixels(pixels, 0, w, 0, 0, w, h);
         return out;
+    }
+
+    private Bitmap safeBuildDebugOverlayFromMats(Mat binary, Mat staffMask, Mat symbolMask, int w, int h) {
+        try {
+            return buildDebugOverlayFromMats(binary, staffMask, symbolMask, w, h);
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     private void fillNotes(ScorePiece piece, List<Blob> noteHeads, int staffSpacing, int w, int h) {
@@ -917,11 +945,11 @@ public class OpenCvScoreProcessor {
             int base = y * w;
             for (int x = 0; x < w; x++) {
                 int idx = base + x;
-                int color = binary[idx] ? Color.WHITE : Color.BLACK;
+                int color = binary[idx] ? COLOR_WHITE : COLOR_BLACK;
                 if (staffMask[idx]) {
-                    color = Color.RED;
+                    color = COLOR_RED;
                 } else if (symbolMask[idx]) {
-                    color = Color.GREEN;
+                    color = COLOR_GREEN;
                 }
                 out.setPixel(x, y, color);
             }
@@ -929,14 +957,22 @@ public class OpenCvScoreProcessor {
         return out;
     }
 
-    private int estimatePerpendicular(Bitmap bitmap) {
-        int cx = bitmap.getWidth() / 2;
-        int cy = bitmap.getHeight() / 2;
+    private Bitmap safeBuildDebugOverlay(boolean[] binary, boolean[] staffMask, boolean[] symbolMask, int w, int h) {
+        try {
+            return buildDebugOverlay(binary, staffMask, symbolMask, w, h);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private int estimatePerpendicular(int[] argb, int w, int h) {
+        int cx = w / 2;
+        int cy = h / 2;
         int sampleRadius = Math.max(8, Math.min(cx, cy) / 5);
         long contrast = 0;
         for (int i = 1; i < sampleRadius; i++) {
-            int p1 = bitmap.getPixel(Math.min(bitmap.getWidth() - 1, cx + i), cy);
-            int p2 = bitmap.getPixel(Math.max(0, cx - i), cy);
+            int p1 = argb[cy * w + Math.min(w - 1, cx + i)];
+            int p2 = argb[cy * w + Math.max(0, cx - i)];
             contrast += Math.abs((p1 & 0xff) - (p2 & 0xff));
         }
         int score = 100 - (int) Math.min(80, contrast / Math.max(1, sampleRadius * 6));
