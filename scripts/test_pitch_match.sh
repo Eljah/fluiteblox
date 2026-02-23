@@ -6,6 +6,28 @@ OUT_DIR="$ROOT/target/pitch-match-test"
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
+mkdir -p "$OUT_DIR/android/content" "$OUT_DIR/android/util" "$OUT_DIR/tatar/eljah/recorder"
+cat > "$OUT_DIR/android/content/Context.java" <<'JAVA'
+package android.content;
+public class Context {}
+JAVA
+
+cat > "$OUT_DIR/android/util/Log.java" <<'JAVA'
+package android.util;
+public final class Log {
+  public static int w(String tag, String msg) { return 0; }
+}
+JAVA
+
+cat > "$OUT_DIR/tatar/eljah/recorder/AppLocaleManager.java" <<'JAVA'
+package tatar.eljah.recorder;
+import android.content.Context;
+public final class AppLocaleManager {
+    private AppLocaleManager() {}
+    public static String savedLanguage(Context context) { return null; }
+}
+JAVA
+
 cat > "$OUT_DIR/PitchMatchUtilTestMain.java" <<'JAVA'
 import tatar.eljah.recorder.PitchMatchUtil;
 
@@ -42,6 +64,9 @@ public class PitchMatchUtilTestMain {
 JAVA
 
 javac -d "$OUT_DIR" \
+  "$OUT_DIR/android/content/Context.java" \
+  "$OUT_DIR/android/util/Log.java" \
+  "$OUT_DIR/tatar/eljah/recorder/AppLocaleManager.java" \
   "$ROOT/src/main/java/tatar/eljah/recorder/MusicNotation.java" \
   "$ROOT/src/main/java/tatar/eljah/recorder/PitchMatchUtil.java" \
   "$OUT_DIR/PitchMatchUtilTestMain.java"
