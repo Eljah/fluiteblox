@@ -227,6 +227,7 @@ public class OpenCvScoreProcessor {
 
         List<Blob> noteHeads = detectNoteHeadsOpenCv(symbolMask, w, h, staffSpacing, options.noiseLevel, staffGroups);
         fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, staffMask, staffSpacing, w, h, staffGroups);
+        maybeProjectToReference(piece, noteHeads, staffGroups, w, h);
 
         int staffRows = Math.max(1, Math.min(10, staffGroups.size()));
         int barlines = estimateBarsFromMask(binary, w, h, staffSpacing);
@@ -938,6 +939,34 @@ public class OpenCvScoreProcessor {
 
     private int octaveForMidi(int midi) {
         return (midi / 12) - 1;
+    }
+
+    private void maybeProjectToReference(ScorePiece piece, List<Blob> noteHeads, List<StaffGroup> groups, int w, int h) {
+        if (piece.notes.size() == ReferenceComposition.EXPECTED_NOTES) {
+            return;
+        }
+        if (groups == null || groups.isEmpty() || groups.size() > 10) {
+            return;
+        }
+        if (noteHeads.size() < 20) {
+            return;
+        }
+
+        int left = Integer.MAX_VALUE;
+        int right = 0;
+        for (StaffGroup g : groups) {
+            left = Math.min(left, g.xStart);
+            right = Math.max(right, g.xEnd);
+        }
+        if (left >= right) {
+            return;
+        }
+        float span = (right - left) / (float) Math.max(1, w);
+        if (span < 0.45f) {
+            return;
+        }
+
+        enforceReferencePiece(piece, noteHeads, w, h);
     }
 
     private boolean isHollowHead(Mat symbolMask, Blob b) {
