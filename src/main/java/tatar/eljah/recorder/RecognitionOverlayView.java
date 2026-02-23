@@ -3,8 +3,8 @@ package tatar.eljah.recorder;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Paint;
 import android.graphics.RectF;
+import android.graphics.Paint;
 import android.util.AttributeSet;
 import android.view.View;
 
@@ -17,6 +17,7 @@ public class RecognitionOverlayView extends View {
     private final Paint labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private final List<NoteEvent> notes = new ArrayList<NoteEvent>();
+    private final RectF imageBounds = new RectF(0f, 0f, 1f, 1f);
 
     public RecognitionOverlayView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -36,6 +37,11 @@ public class RecognitionOverlayView extends View {
         invalidate();
     }
 
+    public void setImageBounds(float left, float top, float right, float bottom) {
+        imageBounds.set(left, top, right, bottom);
+        invalidate();
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
@@ -43,8 +49,13 @@ public class RecognitionOverlayView extends View {
             return;
         }
 
-        float width = getWidth();
-        float height = getHeight();
+        float width = imageBounds.width();
+        float height = imageBounds.height();
+        if (width <= 1f || height <= 1f) {
+            width = getWidth();
+            height = getHeight();
+            imageBounds.set(0f, 0f, width, height);
+        }
         float noteRadius = Math.max(6f, width / 110f);
         float rowGap = Math.max(8f, height / 90f);
 
@@ -52,8 +63,10 @@ public class RecognitionOverlayView extends View {
             if (note.x < 0f || note.y < 0f) {
                 continue;
             }
-            float x = note.x * width;
-            float y = note.y * height;
+            float nx = Math.max(0f, Math.min(1f, note.x));
+            float ny = Math.max(0f, Math.min(1f, note.y));
+            float x = imageBounds.left + nx * width;
+            float y = imageBounds.top + ny * height;
 
             for (int i = -2; i <= 2; i++) {
                 canvas.drawLine(x - 38f, y + i * rowGap, x + 38f, y + i * rowGap, staffPaint);

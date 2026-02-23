@@ -91,6 +91,11 @@
             <artifactId>support-annotations</artifactId>
             <version>${android.support.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.openpnp</groupId>
+            <artifactId>opencv</artifactId>
+            <version>4.9.0-0</version>
+        </dependency>
     </dependencies>
 
     <profiles>

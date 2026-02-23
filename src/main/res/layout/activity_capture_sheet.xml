@@ -29,6 +29,13 @@
             android:layout_marginTop="12dp"
             android:text="@string/capture_open_camera" />
 
+        <Button
+            android:id="@+id/btn_pick_gallery"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/capture_pick_gallery" />
+
         <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="240dp"
@@ -39,7 +46,8 @@
                 android:id="@+id/image_preview"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:scaleType="centerCrop" />
+                android:adjustViewBounds="true"
+                android:scaleType="fitCenter" />
 
             <tatar.eljah.recorder.RecognitionOverlayView
                 android:id="@+id/image_notes_overlay"
@@ -54,6 +62,34 @@
             android:layout_marginTop="8dp"
             android:text="@string/capture_waiting"
             android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/text_threshold_value"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/capture_threshold_default" />
+
+        <SeekBar
+            android:id="@+id/seek_threshold"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="20"
+            android:progress="5" />
+
+        <TextView
+            android:id="@+id/text_noise_value"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/capture_noise_default" />
+
+        <SeekBar
+            android:id="@+id/seek_noise"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progress="50" />
 
         <Button
             android:id="@+id/btn_save_piece"

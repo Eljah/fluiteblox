@@ -3,6 +3,11 @@ package tatar.eljah.recorder;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
+import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
@@ -12,19 +17,30 @@ import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import java.io.InputStream;
 
 import tatar.eljah.fluitblox.R;
 
 public class CaptureSheetActivity extends AppCompatActivity {
     private static final int REQ_CAMERA = 410;
     private static final int REQ_CAMERA_PERMISSION = 411;
+    private static final int REQ_PICK_IMAGE = 412;
 
     private Bitmap capturedBitmap;
     private TextView analysisText;
+    private TextView thresholdValueText;
+    private TextView noiseValueText;
     private RecognitionOverlayView notesOverlay;
     private OpenCvScoreProcessor.ProcessingResult latestResult;
+    private Bitmap sourceBitmapForProcessing;
+    private int thresholdOffset = 7;
+    private float noiseLevel = 0.5f;
+    private Thread processingThread;
+    private int processingToken;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -35,12 +51,63 @@ public class CaptureSheetActivity extends AppCompatActivity {
         final EditText titleInput = findViewById(R.id.input_piece_title);
         final ImageView preview = findViewById(R.id.image_preview);
         analysisText = findViewById(R.id.text_analysis);
+        thresholdValueText = findViewById(R.id.text_threshold_value);
+        noiseValueText = findViewById(R.id.text_noise_value);
         notesOverlay = findViewById(R.id.image_notes_overlay);
+        SeekBar thresholdSeek = findViewById(R.id.seek_threshold);
+        SeekBar noiseSeek = findViewById(R.id.seek_noise);
+
+        thresholdSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                thresholdOffset = 2 + progress;
+                renderControlValues();
+                if (fromUser) {
+                    rerunProcessing();
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                rerunProcessing();
+            }
+        });
+        noiseSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                noiseLevel = progress / 100f;
+                renderControlValues();
+                if (fromUser) {
+                    rerunProcessing();
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                rerunProcessing();
+            }
+        });
+        renderControlValues();
 
         findViewById(R.id.btn_open_camera).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 openCamera();
+            }
+        });
+
+        findViewById(R.id.btn_pick_gallery).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openGallery();
             }
         });
 
@@ -58,7 +125,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 }
                 OpenCvScoreProcessor.ProcessingResult result = latestResult;
                 if (result == null) {
-                    result = new OpenCvScoreProcessor().process(capturedBitmap, title);
+                    result = new OpenCvScoreProcessor().process(capturedBitmap, title, currentOptions());
                 }
                 result.piece.title = title;
                 new ScoreLibraryRepository(CaptureSheetActivity.this).savePiece(result.piece);
@@ -74,6 +141,17 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 openCamera();
             }
         });
+    }
+
+    @Override
+    protected void onDestroy() {
+        processingToken++;
+        Thread running = processingThread;
+        if (running != null) {
+            running.interrupt();
+            processingThread = null;
+        }
+        super.onDestroy();
     }
 
     private void openCamera() {
@@ -92,6 +170,13 @@ public class CaptureSheetActivity extends AppCompatActivity {
             return;
         }
         startActivityForResult(intent, REQ_CAMERA);
+    }
+
+    private void openGallery() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType("image/*");
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(Intent.createChooser(intent, getString(R.string.capture_pick_gallery)), REQ_PICK_IMAGE);
     }
 
     @Override
@@ -113,16 +198,151 @@ public class CaptureSheetActivity extends AppCompatActivity {
             Bitmap bmp = (Bitmap) data.getExtras().get("data");
             if (bmp != null) {
                 capturedBitmap = bmp;
-                latestResult = new OpenCvScoreProcessor().process(bmp, "draft");
-                Bitmap previewBitmap = latestResult.debugOverlay != null ? latestResult.debugOverlay : bmp;
-                ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(previewBitmap);
-                notesOverlay.setRecognizedNotes(latestResult.piece.notes);
-                analysisText.setText(getString(R.string.capture_analysis_template,
-                        latestResult.perpendicularScore,
-                        latestResult.staffRows,
-                        latestResult.barlines,
-                        latestResult.piece.notes.size()) + "\n" + getString(R.string.capture_debug_colors) + "\n" + getString(R.string.capture_expected_notes));
+                sourceBitmapForProcessing = bmp;
+                rerunProcessing();
+            }
+        } else if (requestCode == REQ_PICK_IMAGE && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            Uri uri = data.getData();
+            try {
+                Bitmap bmp = decodeGalleryBitmap(uri, 1600);
+                if (bmp != null) {
+                    capturedBitmap = bmp;
+                    sourceBitmapForProcessing = bmp;
+                    rerunProcessing();
+                } else {
+                    Toast.makeText(this, R.string.capture_gallery_load_failed, Toast.LENGTH_SHORT).show();
+                }
+            } catch (Exception e) {
+                Toast.makeText(this, R.string.capture_gallery_load_failed, Toast.LENGTH_SHORT).show();
             }
         }
+    }
+
+    private Bitmap decodeGalleryBitmap(Uri uri, int maxDim) throws Exception {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        InputStream boundsStream = getContentResolver().openInputStream(uri);
+        try {
+            BitmapFactory.decodeStream(boundsStream, null, bounds);
+        } finally {
+            if (boundsStream != null) boundsStream.close();
+        }
+
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
+        opts.inSampleSize = calculateInSampleSize(bounds.outWidth, bounds.outHeight, maxDim);
+        InputStream decodeStream = getContentResolver().openInputStream(uri);
+        try {
+            return BitmapFactory.decodeStream(decodeStream, null, opts);
+        } finally {
+            if (decodeStream != null) decodeStream.close();
+        }
+    }
+
+    static int calculateInSampleSize(int width, int height, int maxDim) {
+        if (width <= 0 || height <= 0 || maxDim <= 0) {
+            return 1;
+        }
+        int sample = 1;
+        while ((width / sample) > maxDim || (height / sample) > maxDim) {
+            sample <<= 1;
+        }
+        return Math.max(1, sample);
+    }
+
+    private OpenCvScoreProcessor.ProcessingOptions currentOptions() {
+        int neighborhoodHits = noiseLevel >= 0.66f ? 5 : (noiseLevel >= 0.33f ? 4 : 3);
+        return new OpenCvScoreProcessor.ProcessingOptions(thresholdOffset, neighborhoodHits, noiseLevel);
+    }
+
+    private void rerunProcessing() {
+        final Bitmap bmp = sourceBitmapForProcessing;
+        if (bmp == null) {
+            return;
+        }
+        final OpenCvScoreProcessor.ProcessingOptions options = currentOptions();
+        final int token = ++processingToken;
+        Thread previous = processingThread;
+        if (previous != null && previous.isAlive()) {
+            previous.interrupt();
+        }
+        processingThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    final OpenCvScoreProcessor.ProcessingResult result = new OpenCvScoreProcessor().process(bmp, "draft", options);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (isFinishing() || token != processingToken) {
+                                return;
+                            }
+                            latestResult = result;
+                            Bitmap previewBitmap = result.debugOverlay != null ? result.debugOverlay : bmp;
+                            ImageView preview = findViewById(R.id.image_preview);
+                            preview.setImageBitmap(previewBitmap);
+                            updateOverlayBounds(preview, previewBitmap);
+                            notesOverlay.setRecognizedNotes(result.piece.notes);
+                            analysisText.setText(getString(R.string.capture_analysis_template,
+                                    result.perpendicularScore,
+                                    result.staffRows,
+                                    result.barlines,
+                                    result.piece.notes.size()) + "\n"
+                                    + getString(R.string.capture_parameters_template, thresholdOffset, Math.round(noiseLevel * 100f)) + "\n"
+                                    + getString(R.string.capture_staff_knowledge_applied, result.staffRows) + "\n"
+                                    + getString(R.string.capture_antiglare_applied) + "\n"
+                                    + getString(R.string.capture_debug_colors) + "\n"
+                                    + getString(R.string.capture_expected_notes));
+                        }
+                    });
+                } catch (final Throwable t) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (isFinishing() || token != processingToken) {
+                                return;
+                            }
+                            Toast.makeText(CaptureSheetActivity.this, R.string.capture_gallery_load_failed, Toast.LENGTH_SHORT).show();
+                            analysisText.setText(t.getClass().getSimpleName());
+                        }
+                    });
+                }
+            }
+        }, "sheet-processing");
+        processingThread.start();
+    }
+
+    private void updateOverlayBounds(ImageView preview, Bitmap shownBitmap) {
+        if (preview == null || shownBitmap == null || notesOverlay == null) {
+            return;
+        }
+        int viewW = preview.getWidth();
+        int viewH = preview.getHeight();
+        if (viewW <= 0 || viewH <= 0) {
+            notesOverlay.setImageBounds(0f, 0f, 1f, 1f);
+            return;
+        }
+
+        Drawable drawable = preview.getDrawable();
+        if (drawable == null || drawable.getIntrinsicWidth() <= 0 || drawable.getIntrinsicHeight() <= 0) {
+            float scale = Math.min(viewW / (float) shownBitmap.getWidth(), viewH / (float) shownBitmap.getHeight());
+            float drawW = shownBitmap.getWidth() * scale;
+            float drawH = shownBitmap.getHeight() * scale;
+            float left = (viewW - drawW) * 0.5f;
+            float top = (viewH - drawH) * 0.5f;
+            notesOverlay.setImageBounds(left, top, left + drawW, top + drawH);
+            return;
+        }
+
+        RectF rect = new RectF(0f, 0f, drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight());
+        Matrix matrix = new Matrix(preview.getImageMatrix());
+        matrix.mapRect(rect);
+        rect.offset(preview.getPaddingLeft(), preview.getPaddingTop());
+        notesOverlay.setImageBounds(rect.left, rect.top, rect.right, rect.bottom);
+    }
+
+    private void renderControlValues() {
+        thresholdValueText.setText(getString(R.string.capture_threshold_template, thresholdOffset));
+        noiseValueText.setText(getString(R.string.capture_noise_template, Math.round(noiseLevel * 100f)));
     }
 }
