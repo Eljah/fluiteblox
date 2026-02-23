@@ -92,9 +92,10 @@
             <version>${android.support.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.openpnp</groupId>
-            <artifactId>opencv</artifactId>
-            <version>4.9.0-0</version>
+            <groupId>ai.eye2you</groupId>
+            <artifactId>opencv-android</artifactId>
+            <version>4.5.2</version>
+            <type>aar</type>
         </dependency>
     </dependencies>
 
@@ -123,13 +124,19 @@
         </profile>
     </profiles>
 
-    <repositories>
+        <repositories>
+        <repository>
+            <id>central</id>
+            <name>Maven Central</name>
+            <url>https://repo1.maven.org/maven2</url>
+        </repository>
         <repository>
             <id>google</id>
             <name>Google Maven</name>
             <url>https://maven.google.com</url>
         </repository>
     </repositories>
+
 
     <build>
         <extensions>

@@ -29,6 +29,7 @@ set -o pipefail
 "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$SDK_ROOT" \
   "platforms;android-34" \
   "build-tools;28.0.3" \
+  "build-tools;34.0.0" \
   "platform-tools"
 
 echo "SDK ready: $SDK_ROOT"
