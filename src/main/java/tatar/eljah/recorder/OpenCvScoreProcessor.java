@@ -15,6 +15,7 @@ import org.opencv.imgproc.Imgproc;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -40,7 +41,7 @@ public class OpenCvScoreProcessor {
                 // Not running on JVM with openpnp helper, ignore.
             }
             Class.forName("org.opencv.core.Mat");
-            Core.getVersionString();
+            verifyOpenCvNativeBinding();
             loaded = true;
         } catch (Throwable t) {
             loaded = false;
@@ -310,6 +311,24 @@ public class OpenCvScoreProcessor {
             if (staffMask != null) staffMask.release();
             if (symbolMask != null) symbolMask.release();
             if (kernel != null) kernel.release();
+        }
+    }
+
+    private static void verifyOpenCvNativeBinding() {
+        try {
+            Core.getVersionString();
+        } catch (UnsatisfiedLinkError first) {
+            UnsatisfiedLinkError last = first;
+            for (String lib : Arrays.asList("opencv_java4", "opencv_java3", "opencv_java")) {
+                try {
+                    System.loadLibrary(lib);
+                    Core.getVersionString();
+                    return;
+                } catch (UnsatisfiedLinkError ignored) {
+                    last = ignored;
+                }
+            }
+            throw last;
         }
     }
 
