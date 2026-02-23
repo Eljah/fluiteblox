@@ -233,6 +233,7 @@ public class OpenCvScoreProcessor {
             kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(morphK, morphK));
             Imgproc.morphologyEx(symbolMask, symbolMask, Imgproc.MORPH_OPEN, kernel);
             Imgproc.morphologyEx(symbolMask, symbolMask, Imgproc.MORPH_CLOSE, kernel);
+            applyStaffCorridorMask(symbolMask, staffGroups, w, h);
 
             List<Blob> noteHeads = detectNoteHeadsOpenCv(symbolMask, w, h, staffSpacing, options.noiseLevel, staffGroups);
             fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, staffMask, staffSpacing, w, h, staffGroups);
@@ -755,6 +756,31 @@ public class OpenCvScoreProcessor {
         }
     }
 
+    private void applyStaffCorridorMask(Mat symbolMask, List<StaffGroup> groups, int w, int h) {
+        if (groups == null || groups.isEmpty()) {
+            return;
+        }
+
+        Mat corridorMask = Mat.zeros(h, w, CvType.CV_8UC1);
+        double[] full = new double[]{255};
+        for (StaffGroup g : groups) {
+            int xPad = Math.max(6, Math.round(g.spacing * 2.0f));
+            int yPad = Math.max(6, Math.round(g.spacing * 2.0f));
+            int x0 = Math.max(0, g.xStart - xPad);
+            int x1 = Math.min(w - 1, g.xEnd + xPad);
+            int y0 = Math.max(0, Math.round(g.top() - yPad));
+            int y1 = Math.min(h - 1, Math.round(g.bottom() + yPad));
+            for (int y = y0; y <= y1; y++) {
+                for (int x = x0; x <= x1; x++) {
+                    corridorMask.put(y, x, full);
+                }
+            }
+        }
+
+        Core.bitwise_and(symbolMask, corridorMask, symbolMask);
+        corridorMask.release();
+    }
+
     private List<Blob> detectNoteHeadsOpenCv(Mat symbolMask, int w, int h, int staffSpacing, float noiseLevel, List<StaffGroup> groups) {
         List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
         Mat hierarchy = new Mat();
@@ -919,8 +945,8 @@ public class OpenCvScoreProcessor {
         if (g == null) return false;
         float xMargin = Math.max(2f, g.spacing * 0.7f);
         if (cx < g.xStart + xMargin || cx > g.xEnd - xMargin) return false;
-        float minY = g.top() - g.spacing * 1.5f;
-        float maxY = g.bottom() + g.spacing * 1.5f;
+        float minY = g.top() - g.spacing * 1.2f;
+        float maxY = g.bottom() + g.spacing * 1.2f;
         if (cy < minY || cy > maxY) return false;
 
         float halfStep = g.spacing / 2f;
@@ -934,12 +960,12 @@ public class OpenCvScoreProcessor {
             float d = Math.abs(cy - gapY);
             if (d < nearest) nearest = d;
         }
-        float above = g.linesY[0] - g.spacing * 1.5f;
-        float below = g.linesY[4] + g.spacing * 1.5f;
+        float above = g.linesY[0] - g.spacing * 1.2f;
+        float below = g.linesY[4] + g.spacing * 1.2f;
         nearest = Math.min(nearest, Math.abs(cy - above));
         nearest = Math.min(nearest, Math.abs(cy - below));
 
-        return nearest <= Math.max(2f, halfStep * 1.15f);
+        return nearest <= Math.max(2f, halfStep * 0.95f);
     }
 
     private StaffGroup nearestGroupFor(float cx, List<StaffGroup> groups) {
