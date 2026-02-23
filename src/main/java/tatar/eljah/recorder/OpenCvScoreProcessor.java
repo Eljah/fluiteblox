@@ -113,6 +113,17 @@ public class OpenCvScoreProcessor {
         }
     }
 
+    private static class StaffGroup {
+        int xStart;
+        int xEnd;
+        float spacing;
+        float[] linesY = new float[5];
+
+        float top() { return linesY[0]; }
+        float bottom() { return linesY[4]; }
+        float center() { return (linesY[0] + linesY[4]) * 0.5f; }
+    }
+
     public ProcessingResult process(Bitmap bitmap, String title) {
         return process(bitmap, title, ProcessingOptions.defaults());
     }
@@ -168,16 +179,6 @@ public class OpenCvScoreProcessor {
         int barlines = estimateBars(binary, w, h, staffSpacing);
         int perpendicular = estimatePerpendicular(argb, w, h);
         fillNotes(piece, noteHeads, staffSpacing, w, h);
-        enforceReferencePiece(piece, noteHeads, w, h);
-
-        int minRecognized = 8;
-        int syntheticTarget = Math.max(minRecognized, staffRows * 10);
-        if (piece.notes.isEmpty()) {
-            fallbackFill(piece, 0, syntheticTarget, syntheticTarget);
-        } else if (piece.notes.size() < minRecognized) {
-            int missing = minRecognized - piece.notes.size();
-            fallbackFill(piece, piece.notes.size(), missing, minRecognized);
-        }
 
         Bitmap debugOverlay = safeBuildDebugOverlay(binary, staffMask, symbolMask, w, h);
         return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay);
@@ -207,6 +208,8 @@ public class OpenCvScoreProcessor {
 
         int staffSpacing = estimateStaffSpacingOpenCv(binary);
         Mat staffMask = detectStaffMaskOpenCv(binary, staffSpacing);
+        List<StaffGroup> staffGroups = extractStaffGroups(staffMask, staffSpacing);
+        rebuildStaffMaskFromGroups(staffMask, staffGroups, w, h);
         Mat symbolMask = new Mat();
         Core.subtract(binary, staffMask, symbolMask);
 
@@ -215,22 +218,12 @@ public class OpenCvScoreProcessor {
         Imgproc.morphologyEx(symbolMask, symbolMask, Imgproc.MORPH_OPEN, kernel);
         Imgproc.morphologyEx(symbolMask, symbolMask, Imgproc.MORPH_CLOSE, kernel);
 
-        List<Blob> noteHeads = detectNoteHeadsOpenCv(symbolMask, w, h, staffSpacing, options.noiseLevel);
-        fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, staffMask, staffSpacing, w, h);
-        enforceReferencePiece(piece, noteHeads, w, h);
+        List<Blob> noteHeads = detectNoteHeadsOpenCv(symbolMask, w, h, staffSpacing, options.noiseLevel, staffGroups);
+        fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, staffMask, staffSpacing, w, h, staffGroups);
 
-        int staffRows = estimateStaffRowsFromMask(staffMask, w, h);
+        int staffRows = Math.max(1, Math.min(10, staffGroups.size()));
         int barlines = estimateBarsFromMask(binary, w, h, staffSpacing);
         int perpendicular = estimatePerpendicular(argb, w, h);
-
-        int minRecognized = 8;
-        int syntheticTarget = Math.max(minRecognized, Math.max(1, staffRows) * 10);
-        if (piece.notes.isEmpty()) {
-            fallbackFill(piece, 0, syntheticTarget, syntheticTarget);
-        } else if (piece.notes.size() < minRecognized) {
-            int missing = minRecognized - piece.notes.size();
-            fallbackFill(piece, piece.notes.size(), missing, minRecognized);
-        }
 
         Bitmap debugOverlay = safeBuildDebugOverlayFromMats(binary, staffMask, symbolMask, w, h);
 
@@ -628,7 +621,108 @@ public class OpenCvScoreProcessor {
         }
     }
 
-    private List<Blob> detectNoteHeadsOpenCv(Mat symbolMask, int w, int h, int staffSpacing, float noiseLevel) {
+    private List<StaffGroup> extractStaffGroups(Mat staffMask, int staffSpacing) {
+        int h = staffMask.rows();
+        int w = staffMask.cols();
+        int[] energy = new int[h];
+        for (int y = 0; y < h; y++) {
+            int dark = 0;
+            for (int x = 0; x < w; x++) {
+                if (staffMask.get(y, x)[0] > 0) dark++;
+            }
+            energy[y] = dark;
+        }
+
+        List<Integer> peaks = new ArrayList<Integer>();
+        int minGap = Math.max(2, staffSpacing / 2);
+        for (int y = 1; y < h - 1; y++) {
+            if (energy[y] > w / 4 && energy[y] >= energy[y - 1] && energy[y] >= energy[y + 1]) {
+                if (peaks.isEmpty() || y - peaks.get(peaks.size() - 1) >= minGap) {
+                    peaks.add(y);
+                }
+            }
+        }
+
+        List<StaffGroup> groups = new ArrayList<StaffGroup>();
+        int i = 0;
+        while (i + 4 < peaks.size() && groups.size() < 10) {
+            float d1 = peaks.get(i + 1) - peaks.get(i);
+            float d2 = peaks.get(i + 2) - peaks.get(i + 1);
+            float d3 = peaks.get(i + 3) - peaks.get(i + 2);
+            float d4 = peaks.get(i + 4) - peaks.get(i + 3);
+            float avg = (d1 + d2 + d3 + d4) / 4f;
+            float tol = Math.max(1.5f, avg * 0.45f);
+            if (Math.abs(d1 - avg) <= tol && Math.abs(d2 - avg) <= tol
+                    && Math.abs(d3 - avg) <= tol && Math.abs(d4 - avg) <= tol) {
+                StaffGroup g = new StaffGroup();
+                for (int k = 0; k < 5; k++) g.linesY[k] = peaks.get(i + k);
+                g.spacing = avg;
+                g.xStart = findGroupXStart(staffMask, g);
+                g.xEnd = findGroupXEnd(staffMask, g);
+                if (g.xEnd > g.xStart + w / 3) {
+                    groups.add(g);
+                    i += 5;
+                    continue;
+                }
+            }
+            i++;
+        }
+        return groups;
+    }
+
+    private int findGroupXStart(Mat mask, StaffGroup g) {
+        int w = mask.cols();
+        int h = mask.rows();
+        int y0 = Math.max(0, Math.round(g.top() - g.spacing));
+        int y1 = Math.min(h - 1, Math.round(g.bottom() + g.spacing));
+        for (int x = 0; x < w; x++) {
+            int dark = 0;
+            for (int y = y0; y <= y1; y++) {
+                if (mask.get(y, x)[0] > 0) dark++;
+            }
+            if (dark >= 3) return x;
+        }
+        return 0;
+    }
+
+    private int findGroupXEnd(Mat mask, StaffGroup g) {
+        int w = mask.cols();
+        int h = mask.rows();
+        int y0 = Math.max(0, Math.round(g.top() - g.spacing));
+        int y1 = Math.min(h - 1, Math.round(g.bottom() + g.spacing));
+        for (int x = w - 1; x >= 0; x--) {
+            int dark = 0;
+            for (int y = y0; y <= y1; y++) {
+                if (mask.get(y, x)[0] > 0) dark++;
+            }
+            if (dark >= 3) return x;
+        }
+        return w - 1;
+    }
+
+    private void rebuildStaffMaskFromGroups(Mat staffMask, List<StaffGroup> groups, int w, int h) {
+        double[] zero = new double[]{0};
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                staffMask.put(y, x, zero);
+            }
+        }
+        double[] full = new double[]{255};
+        for (StaffGroup g : groups) {
+            int xs = Math.max(0, g.xStart);
+            int xe = Math.min(w - 1, g.xEnd);
+            for (int i = 0; i < 5; i++) {
+                int y = Math.round(g.linesY[i]);
+                for (int row = Math.max(0, y - 1); row <= Math.min(h - 1, y + 1); row++) {
+                    for (int x = xs; x <= xe; x++) {
+                        staffMask.put(row, x, full);
+                    }
+                }
+            }
+        }
+    }
+
+    private List<Blob> detectNoteHeadsOpenCv(Mat symbolMask, int w, int h, int staffSpacing, float noiseLevel, List<StaffGroup> groups) {
         List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
         Mat hierarchy = new Mat();
         Imgproc.findContours(symbolMask.clone(), contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
@@ -636,6 +730,8 @@ public class OpenCvScoreProcessor {
         List<Blob> out = new ArrayList<Blob>();
         int minArea = Math.max(8, (int) ((staffSpacing * staffSpacing / 8f) * (0.6f + noiseLevel * 1.2f)));
         int maxArea = Math.max(1200, staffSpacing * staffSpacing * 4);
+        float minSize = Math.max(3f, staffSpacing * 0.45f);
+        float maxSize = Math.max(8f, staffSpacing * 1.9f);
         for (MatOfPoint c : contours) {
             double area = Imgproc.contourArea(c);
             if (area < minArea || area > maxArea) {
@@ -647,8 +743,23 @@ public class OpenCvScoreProcessor {
                 c.release();
                 continue;
             }
+            if (r.width < minSize || r.height < minSize || r.width > maxSize || r.height > maxSize) {
+                c.release();
+                continue;
+            }
             float ratio = (float) r.width / (float) r.height;
             if (ratio < 0.35f || ratio > 2.6f) {
+                c.release();
+                continue;
+            }
+            float fill = (float) (area / Math.max(1.0, r.width * r.height));
+            if (fill < 0.25f || fill > 0.92f) {
+                c.release();
+                continue;
+            }
+            float cx = r.x + r.width * 0.5f;
+            float cy = r.y + r.height * 0.5f;
+            if (!isAllowedNotePosition(cx, cy, groups)) {
                 c.release();
                 continue;
             }
@@ -669,7 +780,66 @@ public class OpenCvScoreProcessor {
                 return a.minX - b.minX;
             }
         });
+        return dedupeNoteHeads(out, groups, staffSpacing);
+    }
+
+    private List<Blob> dedupeNoteHeads(List<Blob> in, List<StaffGroup> groups, int staffSpacing) {
+        if (in.size() < 2) return in;
+        List<Blob> sorted = new ArrayList<Blob>(in);
+        Collections.sort(sorted, new Comparator<Blob>() {
+            @Override
+            public int compare(Blob a, Blob b) {
+                return b.area - a.area;
+            }
+        });
+
+        List<Blob> keep = new ArrayList<Blob>();
+        float minCenterDist = Math.max(2f, staffSpacing * 0.55f);
+        for (Blob b : sorted) {
+            boolean overlap = false;
+            float cx = b.cx();
+            float cy = b.cy();
+            for (Blob k : keep) {
+                float dx = cx - k.cx();
+                float dy = cy - k.cy();
+                if (Math.sqrt(dx * dx + dy * dy) < minCenterDist) {
+                    overlap = true;
+                    break;
+                }
+            }
+            if (!overlap) keep.add(b);
+        }
+
+        java.util.HashMap<String, Blob> perSlot = new java.util.HashMap<String, Blob>();
+        for (Blob b : keep) {
+            StaffGroup g = nearestGroupFor(b.cx(), groups);
+            int groupIdx = indexOfGroup(groups, g);
+            float slotW = Math.max(6f, staffSpacing * 0.9f);
+            int xSlot = Math.round(b.cx() / slotW);
+            String key = groupIdx + ":" + xSlot;
+            Blob prev = perSlot.get(key);
+            if (prev == null || b.area > prev.area) {
+                perSlot.put(key, b);
+            }
+        }
+
+        List<Blob> out = new ArrayList<Blob>(perSlot.values());
+        Collections.sort(out, new Comparator<Blob>() {
+            @Override
+            public int compare(Blob a, Blob b) {
+                if (a.minX == b.minX) return a.minY - b.minY;
+                return a.minX - b.minX;
+            }
+        });
         return out;
+    }
+
+    private int indexOfGroup(List<StaffGroup> groups, StaffGroup group) {
+        if (group == null) return -1;
+        for (int i = 0; i < groups.size(); i++) {
+            if (groups.get(i) == group) return i;
+        }
+        return -1;
     }
 
     private void fillNotesWithDurationFeatures(ScorePiece piece,
@@ -678,17 +848,22 @@ public class OpenCvScoreProcessor {
                                                Mat staffMask,
                                                int staffSpacing,
                                                int w,
-                                               int h) {
+                                               int h,
+                                               List<StaffGroup> groups) {
         if (noteHeads.isEmpty()) return;
-        String[] noteCycle = new String[]{"C", "D", "E", "F", "G", "A", "B"};
         int measureSize = 4;
         for (int i = 0; i < noteHeads.size(); i++) {
             Blob b = noteHeads.get(i);
             float xNorm = b.cx() / (float) Math.max(1, w - 1);
             float yNorm = b.cy() / (float) Math.max(1, h - 1);
-            int step = Math.round((1.0f - yNorm) * 12.0f);
-            int noteIndex = ((step % 7) + 7) % 7;
-            int octave = Math.max(3, Math.min(6, 4 + (step / 7)));
+            StaffGroup group = nearestGroupFor(b.cx(), groups);
+            int stepFromBottom = 0;
+            if (group != null) {
+                stepFromBottom = Math.round((group.linesY[4] - b.cy()) / (group.spacing / 2f));
+            }
+            int midi = MusicNotation.midiFor("C", 4) + stepFromBottom;
+            String noteName = noteNameForMidi(midi);
+            int octave = octaveForMidi(midi);
 
             boolean hollow = isHollowHead(symbolMask, b);
             int stemCount = detectStemCount(symbolMask, b, staffSpacing);
@@ -696,9 +871,61 @@ public class OpenCvScoreProcessor {
             String duration = resolveDuration(hollow, stemCount, flagCount);
 
             piece.notes.add(new NoteEvent(
-                    noteCycle[noteIndex], octave, duration, 1 + (i / measureSize), xNorm, yNorm
+                    noteName, octave, duration, 1 + (i / measureSize), xNorm, yNorm
             ));
         }
+    }
+
+    private boolean isAllowedNotePosition(float cx, float cy, List<StaffGroup> groups) {
+        StaffGroup g = nearestGroupFor(cx, groups);
+        if (g == null) return false;
+        float minY = g.top() - g.spacing * 1.5f;
+        float maxY = g.bottom() + g.spacing * 1.5f;
+        if (cy < minY || cy > maxY) return false;
+
+        float halfStep = g.spacing / 2f;
+        float nearest = Float.MAX_VALUE;
+        for (int i = 0; i < 5; i++) {
+            float d = Math.abs(cy - g.linesY[i]);
+            if (d < nearest) nearest = d;
+        }
+        for (int i = 0; i < 4; i++) {
+            float gapY = (g.linesY[i] + g.linesY[i + 1]) * 0.5f;
+            float d = Math.abs(cy - gapY);
+            if (d < nearest) nearest = d;
+        }
+        float above = g.linesY[0] - g.spacing * 1.5f;
+        float below = g.linesY[4] + g.spacing * 1.5f;
+        nearest = Math.min(nearest, Math.abs(cy - above));
+        nearest = Math.min(nearest, Math.abs(cy - below));
+
+        return nearest <= Math.max(2f, halfStep * 0.75f);
+    }
+
+    private StaffGroup nearestGroupFor(float cx, List<StaffGroup> groups) {
+        StaffGroup best = null;
+        float bestDist = Float.MAX_VALUE;
+        for (StaffGroup g : groups) {
+            if (cx >= g.xStart && cx <= g.xEnd) {
+                return g;
+            }
+            float d = Math.min(Math.abs(cx - g.xStart), Math.abs(cx - g.xEnd));
+            if (d < bestDist) {
+                bestDist = d;
+                best = g;
+            }
+        }
+        return best;
+    }
+
+    private String noteNameForMidi(int midi) {
+        String[] names = new String[]{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+        int semitone = ((midi % 12) + 12) % 12;
+        return names[semitone];
+    }
+
+    private int octaveForMidi(int midi) {
+        return (midi / 12) - 1;
     }
 
     private boolean isHollowHead(Mat symbolMask, Blob b) {
