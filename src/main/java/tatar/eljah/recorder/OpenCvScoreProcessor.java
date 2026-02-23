@@ -725,15 +725,20 @@ public class OpenCvScoreProcessor {
         }
         double[] full = new double[]{255};
         int commonStart = w - 1;
-        int commonEnd = 0;
+        int longestLen = 0;
         for (StaffGroup g : groups) {
-            commonStart = Math.min(commonStart, Math.max(0, g.xStart));
-            commonEnd = Math.max(commonEnd, Math.min(w - 1, g.xEnd));
+            int s = Math.max(0, g.xStart);
+            int e = Math.min(w - 1, g.xEnd);
+            commonStart = Math.min(commonStart, s);
+            longestLen = Math.max(longestLen, Math.max(1, e - s + 1));
         }
-        if (commonStart > commonEnd) {
+        if (commonStart < 0 || commonStart >= w) {
             commonStart = 0;
-            commonEnd = w - 1;
         }
+        if (longestLen <= 0) {
+            longestLen = w;
+        }
+        int commonEnd = Math.min(w - 1, commonStart + longestLen - 1);
         for (StaffGroup g : groups) {
             g.xStart = commonStart;
             g.xEnd = commonEnd;

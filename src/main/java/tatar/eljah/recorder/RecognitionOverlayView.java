@@ -63,8 +63,10 @@ public class RecognitionOverlayView extends View {
             if (note.x < 0f || note.y < 0f) {
                 continue;
             }
-            float x = imageBounds.left + note.x * width;
-            float y = imageBounds.top + note.y * height;
+            float nx = Math.max(0f, Math.min(1f, note.x));
+            float ny = Math.max(0f, Math.min(1f, note.y));
+            float x = imageBounds.left + nx * width;
+            float y = imageBounds.top + ny * height;
 
             for (int i = -2; i <= 2; i++) {
                 canvas.drawLine(x - 38f, y + i * rowGap, x + 38f, y + i * rowGap, staffPaint);
