@@ -12,7 +12,10 @@ import org.opencv.core.Size;
 import org.opencv.imgproc.CLAHE;
 import org.opencv.imgproc.Imgproc;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -24,10 +27,12 @@ public class OpenCvScoreProcessor {
     private static final int COLOR_GREEN = 0xFF00FF00;
 
     private static final boolean OPENCV_READY;
+    private static final String OPENCV_INIT_STACKTRACE;
     private static volatile boolean opencvRuntimeDisabled;
 
     static {
         boolean loaded;
+        String initStacktrace = null;
         try {
             try {
                 Class<?> openCvLoader = Class.forName("nu.pattern.OpenCV");
@@ -36,12 +41,14 @@ public class OpenCvScoreProcessor {
                 // Not running on JVM with openpnp helper, ignore.
             }
             Class.forName("org.opencv.core.Mat");
-            Core.getVersionString();
+            verifyOpenCvNativeBinding();
             loaded = true;
         } catch (Throwable t) {
             loaded = false;
+            initStacktrace = stackTraceToString(t);
         }
         OPENCV_READY = loaded;
+        OPENCV_INIT_STACKTRACE = initStacktrace;
     }
 
     public static class ProcessingOptions {
@@ -66,17 +73,60 @@ public class OpenCvScoreProcessor {
         public final int barlines;
         public final int perpendicularScore;
         public final Bitmap debugOverlay;
+        public final List<StaffCorridor> staffCorridors;
+        public final String processingMode;
+        public final boolean openCvUsed;
+        public final String openCvStackTrace;
 
         public ProcessingResult(ScorePiece piece,
                                 int staffRows,
                                 int barlines,
                                 int perpendicularScore,
                                 Bitmap debugOverlay) {
+            this(piece, staffRows, barlines, perpendicularScore, debugOverlay, new ArrayList<StaffCorridor>(), "legacy", false, null);
+        }
+
+        public ProcessingResult(ScorePiece piece,
+                                int staffRows,
+                                int barlines,
+                                int perpendicularScore,
+                                Bitmap debugOverlay,
+                                List<StaffCorridor> staffCorridors) {
+            this(piece, staffRows, barlines, perpendicularScore, debugOverlay, staffCorridors, "opencv", true, null);
+        }
+
+        public ProcessingResult(ScorePiece piece,
+                                int staffRows,
+                                int barlines,
+                                int perpendicularScore,
+                                Bitmap debugOverlay,
+                                List<StaffCorridor> staffCorridors,
+                                String processingMode,
+                                boolean openCvUsed,
+                                String openCvStackTrace) {
             this.piece = piece;
             this.staffRows = staffRows;
             this.barlines = barlines;
             this.perpendicularScore = perpendicularScore;
             this.debugOverlay = debugOverlay;
+            this.staffCorridors = staffCorridors == null ? new ArrayList<StaffCorridor>() : staffCorridors;
+            this.processingMode = processingMode == null ? "legacy" : processingMode;
+            this.openCvUsed = openCvUsed;
+            this.openCvStackTrace = openCvStackTrace;
+        }
+    }
+
+    public static class StaffCorridor {
+        public final float left;
+        public final float top;
+        public final float right;
+        public final float bottom;
+
+        public StaffCorridor(float left, float top, float right, float bottom) {
+            this.left = left;
+            this.top = top;
+            this.right = right;
+            this.bottom = bottom;
         }
     }
 
@@ -157,15 +207,21 @@ public class OpenCvScoreProcessor {
         if (OPENCV_READY && !opencvRuntimeDisabled) {
             try {
                 return processWithOpenCv(width, height, argb, title, options);
-            } catch (Throwable ignored) {
+            } catch (Throwable t) {
                 opencvRuntimeDisabled = true;
+                return processLegacy(width, height, argb, title, options, stackTraceToString(t));
             }
         }
 
-        return processLegacy(width, height, argb, title, options);
+        String reason = OPENCV_READY ? "OpenCV runtime disabled after previous failure" : OPENCV_INIT_STACKTRACE;
+        return processLegacy(width, height, argb, title, options, reason);
     }
 
     private ProcessingResult processLegacy(int w, int h, int[] argb, String title, ProcessingOptions options) {
+        return processLegacy(w, h, argb, title, options, null);
+    }
+
+    private ProcessingResult processLegacy(int w, int h, int[] argb, String title, ProcessingOptions options, String openCvStackTrace) {
         ScorePiece piece = new ScorePiece();
         piece.title = title;
 
@@ -189,7 +245,7 @@ public class OpenCvScoreProcessor {
         fillNotes(piece, noteHeads, staffSpacing, w, h);
 
         Bitmap debugOverlay = safeBuildDebugOverlay(binary, staffMask, symbolMask, w, h);
-        return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay);
+        return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay, new ArrayList<StaffCorridor>(), "legacy", false, openCvStackTrace);
     }
 
     private ProcessingResult processWithOpenCv(int w, int h, int[] argb, String title, ProcessingOptions options) {
@@ -233,17 +289,18 @@ public class OpenCvScoreProcessor {
             kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(morphK, morphK));
             Imgproc.morphologyEx(symbolMask, symbolMask, Imgproc.MORPH_OPEN, kernel);
             Imgproc.morphologyEx(symbolMask, symbolMask, Imgproc.MORPH_CLOSE, kernel);
+            applyStaffCorridorMask(symbolMask, staffGroups, w, h);
 
             List<Blob> noteHeads = detectNoteHeadsOpenCv(symbolMask, w, h, staffSpacing, options.noiseLevel, staffGroups);
             fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, staffMask, staffSpacing, w, h, staffGroups);
-            maybeProjectToReference(piece, noteHeads, staffGroups, w, h);
 
             int staffRows = Math.max(1, Math.min(10, staffGroups.size()));
             int barlines = estimateBarsFromMask(binary, w, h, staffSpacing);
             int perpendicular = estimatePerpendicular(argb, w, h);
+            List<StaffCorridor> corridors = buildStaffCorridors(staffGroups, w, h);
 
             Bitmap debugOverlay = safeBuildDebugOverlayFromMats(binary, staffMask, symbolMask, w, h);
-            return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay);
+            return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay, corridors);
         } finally {
             if (gray != null) gray.release();
             if (contrast != null) contrast.release();
@@ -253,6 +310,39 @@ public class OpenCvScoreProcessor {
             if (staffMask != null) staffMask.release();
             if (symbolMask != null) symbolMask.release();
             if (kernel != null) kernel.release();
+        }
+    }
+
+    private static void verifyOpenCvNativeBinding() {
+        try {
+            Core.getVersionString();
+        } catch (UnsatisfiedLinkError first) {
+            UnsatisfiedLinkError last = first;
+            for (String lib : Arrays.asList("opencv_java4", "opencv_java3", "opencv_java")) {
+                try {
+                    System.loadLibrary(lib);
+                    Core.getVersionString();
+                    return;
+                } catch (UnsatisfiedLinkError ignored) {
+                    last = ignored;
+                }
+            }
+            throw last;
+        }
+    }
+
+    private static String stackTraceToString(Throwable t) {
+        if (t == null) {
+            return null;
+        }
+        try {
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            t.printStackTrace(pw);
+            pw.flush();
+            return sw.toString();
+        } catch (Throwable ignored) {
+            return t.toString();
         }
     }
 
@@ -755,6 +845,48 @@ public class OpenCvScoreProcessor {
         }
     }
 
+    private void applyStaffCorridorMask(Mat symbolMask, List<StaffGroup> groups, int w, int h) {
+        if (groups == null || groups.isEmpty()) {
+            return;
+        }
+
+        Mat corridorMask = Mat.zeros(h, w, CvType.CV_8UC1);
+        double[] full = new double[]{255};
+        for (StaffGroup g : groups) {
+            int xPad = Math.max(6, Math.round(g.spacing * 2.0f));
+            int yPad = Math.max(6, Math.round(g.spacing * 2.0f));
+            int x0 = Math.max(0, g.xStart - xPad);
+            int x1 = Math.min(w - 1, g.xEnd + xPad);
+            int y0 = Math.max(0, Math.round(g.top() - yPad));
+            int y1 = Math.min(h - 1, Math.round(g.bottom() + yPad));
+            for (int y = y0; y <= y1; y++) {
+                for (int x = x0; x <= x1; x++) {
+                    corridorMask.put(y, x, full);
+                }
+            }
+        }
+
+        Core.bitwise_and(symbolMask, corridorMask, symbolMask);
+        corridorMask.release();
+    }
+
+    private List<StaffCorridor> buildStaffCorridors(List<StaffGroup> groups, int w, int h) {
+        List<StaffCorridor> out = new ArrayList<StaffCorridor>();
+        if (groups == null || groups.isEmpty()) {
+            return out;
+        }
+        for (StaffGroup g : groups) {
+            int xPad = Math.max(6, Math.round(g.spacing * 2.0f));
+            int yPad = Math.max(6, Math.round(g.spacing * 2.0f));
+            float x0 = Math.max(0, g.xStart - xPad) / (float) Math.max(1, w - 1);
+            float x1 = Math.min(w - 1, g.xEnd + xPad) / (float) Math.max(1, w - 1);
+            float y0 = Math.max(0, Math.round(g.top() - yPad)) / (float) Math.max(1, h - 1);
+            float y1 = Math.min(h - 1, Math.round(g.bottom() + yPad)) / (float) Math.max(1, h - 1);
+            out.add(new StaffCorridor(x0, y0, x1, y1));
+        }
+        return out;
+    }
+
     private List<Blob> detectNoteHeadsOpenCv(Mat symbolMask, int w, int h, int staffSpacing, float noiseLevel, List<StaffGroup> groups) {
         List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
         Mat hierarchy = new Mat();
@@ -783,12 +915,24 @@ public class OpenCvScoreProcessor {
                 continue;
             }
             float ratio = (float) r.width / (float) r.height;
-            if (ratio < 0.35f || ratio > 2.6f) {
+            if (ratio < 0.5f || ratio > 2.0f) {
                 c.release();
                 continue;
             }
             float fill = (float) (area / Math.max(1.0, r.width * r.height));
-            if (fill < 0.16f || fill > 0.95f) {
+            if (fill < 0.18f || fill > 0.9f) {
+                c.release();
+                continue;
+            }
+            org.opencv.core.MatOfPoint2f curve = new org.opencv.core.MatOfPoint2f(c.toArray());
+            double perimeter = Imgproc.arcLength(curve, true);
+            curve.release();
+            if (perimeter <= 0.0) {
+                c.release();
+                continue;
+            }
+            double circularity = (4.0 * Math.PI * area) / (perimeter * perimeter);
+            if (circularity < 0.32 || circularity > 1.5) {
                 c.release();
                 continue;
             }
@@ -850,7 +994,7 @@ public class OpenCvScoreProcessor {
 
         java.util.HashMap<String, Blob> perSlot = new java.util.HashMap<String, Blob>();
         for (Blob b : keep) {
-            StaffGroup g = nearestGroupFor(b.cx(), groups);
+            StaffGroup g = nearestGroupForPoint(b.cx(), b.cy(), groups);
             int groupIdx = indexOfGroup(groups, g);
             float slotW = Math.max(7f, staffSpacing * 1.25f);
             int xSlot = Math.round(b.cx() / slotW);
@@ -894,7 +1038,7 @@ public class OpenCvScoreProcessor {
             Blob b = noteHeads.get(i);
             float xNorm = b.cx() / (float) Math.max(1, w - 1);
             float yNorm = b.cy() / (float) Math.max(1, h - 1);
-            StaffGroup group = nearestGroupFor(b.cx(), groups);
+            StaffGroup group = nearestGroupForPoint(b.cx(), b.cy(), groups);
             int stepFromBottom = 0;
             if (group != null) {
                 stepFromBottom = Math.round((group.linesY[4] - b.cy()) / (group.spacing / 2f));
@@ -915,12 +1059,12 @@ public class OpenCvScoreProcessor {
     }
 
     private boolean isAllowedNotePosition(float cx, float cy, List<StaffGroup> groups) {
-        StaffGroup g = nearestGroupFor(cx, groups);
+        StaffGroup g = nearestGroupForPoint(cx, cy, groups);
         if (g == null) return false;
         float xMargin = Math.max(2f, g.spacing * 0.7f);
         if (cx < g.xStart + xMargin || cx > g.xEnd - xMargin) return false;
-        float minY = g.top() - g.spacing * 1.5f;
-        float maxY = g.bottom() + g.spacing * 1.5f;
+        float minY = g.top() - g.spacing * 1.2f;
+        float maxY = g.bottom() + g.spacing * 1.2f;
         if (cy < minY || cy > maxY) return false;
 
         float halfStep = g.spacing / 2f;
@@ -934,26 +1078,47 @@ public class OpenCvScoreProcessor {
             float d = Math.abs(cy - gapY);
             if (d < nearest) nearest = d;
         }
-        float above = g.linesY[0] - g.spacing * 1.5f;
-        float below = g.linesY[4] + g.spacing * 1.5f;
-        nearest = Math.min(nearest, Math.abs(cy - above));
-        nearest = Math.min(nearest, Math.abs(cy - below));
+        float above1 = g.linesY[0] - g.spacing * 1.0f;
+        float above2 = g.linesY[0] - g.spacing * 2.0f;
+        float below1 = g.linesY[4] + g.spacing * 1.0f;
+        float below2 = g.linesY[4] + g.spacing * 2.0f;
+        nearest = Math.min(nearest, Math.abs(cy - above1));
+        nearest = Math.min(nearest, Math.abs(cy - above2));
+        nearest = Math.min(nearest, Math.abs(cy - below1));
+        nearest = Math.min(nearest, Math.abs(cy - below2));
 
-        return nearest <= Math.max(2f, halfStep * 1.15f);
+        return nearest <= Math.max(2f, halfStep * 0.95f);
     }
 
     private StaffGroup nearestGroupFor(float cx, List<StaffGroup> groups) {
+        return nearestGroupForPoint(cx, Float.NaN, groups);
+    }
+
+    private StaffGroup nearestGroupForPoint(float cx, float cy, List<StaffGroup> groups) {
         StaffGroup best = null;
         float bestDist = Float.MAX_VALUE;
         for (StaffGroup g : groups) {
             float spanMargin = Math.max(12f, g.spacing * 6f);
-            if (cx >= g.xStart && cx <= g.xEnd) {
-                return g;
-            }
             if (cx < g.xStart - spanMargin || cx > g.xEnd + spanMargin) {
                 continue;
             }
-            float d = Math.min(Math.abs(cx - g.xStart), Math.abs(cx - g.xEnd));
+            float xDist;
+            if (cx < g.xStart) {
+                xDist = g.xStart - cx;
+            } else if (cx > g.xEnd) {
+                xDist = cx - g.xEnd;
+            } else {
+                xDist = 0f;
+            }
+            float yDist = 0f;
+            if (!Float.isNaN(cy)) {
+                if (cy < g.top()) {
+                    yDist = g.top() - cy;
+                } else if (cy > g.bottom()) {
+                    yDist = cy - g.bottom();
+                }
+            }
+            float d = xDist + (yDist * 1.8f);
             if (d < bestDist) {
                 bestDist = d;
                 best = g;
@@ -970,34 +1135,6 @@ public class OpenCvScoreProcessor {
 
     private int octaveForMidi(int midi) {
         return (midi / 12) - 1;
-    }
-
-    private void maybeProjectToReference(ScorePiece piece, List<Blob> noteHeads, List<StaffGroup> groups, int w, int h) {
-        if (piece.notes.size() == ReferenceComposition.EXPECTED_NOTES) {
-            return;
-        }
-        if (groups == null || groups.isEmpty() || groups.size() > 10) {
-            return;
-        }
-        if (noteHeads.size() < 20) {
-            return;
-        }
-
-        int left = Integer.MAX_VALUE;
-        int right = 0;
-        for (StaffGroup g : groups) {
-            left = Math.min(left, g.xStart);
-            right = Math.max(right, g.xEnd);
-        }
-        if (left >= right) {
-            return;
-        }
-        float span = (right - left) / (float) Math.max(1, w);
-        if (span < 0.45f) {
-            return;
-        }
-
-        enforceReferencePiece(piece, noteHeads, w, h);
     }
 
     private boolean isHollowHead(Mat symbolMask, Blob b) {
@@ -1169,71 +1306,6 @@ public class OpenCvScoreProcessor {
                     1 + (i / measureSize),
                     xNorm,
                     yNorm
-            ));
-        }
-    }
-
-    private void enforceReferencePiece(ScorePiece piece, List<Blob> noteHeads, int w, int h) {
-        List<NoteEvent> reference = ReferenceComposition.expectedReferenceNotes();
-        if (reference.isEmpty()) {
-            return;
-        }
-
-        if (piece.notes.size() == ReferenceComposition.EXPECTED_NOTES) {
-            return;
-        }
-
-        piece.notes.clear();
-        int detected = noteHeads.size();
-        for (int i = 0; i < reference.size(); i++) {
-            NoteEvent expected = reference.get(i);
-            float x;
-            float y;
-            if (detected > 1) {
-                float scaled = i * (detected - 1f) / Math.max(1, reference.size() - 1f);
-                int leftIdx = Math.max(0, Math.min(detected - 1, (int) Math.floor(scaled)));
-                int rightIdx = Math.max(0, Math.min(detected - 1, (int) Math.ceil(scaled)));
-                Blob left = noteHeads.get(leftIdx);
-                Blob right = noteHeads.get(rightIdx);
-                float blend = scaled - leftIdx;
-                float cx = left.cx() + (right.cx() - left.cx()) * blend;
-                float cy = left.cy() + (right.cy() - left.cy()) * blend;
-                x = cx / (float) Math.max(1, w - 1);
-                y = cy / (float) Math.max(1, h - 1);
-            } else if (detected == 1) {
-                Blob b = noteHeads.get(0);
-                x = b.cx() / (float) Math.max(1, w - 1);
-                y = b.cy() / (float) Math.max(1, h - 1);
-            } else {
-                x = 0.08f + (i / (float) Math.max(1, reference.size() - 1)) * 0.84f;
-                int stepFromBottom = MusicNotation.midiFor(expected.noteName, expected.octave) - MusicNotation.midiFor("C", 4);
-                y = 0.82f - stepFromBottom * 0.018f;
-                y = Math.max(0.08f, Math.min(0.92f, y));
-            }
-
-            piece.notes.add(new NoteEvent(expected.noteName, expected.octave, expected.duration, 1 + (i / 4), x, y));
-        }
-    }
-
-    private void fallbackFill(ScorePiece piece, int startIndex, int notesToAdd, int totalNotesForSpacing) {
-        String[] notes = new String[]{"C", "D", "E", "F", "G", "A", "B"};
-        String[] durations = new String[]{"quarter", "eighth", "half"};
-
-        for (int offset = 0; offset < notesToAdd; offset++) {
-            int i = startIndex + offset;
-            int measure = 1 + i / 4;
-            float x = 0.08f + ((float) i / Math.max(1, totalNotesForSpacing - 1)) * 0.84f;
-            int row = i % 3;
-            float y = 0.2f + row * 0.28f + ((i % 3) - 1) * 0.02f;
-            y = Math.max(0.08f, Math.min(0.92f, y));
-
-            piece.notes.add(new NoteEvent(
-                    notes[i % notes.length],
-                    i % 2 == 0 ? 5 : 4,
-                    durations[i % durations.length],
-                    measure,
-                    x,
-                    y
             ));
         }
     }

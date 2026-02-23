@@ -51,6 +51,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         final EditText titleInput = findViewById(R.id.input_piece_title);
         final ImageView preview = findViewById(R.id.image_preview);
         analysisText = findViewById(R.id.text_analysis);
+        analysisText.setTextIsSelectable(true);
         thresholdValueText = findViewById(R.id.text_threshold_value);
         noiseValueText = findViewById(R.id.text_noise_value);
         notesOverlay = findViewById(R.id.image_notes_overlay);
@@ -283,6 +284,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                             preview.setImageBitmap(previewBitmap);
                             updateOverlayBounds(preview, previewBitmap);
                             notesOverlay.setRecognizedNotes(result.piece.notes);
+                            notesOverlay.setStaffCorridors(result.staffCorridors);
                             analysisText.setText(getString(R.string.capture_analysis_template,
                                     result.perpendicularScore,
                                     result.staffRows,
@@ -290,6 +292,8 @@ public class CaptureSheetActivity extends AppCompatActivity {
                                     result.piece.notes.size()) + "\n"
                                     + getString(R.string.capture_parameters_template, thresholdOffset, Math.round(noiseLevel * 100f)) + "\n"
                                     + getString(R.string.capture_staff_knowledge_applied, result.staffRows) + "\n"
+                                    + "Processing mode: " + formatProcessingMode(result) + "\n"
+                                    + formatOpenCvFailureDetails(result)
                                     + getString(R.string.capture_antiglare_applied) + "\n"
                                     + getString(R.string.capture_debug_colors) + "\n"
                                     + getString(R.string.capture_expected_notes));
@@ -310,6 +314,27 @@ public class CaptureSheetActivity extends AppCompatActivity {
             }
         }, "sheet-processing");
         processingThread.start();
+    }
+
+    private String formatOpenCvFailureDetails(OpenCvScoreProcessor.ProcessingResult result) {
+        if (result == null || result.openCvUsed) {
+            return "";
+        }
+        String stack = result.openCvStackTrace;
+        if (stack == null || stack.trim().length() == 0) {
+            return "";
+        }
+        return "OpenCV fallback stacktrace:\n" + stack + "\n";
+    }
+
+    private String formatProcessingMode(OpenCvScoreProcessor.ProcessingResult result) {
+        if (result == null) {
+            return "legacy";
+        }
+        if (result.openCvUsed) {
+            return "OpenCV";
+        }
+        return "legacy (fallback)";
     }
 
     private void updateOverlayBounds(ImageView preview, Bitmap shownBitmap) {

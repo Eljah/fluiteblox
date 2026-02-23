@@ -61,7 +61,7 @@ done
   "${COMPILED_ARGS[@]}"
 
 unzip -q "$BASE_APK" -d "$WORK_DIR/apk"
-mkdir -p "$WORK_DIR/module/manifest" "$WORK_DIR/module/dex" "$WORK_DIR/module/res"
+mkdir -p "$WORK_DIR/module/manifest" "$WORK_DIR/module/dex" "$WORK_DIR/module/res" "$WORK_DIR/module/lib"
 cp "$WORK_DIR/apk/AndroidManifest.xml" "$WORK_DIR/module/manifest/AndroidManifest.xml"
 cp "$WORK_DIR/apk/resources.pb" "$WORK_DIR/module/resources.pb"
 if [[ -d "$WORK_DIR/apk/res" ]]; then
@@ -69,6 +69,15 @@ if [[ -d "$WORK_DIR/apk/res" ]]; then
 fi
 if compgen -G "$REPO_ROOT/target/classes*.dex" > /dev/null; then
   cp "$REPO_ROOT/target"/classes*.dex "$WORK_DIR/module/dex/"
+fi
+
+# Include native libs from unpacked AAR dependencies (e.g. OpenCV Android)
+if [[ -d "$REPO_ROOT/target/unpacked-libs" ]]; then
+  while IFS= read -r -d '' so_file; do
+    abi="$(basename "$(dirname "$so_file")")"
+    mkdir -p "$WORK_DIR/module/lib/$abi"
+    cp "$so_file" "$WORK_DIR/module/lib/$abi/"
+  done < <(find "$REPO_ROOT/target/unpacked-libs" -type f -path '*/jni/*/*.so' -print0)
 fi
 
 (
