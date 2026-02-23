@@ -293,7 +293,6 @@ public class OpenCvScoreProcessor {
 
             List<Blob> noteHeads = detectNoteHeadsOpenCv(symbolMask, w, h, staffSpacing, options.noiseLevel, staffGroups);
             fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, staffMask, staffSpacing, w, h, staffGroups);
-            maybeProjectToReference(piece, noteHeads, staffGroups, w, h);
 
             int staffRows = Math.max(1, Math.min(10, staffGroups.size()));
             int barlines = estimateBarsFromMask(binary, w, h, staffSpacing);
@@ -1105,34 +1104,6 @@ public class OpenCvScoreProcessor {
         return (midi / 12) - 1;
     }
 
-    private void maybeProjectToReference(ScorePiece piece, List<Blob> noteHeads, List<StaffGroup> groups, int w, int h) {
-        if (piece.notes.size() == ReferenceComposition.EXPECTED_NOTES) {
-            return;
-        }
-        if (groups == null || groups.isEmpty() || groups.size() > 10) {
-            return;
-        }
-        if (noteHeads.size() < 20) {
-            return;
-        }
-
-        int left = Integer.MAX_VALUE;
-        int right = 0;
-        for (StaffGroup g : groups) {
-            left = Math.min(left, g.xStart);
-            right = Math.max(right, g.xEnd);
-        }
-        if (left >= right) {
-            return;
-        }
-        float span = (right - left) / (float) Math.max(1, w);
-        if (span < 0.45f) {
-            return;
-        }
-
-        enforceReferencePiece(piece, noteHeads, w, h);
-    }
-
     private boolean isHollowHead(Mat symbolMask, Blob b) {
         int x0 = Math.max(0, b.minX);
         int x1 = Math.min(symbolMask.cols() - 1, b.maxX);
@@ -1302,71 +1273,6 @@ public class OpenCvScoreProcessor {
                     1 + (i / measureSize),
                     xNorm,
                     yNorm
-            ));
-        }
-    }
-
-    private void enforceReferencePiece(ScorePiece piece, List<Blob> noteHeads, int w, int h) {
-        List<NoteEvent> reference = ReferenceComposition.expectedReferenceNotes();
-        if (reference.isEmpty()) {
-            return;
-        }
-
-        if (piece.notes.size() == ReferenceComposition.EXPECTED_NOTES) {
-            return;
-        }
-
-        piece.notes.clear();
-        int detected = noteHeads.size();
-        for (int i = 0; i < reference.size(); i++) {
-            NoteEvent expected = reference.get(i);
-            float x;
-            float y;
-            if (detected > 1) {
-                float scaled = i * (detected - 1f) / Math.max(1, reference.size() - 1f);
-                int leftIdx = Math.max(0, Math.min(detected - 1, (int) Math.floor(scaled)));
-                int rightIdx = Math.max(0, Math.min(detected - 1, (int) Math.ceil(scaled)));
-                Blob left = noteHeads.get(leftIdx);
-                Blob right = noteHeads.get(rightIdx);
-                float blend = scaled - leftIdx;
-                float cx = left.cx() + (right.cx() - left.cx()) * blend;
-                float cy = left.cy() + (right.cy() - left.cy()) * blend;
-                x = cx / (float) Math.max(1, w - 1);
-                y = cy / (float) Math.max(1, h - 1);
-            } else if (detected == 1) {
-                Blob b = noteHeads.get(0);
-                x = b.cx() / (float) Math.max(1, w - 1);
-                y = b.cy() / (float) Math.max(1, h - 1);
-            } else {
-                x = 0.08f + (i / (float) Math.max(1, reference.size() - 1)) * 0.84f;
-                int stepFromBottom = MusicNotation.midiFor(expected.noteName, expected.octave) - MusicNotation.midiFor("C", 4);
-                y = 0.82f - stepFromBottom * 0.018f;
-                y = Math.max(0.08f, Math.min(0.92f, y));
-            }
-
-            piece.notes.add(new NoteEvent(expected.noteName, expected.octave, expected.duration, 1 + (i / 4), x, y));
-        }
-    }
-
-    private void fallbackFill(ScorePiece piece, int startIndex, int notesToAdd, int totalNotesForSpacing) {
-        String[] notes = new String[]{"C", "D", "E", "F", "G", "A", "B"};
-        String[] durations = new String[]{"quarter", "eighth", "half"};
-
-        for (int offset = 0; offset < notesToAdd; offset++) {
-            int i = startIndex + offset;
-            int measure = 1 + i / 4;
-            float x = 0.08f + ((float) i / Math.max(1, totalNotesForSpacing - 1)) * 0.84f;
-            int row = i % 3;
-            float y = 0.2f + row * 0.28f + ((i % 3) - 1) * 0.02f;
-            y = Math.max(0.08f, Math.min(0.92f, y));
-
-            piece.notes.add(new NoteEvent(
-                    notes[i % notes.length],
-                    i % 2 == 0 ? 5 : 4,
-                    durations[i % durations.length],
-                    measure,
-                    x,
-                    y
             ));
         }
     }

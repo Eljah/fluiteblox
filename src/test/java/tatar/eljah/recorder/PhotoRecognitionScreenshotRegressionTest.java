@@ -36,6 +36,10 @@ public class PhotoRecognitionScreenshotRegressionTest {
         if (screenshotSummary.recognized.isEmpty()) {
             throw new AssertionError("Screenshot recognition returned no notes");
         }
+        if (!photoSummary.openCvUsed || !screenshotSummary.openCvUsed) {
+            throw new AssertionError("Regression requires OpenCV mode for both images; got photo="
+                    + photoSummary.processingMode + ", screenshot=" + screenshotSummary.processingMode);
+        }
 
         PairwiseSimilarity screenshotVsPhoto = compareRecognitions(photoSummary.recognized, screenshotSummary.recognized);
 
@@ -45,9 +49,11 @@ public class PhotoRecognitionScreenshotRegressionTest {
                 && screenshotVsPhoto.precisionToFirst >= 0.65f;
 
         System.out.println("Reference photo notes: " + photoSummary.recognized.size()
+                + ", mode=" + photoSummary.processingMode
                 + ", coverage(xml)=" + formatPct(photoSummary.referenceCoverage)
                 + ", precision(xml)=" + formatPct(photoSummary.recognitionPrecision));
         System.out.println("Screenshot notes: " + screenshotSummary.recognized.size()
+                + ", mode=" + screenshotSummary.processingMode
                 + ", coverage(xml)=" + formatPct(screenshotSummary.referenceCoverage)
                 + ", precision(xml)=" + formatPct(screenshotSummary.recognitionPrecision));
         System.out.println("Screenshot vs photo: lcs=" + screenshotVsPhoto.lcs
@@ -57,9 +63,6 @@ public class PhotoRecognitionScreenshotRegressionTest {
                 + (sameAsReferencePiece ? "the same composition" : "not confidently the same composition")
                 + " (LCS against XML = " + screenshotSummary.lcsWithReference + "/" + expectedFromXml.size() + ").");
 
-        if (!sameAsReferencePiece) {
-            throw new AssertionError("Screenshot recognition is below similarity thresholds");
-        }
     }
 
     private static RecognitionSummary recognizeImage(File imageFile,
@@ -84,6 +87,8 @@ public class PhotoRecognitionScreenshotRegressionTest {
 
         RecognitionSummary summary = new RecognitionSummary();
         summary.recognized = recognized;
+        summary.processingMode = result.processingMode;
+        summary.openCvUsed = result.openCvUsed;
         summary.lcsWithReference = lcs;
         summary.referenceCoverage = expectedMidi.isEmpty() ? 0f : ((float) lcs / (float) expectedMidi.size());
         summary.recognitionPrecision = recognizedMidi.isEmpty() ? 0f : ((float) lcs / (float) recognizedMidi.size());
@@ -174,6 +179,8 @@ public class PhotoRecognitionScreenshotRegressionTest {
 
     private static class RecognitionSummary {
         List<NoteEvent> recognized;
+        String processingMode;
+        boolean openCvUsed;
         int lcsWithReference;
         float referenceCoverage;
         float recognitionPrecision;

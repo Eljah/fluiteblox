@@ -112,8 +112,10 @@ public final class ReferenceCompositionExtractor {
 }
 JAVA
 
-mvn -q dependency:get -Dartifact=org.openpnp:opencv:4.9.0-0
-OPENCV_JAR="$HOME/.m2/repository/org/openpnp/opencv/4.9.0-0/opencv-4.9.0-0.jar"
+OPENCV_JAR="$ROOT/target/photo-screenshot-test/opencv-4.9.0-0.jar"
+if [[ ! -f "$OPENCV_JAR" ]]; then
+  curl -fsSL -o "$OPENCV_JAR" "https://repo1.maven.org/maven2/org/openpnp/opencv/4.9.0-0/opencv-4.9.0-0.jar"
+fi
 
 javac -cp "$OPENCV_JAR" -d "$OUT_DIR" \
   "$OUT_DIR/android/graphics/Bitmap.java" \
