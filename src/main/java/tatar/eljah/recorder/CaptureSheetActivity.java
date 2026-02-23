@@ -216,7 +216,9 @@ public class CaptureSheetActivity extends AppCompatActivity {
         }
         latestResult = new OpenCvScoreProcessor().process(bmp, "draft", currentOptions());
         Bitmap previewBitmap = latestResult.debugOverlay != null ? latestResult.debugOverlay : bmp;
-        ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(previewBitmap);
+        ImageView preview = findViewById(R.id.image_preview);
+        preview.setImageBitmap(previewBitmap);
+        updateOverlayBounds(preview, previewBitmap);
         notesOverlay.setRecognizedNotes(latestResult.piece.notes);
         analysisText.setText(getString(R.string.capture_analysis_template,
                 latestResult.perpendicularScore,
@@ -228,6 +230,25 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 + getString(R.string.capture_antiglare_applied) + "\n"
                 + getString(R.string.capture_debug_colors) + "\n"
                 + getString(R.string.capture_expected_notes));
+    }
+
+    private void updateOverlayBounds(ImageView preview, Bitmap shownBitmap) {
+        if (preview == null || shownBitmap == null || notesOverlay == null) {
+            return;
+        }
+        int viewW = preview.getWidth();
+        int viewH = preview.getHeight();
+        if (viewW <= 0 || viewH <= 0) {
+            notesOverlay.setImageBounds(0f, 0f, 1f, 1f);
+            return;
+        }
+
+        float scale = Math.min(viewW / (float) shownBitmap.getWidth(), viewH / (float) shownBitmap.getHeight());
+        float drawW = shownBitmap.getWidth() * scale;
+        float drawH = shownBitmap.getHeight() * scale;
+        float left = (viewW - drawW) * 0.5f;
+        float top = (viewH - drawH) * 0.5f;
+        notesOverlay.setImageBounds(left, top, left + drawW, top + drawH);
     }
 
     private void renderControlValues() {

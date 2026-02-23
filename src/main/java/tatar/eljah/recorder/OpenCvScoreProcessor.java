@@ -24,6 +24,7 @@ public class OpenCvScoreProcessor {
     private static final int COLOR_GREEN = 0xFF00FF00;
 
     private static final boolean OPENCV_READY;
+    private static volatile boolean opencvRuntimeDisabled;
 
     static {
         boolean loaded;
@@ -153,11 +154,11 @@ public class OpenCvScoreProcessor {
     }
 
     public ProcessingResult processArgb(int width, int height, int[] argb, String title, ProcessingOptions options) {
-        if (OPENCV_READY) {
+        if (OPENCV_READY && !opencvRuntimeDisabled) {
             try {
                 return processWithOpenCv(width, height, argb, title, options);
             } catch (Throwable ignored) {
-                // fallback to existing pure-java pipeline
+                opencvRuntimeDisabled = true;
             }
         }
 
@@ -194,57 +195,65 @@ public class OpenCvScoreProcessor {
     private ProcessingResult processWithOpenCv(int w, int h, int[] argb, String title, ProcessingOptions options) {
         ScorePiece piece = new ScorePiece();
         piece.title = title;
+        Mat gray = null;
+        Mat contrast = null;
+        CLAHE clahe = null;
+        Mat norm = null;
+        Mat binary = null;
+        Mat staffMask = null;
+        Mat symbolMask = null;
+        Mat kernel = null;
+        try {
+            gray = bitmapToGrayMat(argb, w, h);
 
-        Mat gray = bitmapToGrayMat(argb, w, h);
+            contrast = new Mat();
+            clahe = Imgproc.createCLAHE(2.4, new Size(8, 8));
+            clahe.apply(gray, contrast);
 
-        Mat contrast = new Mat();
-        CLAHE clahe = Imgproc.createCLAHE(2.4, new Size(8, 8));
-        clahe.apply(gray, contrast);
+            norm = new Mat();
+            Imgproc.medianBlur(contrast, norm, 3);
 
-        Mat norm = new Mat();
-        Imgproc.medianBlur(contrast, norm, 3);
+            binary = new Mat();
+            int blockSize = Math.max(15, (Math.min(w, h) / 20) | 1);
+            double c = options.thresholdOffset;
+            Imgproc.adaptiveThreshold(norm, binary, 255,
+                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    Imgproc.THRESH_BINARY_INV,
+                    blockSize,
+                    c);
 
-        Mat binary = new Mat();
-        int blockSize = Math.max(15, (Math.min(w, h) / 20) | 1);
-        double c = options.thresholdOffset;
-        Imgproc.adaptiveThreshold(norm, binary, 255,
-                Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
-                Imgproc.THRESH_BINARY_INV,
-                blockSize,
-                c);
+            int staffSpacing = estimateStaffSpacingOpenCv(binary);
+            staffMask = detectStaffMaskOpenCv(binary, staffSpacing);
+            List<StaffGroup> staffGroups = extractStaffGroups(staffMask, staffSpacing);
+            rebuildStaffMaskFromGroups(staffMask, staffGroups, w, h);
+            symbolMask = new Mat();
+            Core.subtract(binary, staffMask, symbolMask);
 
-        int staffSpacing = estimateStaffSpacingOpenCv(binary);
-        Mat staffMask = detectStaffMaskOpenCv(binary, staffSpacing);
-        List<StaffGroup> staffGroups = extractStaffGroups(staffMask, staffSpacing);
-        rebuildStaffMaskFromGroups(staffMask, staffGroups, w, h);
-        Mat symbolMask = new Mat();
-        Core.subtract(binary, staffMask, symbolMask);
+            int morphK = options.noiseLevel >= 0.66f ? 3 : 2;
+            kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(morphK, morphK));
+            Imgproc.morphologyEx(symbolMask, symbolMask, Imgproc.MORPH_OPEN, kernel);
+            Imgproc.morphologyEx(symbolMask, symbolMask, Imgproc.MORPH_CLOSE, kernel);
 
-        int morphK = options.noiseLevel >= 0.66f ? 3 : 2;
-        Mat kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(morphK, morphK));
-        Imgproc.morphologyEx(symbolMask, symbolMask, Imgproc.MORPH_OPEN, kernel);
-        Imgproc.morphologyEx(symbolMask, symbolMask, Imgproc.MORPH_CLOSE, kernel);
+            List<Blob> noteHeads = detectNoteHeadsOpenCv(symbolMask, w, h, staffSpacing, options.noiseLevel, staffGroups);
+            fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, staffMask, staffSpacing, w, h, staffGroups);
+            maybeProjectToReference(piece, noteHeads, staffGroups, w, h);
 
-        List<Blob> noteHeads = detectNoteHeadsOpenCv(symbolMask, w, h, staffSpacing, options.noiseLevel, staffGroups);
-        fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, staffMask, staffSpacing, w, h, staffGroups);
-        maybeProjectToReference(piece, noteHeads, staffGroups, w, h);
+            int staffRows = Math.max(1, Math.min(10, staffGroups.size()));
+            int barlines = estimateBarsFromMask(binary, w, h, staffSpacing);
+            int perpendicular = estimatePerpendicular(argb, w, h);
 
-        int staffRows = Math.max(1, Math.min(10, staffGroups.size()));
-        int barlines = estimateBarsFromMask(binary, w, h, staffSpacing);
-        int perpendicular = estimatePerpendicular(argb, w, h);
-
-        Bitmap debugOverlay = safeBuildDebugOverlayFromMats(binary, staffMask, symbolMask, w, h);
-
-        gray.release();
-        contrast.release();
-        clahe.collectGarbage();
-        norm.release();
-        binary.release();
-        staffMask.release();
-        symbolMask.release();
-        kernel.release();
-
-        return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay);
+            Bitmap debugOverlay = safeBuildDebugOverlayFromMats(binary, staffMask, symbolMask, w, h);
+            return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay);
+        } finally {
+            if (gray != null) gray.release();
+            if (contrast != null) contrast.release();
+            if (clahe != null) clahe.collectGarbage();
+            if (norm != null) norm.release();
+            if (binary != null) binary.release();
+            if (staffMask != null) staffMask.release();
+            if (symbolMask != null) symbolMask.release();
+            if (kernel != null) kernel.release();
+        }
     }
 
     private int[] toGray(int[] argb, int w, int h) {
@@ -715,9 +724,21 @@ public class OpenCvScoreProcessor {
             }
         }
         double[] full = new double[]{255};
+        int commonStart = w - 1;
+        int commonEnd = 0;
         for (StaffGroup g : groups) {
-            int xs = Math.max(0, g.xStart);
-            int xe = Math.min(w - 1, g.xEnd);
+            commonStart = Math.min(commonStart, Math.max(0, g.xStart));
+            commonEnd = Math.max(commonEnd, Math.min(w - 1, g.xEnd));
+        }
+        if (commonStart > commonEnd) {
+            commonStart = 0;
+            commonEnd = w - 1;
+        }
+        for (StaffGroup g : groups) {
+            g.xStart = commonStart;
+            g.xEnd = commonEnd;
+            int xs = commonStart;
+            int xe = commonEnd;
             for (int i = 0; i < 5; i++) {
                 int y = Math.round(g.linesY[i]);
                 for (int row = Math.max(0, y - 1); row <= Math.min(h - 1, y + 1); row++) {
@@ -732,7 +753,9 @@ public class OpenCvScoreProcessor {
     private List<Blob> detectNoteHeadsOpenCv(Mat symbolMask, int w, int h, int staffSpacing, float noiseLevel, List<StaffGroup> groups) {
         List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
         Mat hierarchy = new Mat();
-        Imgproc.findContours(symbolMask.clone(), contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+        Mat contoursInput = symbolMask.clone();
+        try {
+            Imgproc.findContours(contoursInput, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
 
         List<Blob> out = new ArrayList<Blob>();
         int minArea = Math.max(8, (int) ((staffSpacing * staffSpacing / 8f) * (0.6f + noiseLevel * 1.2f)));
@@ -779,15 +802,18 @@ public class OpenCvScoreProcessor {
             out.add(b);
             c.release();
         }
-        hierarchy.release();
-        Collections.sort(out, new Comparator<Blob>() {
+            Collections.sort(out, new Comparator<Blob>() {
             @Override
             public int compare(Blob a, Blob b) {
                 if (a.minX == b.minX) return a.minY - b.minY;
                 return a.minX - b.minX;
             }
         });
-        return dedupeNoteHeads(out, groups, staffSpacing);
+            return dedupeNoteHeads(out, groups, staffSpacing);
+        } finally {
+            contoursInput.release();
+            hierarchy.release();
+        }
     }
 
     private List<Blob> dedupeNoteHeads(List<Blob> in, List<StaffGroup> groups, int staffSpacing) {
