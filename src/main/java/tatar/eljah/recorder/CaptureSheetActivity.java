@@ -12,6 +12,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -23,8 +24,13 @@ public class CaptureSheetActivity extends AppCompatActivity {
 
     private Bitmap capturedBitmap;
     private TextView analysisText;
+    private TextView thresholdValueText;
+    private TextView noiseValueText;
     private RecognitionOverlayView notesOverlay;
     private OpenCvScoreProcessor.ProcessingResult latestResult;
+    private Bitmap sourceBitmapForProcessing;
+    private int thresholdOffset = 7;
+    private float noiseLevel = 0.5f;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -35,7 +41,51 @@ public class CaptureSheetActivity extends AppCompatActivity {
         final EditText titleInput = findViewById(R.id.input_piece_title);
         final ImageView preview = findViewById(R.id.image_preview);
         analysisText = findViewById(R.id.text_analysis);
+        thresholdValueText = findViewById(R.id.text_threshold_value);
+        noiseValueText = findViewById(R.id.text_noise_value);
         notesOverlay = findViewById(R.id.image_notes_overlay);
+        SeekBar thresholdSeek = findViewById(R.id.seek_threshold);
+        SeekBar noiseSeek = findViewById(R.id.seek_noise);
+
+        thresholdSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                thresholdOffset = 2 + progress;
+                renderControlValues();
+                if (fromUser) {
+                    rerunProcessing();
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                rerunProcessing();
+            }
+        });
+        noiseSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                noiseLevel = progress / 100f;
+                renderControlValues();
+                if (fromUser) {
+                    rerunProcessing();
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                rerunProcessing();
+            }
+        });
+        renderControlValues();
 
         findViewById(R.id.btn_open_camera).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -58,7 +108,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 }
                 OpenCvScoreProcessor.ProcessingResult result = latestResult;
                 if (result == null) {
-                    result = new OpenCvScoreProcessor().process(capturedBitmap, title);
+                    result = new OpenCvScoreProcessor().process(capturedBitmap, title, currentOptions());
                 }
                 result.piece.title = title;
                 new ScoreLibraryRepository(CaptureSheetActivity.this).savePiece(result.piece);
@@ -113,16 +163,38 @@ public class CaptureSheetActivity extends AppCompatActivity {
             Bitmap bmp = (Bitmap) data.getExtras().get("data");
             if (bmp != null) {
                 capturedBitmap = bmp;
-                latestResult = new OpenCvScoreProcessor().process(bmp, "draft");
-                Bitmap previewBitmap = latestResult.debugOverlay != null ? latestResult.debugOverlay : bmp;
-                ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(previewBitmap);
-                notesOverlay.setRecognizedNotes(latestResult.piece.notes);
-                analysisText.setText(getString(R.string.capture_analysis_template,
-                        latestResult.perpendicularScore,
-                        latestResult.staffRows,
-                        latestResult.barlines,
-                        latestResult.piece.notes.size()) + "\n" + getString(R.string.capture_debug_colors) + "\n" + getString(R.string.capture_expected_notes));
+                sourceBitmapForProcessing = bmp;
+                rerunProcessing();
             }
         }
+    }
+
+    private OpenCvScoreProcessor.ProcessingOptions currentOptions() {
+        int neighborhoodHits = noiseLevel >= 0.66f ? 5 : (noiseLevel >= 0.33f ? 4 : 3);
+        return new OpenCvScoreProcessor.ProcessingOptions(thresholdOffset, neighborhoodHits, noiseLevel);
+    }
+
+    private void rerunProcessing() {
+        Bitmap bmp = sourceBitmapForProcessing;
+        if (bmp == null) {
+            return;
+        }
+        latestResult = new OpenCvScoreProcessor().process(bmp, "draft", currentOptions());
+        Bitmap previewBitmap = latestResult.debugOverlay != null ? latestResult.debugOverlay : bmp;
+        ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(previewBitmap);
+        notesOverlay.setRecognizedNotes(latestResult.piece.notes);
+        analysisText.setText(getString(R.string.capture_analysis_template,
+                latestResult.perpendicularScore,
+                latestResult.staffRows,
+                latestResult.barlines,
+                latestResult.piece.notes.size()) + "\n"
+                + getString(R.string.capture_parameters_template, thresholdOffset, Math.round(noiseLevel * 100f)) + "\n"
+                + getString(R.string.capture_debug_colors) + "\n"
+                + getString(R.string.capture_expected_notes));
+    }
+
+    private void renderControlValues() {
+        thresholdValueText.setText(getString(R.string.capture_threshold_template, thresholdOffset));
+        noiseValueText.setText(getString(R.string.capture_noise_template, Math.round(noiseLevel * 100f)));
     }
 }
