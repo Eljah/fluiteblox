@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$ROOT/target/photo-screenshot-test"
 rm -rf "$OUT_DIR"
-mkdir -p "$OUT_DIR/android/graphics" "$OUT_DIR/android/content" "$OUT_DIR/android/content/res"
+mkdir -p "$OUT_DIR/android/graphics" "$OUT_DIR/android/content" "$OUT_DIR/android/content/res" "$OUT_DIR/tatar/eljah/recorder"
 
 cat > "$OUT_DIR/android/graphics/Bitmap.java" <<'JAVA'
 package android.graphics;
@@ -78,13 +78,55 @@ public class AssetManager {
 }
 JAVA
 
-javac -d "$OUT_DIR" \
+cat > "$OUT_DIR/tatar/eljah/recorder/AppLocaleManager.java" <<'JAVA'
+package tatar.eljah.recorder;
+
+import android.content.Context;
+
+public final class AppLocaleManager {
+    private AppLocaleManager() {}
+
+    public static String savedLanguage(Context context) {
+        return null;
+    }
+}
+JAVA
+
+cat > "$OUT_DIR/tatar/eljah/recorder/ReferenceCompositionExtractor.java" <<'JAVA'
+package tatar.eljah.recorder;
+
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+
+public final class ReferenceCompositionExtractor {
+    private ReferenceCompositionExtractor() {}
+
+    public static byte[] decodeBase64Midi(InputStream in) {
+        return new byte[0];
+    }
+
+    public static List<NoteEvent> extractFromXmlAndMidi(InputStream xmlIn, byte[] midiBytes, int limit) {
+        return new ArrayList<NoteEvent>();
+    }
+}
+JAVA
+
+mvn -q dependency:get -Dartifact=org.openpnp:opencv:4.9.0-0
+OPENCV_JAR="$HOME/.m2/repository/org/openpnp/opencv/4.9.0-0/opencv-4.9.0-0.jar"
+
+javac -cp "$OPENCV_JAR" -d "$OUT_DIR" \
   "$OUT_DIR/android/graphics/Bitmap.java" \
   "$OUT_DIR/android/graphics/Color.java" \
   "$OUT_DIR/android/content/Context.java" \
-  "$OUT_DIR/android/content/res/AssetManager.java"
+  "$OUT_DIR/android/content/res/AssetManager.java" \
+  "$OUT_DIR/tatar/eljah/recorder/AppLocaleManager.java" \
+  "$OUT_DIR/tatar/eljah/recorder/ReferenceCompositionExtractor.java" \
+  "$ROOT/src/main/java/tatar/eljah/recorder/NoteEvent.java" \
+  "$ROOT/src/main/java/tatar/eljah/recorder/ScorePiece.java" \
+  "$ROOT/src/main/java/tatar/eljah/recorder/MusicNotation.java" \
+  "$ROOT/src/main/java/tatar/eljah/recorder/ReferenceComposition.java" \
+  "$ROOT/src/main/java/tatar/eljah/recorder/OpenCvScoreProcessor.java" \
+  "$ROOT/src/test/java/tatar/eljah/recorder/PhotoRecognitionScreenshotRegressionTest.java"
 
-OPENCV_JAR="$HOME/.m2/repository/org/openpnp/opencv/4.9.0-0/opencv-4.9.0-0.jar"
-
-java -cp "$OUT_DIR:$ROOT/target/test-classes:$ROOT/target/classes:$OPENCV_JAR" \
-  tatar.eljah.recorder.PhotoRecognitionScreenshotRegressionTest
+java -cp "$OUT_DIR:$OPENCV_JAR" tatar.eljah.recorder.PhotoRecognitionScreenshotRegressionTest

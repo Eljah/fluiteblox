@@ -56,6 +56,10 @@ public class PhotoRecognitionScreenshotRegressionTest {
         System.out.println("Conclusion: screenshot is "
                 + (sameAsReferencePiece ? "the same composition" : "not confidently the same composition")
                 + " (LCS against XML = " + screenshotSummary.lcsWithReference + "/" + expectedFromXml.size() + ").");
+
+        if (!sameAsReferencePiece) {
+            throw new AssertionError("Screenshot recognition is below similarity thresholds");
+        }
     }
 
     private static RecognitionSummary recognizeImage(File imageFile,
