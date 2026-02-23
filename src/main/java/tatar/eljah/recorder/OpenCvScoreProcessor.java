@@ -12,6 +12,8 @@ import org.opencv.core.Size;
 import org.opencv.imgproc.CLAHE;
 import org.opencv.imgproc.Imgproc;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -24,10 +26,12 @@ public class OpenCvScoreProcessor {
     private static final int COLOR_GREEN = 0xFF00FF00;
 
     private static final boolean OPENCV_READY;
+    private static final String OPENCV_INIT_STACKTRACE;
     private static volatile boolean opencvRuntimeDisabled;
 
     static {
         boolean loaded;
+        String initStacktrace = null;
         try {
             try {
                 Class<?> openCvLoader = Class.forName("nu.pattern.OpenCV");
@@ -40,8 +44,10 @@ public class OpenCvScoreProcessor {
             loaded = true;
         } catch (Throwable t) {
             loaded = false;
+            initStacktrace = stackTraceToString(t);
         }
         OPENCV_READY = loaded;
+        OPENCV_INIT_STACKTRACE = initStacktrace;
     }
 
     public static class ProcessingOptions {
@@ -69,13 +75,14 @@ public class OpenCvScoreProcessor {
         public final List<StaffCorridor> staffCorridors;
         public final String processingMode;
         public final boolean openCvUsed;
+        public final String openCvStackTrace;
 
         public ProcessingResult(ScorePiece piece,
                                 int staffRows,
                                 int barlines,
                                 int perpendicularScore,
                                 Bitmap debugOverlay) {
-            this(piece, staffRows, barlines, perpendicularScore, debugOverlay, new ArrayList<StaffCorridor>(), "legacy", false);
+            this(piece, staffRows, barlines, perpendicularScore, debugOverlay, new ArrayList<StaffCorridor>(), "legacy", false, null);
         }
 
         public ProcessingResult(ScorePiece piece,
@@ -84,7 +91,7 @@ public class OpenCvScoreProcessor {
                                 int perpendicularScore,
                                 Bitmap debugOverlay,
                                 List<StaffCorridor> staffCorridors) {
-            this(piece, staffRows, barlines, perpendicularScore, debugOverlay, staffCorridors, "opencv", true);
+            this(piece, staffRows, barlines, perpendicularScore, debugOverlay, staffCorridors, "opencv", true, null);
         }
 
         public ProcessingResult(ScorePiece piece,
@@ -94,7 +101,8 @@ public class OpenCvScoreProcessor {
                                 Bitmap debugOverlay,
                                 List<StaffCorridor> staffCorridors,
                                 String processingMode,
-                                boolean openCvUsed) {
+                                boolean openCvUsed,
+                                String openCvStackTrace) {
             this.piece = piece;
             this.staffRows = staffRows;
             this.barlines = barlines;
@@ -103,6 +111,7 @@ public class OpenCvScoreProcessor {
             this.staffCorridors = staffCorridors == null ? new ArrayList<StaffCorridor>() : staffCorridors;
             this.processingMode = processingMode == null ? "legacy" : processingMode;
             this.openCvUsed = openCvUsed;
+            this.openCvStackTrace = openCvStackTrace;
         }
     }
 
@@ -197,15 +206,21 @@ public class OpenCvScoreProcessor {
         if (OPENCV_READY && !opencvRuntimeDisabled) {
             try {
                 return processWithOpenCv(width, height, argb, title, options);
-            } catch (Throwable ignored) {
+            } catch (Throwable t) {
                 opencvRuntimeDisabled = true;
+                return processLegacy(width, height, argb, title, options, stackTraceToString(t));
             }
         }
 
-        return processLegacy(width, height, argb, title, options);
+        String reason = OPENCV_READY ? "OpenCV runtime disabled after previous failure" : OPENCV_INIT_STACKTRACE;
+        return processLegacy(width, height, argb, title, options, reason);
     }
 
     private ProcessingResult processLegacy(int w, int h, int[] argb, String title, ProcessingOptions options) {
+        return processLegacy(w, h, argb, title, options, null);
+    }
+
+    private ProcessingResult processLegacy(int w, int h, int[] argb, String title, ProcessingOptions options, String openCvStackTrace) {
         ScorePiece piece = new ScorePiece();
         piece.title = title;
 
@@ -229,7 +244,7 @@ public class OpenCvScoreProcessor {
         fillNotes(piece, noteHeads, staffSpacing, w, h);
 
         Bitmap debugOverlay = safeBuildDebugOverlay(binary, staffMask, symbolMask, w, h);
-        return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay, new ArrayList<StaffCorridor>(), "legacy", false);
+        return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay, new ArrayList<StaffCorridor>(), "legacy", false, openCvStackTrace);
     }
 
     private ProcessingResult processWithOpenCv(int w, int h, int[] argb, String title, ProcessingOptions options) {
@@ -295,6 +310,21 @@ public class OpenCvScoreProcessor {
             if (staffMask != null) staffMask.release();
             if (symbolMask != null) symbolMask.release();
             if (kernel != null) kernel.release();
+        }
+    }
+
+    private static String stackTraceToString(Throwable t) {
+        if (t == null) {
+            return null;
+        }
+        try {
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            t.printStackTrace(pw);
+            pw.flush();
+            return sw.toString();
+        } catch (Throwable ignored) {
+            return t.toString();
         }
     }
 
