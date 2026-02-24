@@ -158,9 +158,11 @@ public class RecognitionOverlayView extends View {
             float y = event.getY();
 
             if (interactionMode == InteractionMode.EDIT && popupVisible) {
-                handlePopupTap(x, y);
-                suppressNextUpAfterPopup = true;
-                return true;
+                boolean consumed = handlePopupTap(x, y);
+                suppressNextUpAfterPopup = consumed;
+                lastTouchX = Float.NaN;
+                lastTouchY = Float.NaN;
+                return consumed;
             }
             popupVisible = false;
 
@@ -170,6 +172,9 @@ public class RecognitionOverlayView extends View {
         }
 
         if (event.getAction() == MotionEvent.ACTION_MOVE && zoom > 1.01f) {
+            if (suppressNextUpAfterPopup) {
+                return true;
+            }
             if (!Float.isNaN(lastTouchX) && !Float.isNaN(lastTouchY)) {
                 panX += event.getX() - lastTouchX;
                 panY += event.getY() - lastTouchY;
