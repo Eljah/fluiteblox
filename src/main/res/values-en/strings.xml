@@ -78,4 +78,6 @@
     <string name="hint_duration_eighth">eighth</string>
     <string name="hint_duration_sixteenth">sixteenth</string>
     <string name="hint_duration_unknown">unknown</string>
+    <string name="capture_staff_slider_title">Per-staff filter tuning (common default is auto-fixed after scan).</string>
+    <string name="capture_staff_slider_item">Staff %1$d: filter %2$d%%, notes %3$d</string>
 </resources>

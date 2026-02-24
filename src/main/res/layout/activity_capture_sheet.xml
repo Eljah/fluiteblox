@@ -91,6 +91,19 @@
             android:max="100"
             android:progress="50" />
 
+        <TextView
+            android:id="@+id/text_staff_sliders_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/capture_staff_slider_title" />
+
+        <LinearLayout
+            android:id="@+id/layout_staff_sliders"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
         <Button
             android:id="@+id/btn_save_piece"
             android:layout_width="match_parent"

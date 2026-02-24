@@ -64,6 +64,7 @@ public class OpenCvScoreProcessor {
         public final float noteMinCircularity;
         public final boolean recallFirstMode;
         public final float analyticalFilterStrength;
+        public final float[] perStaffAnalyticalStrength;
 
         public ProcessingOptions(int thresholdOffset, int symbolNeighborhoodHits, float noiseLevel) {
             this(thresholdOffset, symbolNeighborhoodHits, noiseLevel,
@@ -71,7 +72,7 @@ public class OpenCvScoreProcessor {
                     0.6f, 4.0f,
                     0.18f, 0.9f,
                     0.32f,
-                    false, 0.55f);
+                    false, 0.55f, null);
         }
 
         public ProcessingOptions(int thresholdOffset,
@@ -86,6 +87,25 @@ public class OpenCvScoreProcessor {
                                  float noteMinCircularity,
                                  boolean recallFirstMode,
                                  float analyticalFilterStrength) {
+            this(thresholdOffset, symbolNeighborhoodHits, noiseLevel,
+                    skipAdaptiveBinarization, skipMorphNoiseSuppression,
+                    noteMinAreaFactor, noteMaxAreaFactor, noteMinFill, noteMaxFill, noteMinCircularity,
+                    recallFirstMode, analyticalFilterStrength, null);
+        }
+
+        public ProcessingOptions(int thresholdOffset,
+                                 int symbolNeighborhoodHits,
+                                 float noiseLevel,
+                                 boolean skipAdaptiveBinarization,
+                                 boolean skipMorphNoiseSuppression,
+                                 float noteMinAreaFactor,
+                                 float noteMaxAreaFactor,
+                                 float noteMinFill,
+                                 float noteMaxFill,
+                                 float noteMinCircularity,
+                                 boolean recallFirstMode,
+                                 float analyticalFilterStrength,
+                                 float[] perStaffAnalyticalStrength) {
             this.thresholdOffset = Math.max(1, Math.min(32, thresholdOffset));
             this.symbolNeighborhoodHits = Math.max(1, Math.min(9, symbolNeighborhoodHits));
             this.noiseLevel = Math.max(0f, Math.min(1f, noiseLevel));
@@ -98,6 +118,7 @@ public class OpenCvScoreProcessor {
             this.noteMinCircularity = Math.max(0.08f, Math.min(0.8f, noteMinCircularity));
             this.recallFirstMode = recallFirstMode;
             this.analyticalFilterStrength = Math.max(0.0f, Math.min(1.0f, analyticalFilterStrength));
+            this.perStaffAnalyticalStrength = perStaffAnalyticalStrength == null ? null : perStaffAnalyticalStrength.clone();
         }
 
         public static ProcessingOptions defaults() {
@@ -1134,6 +1155,7 @@ public class OpenCvScoreProcessor {
         minScore += (options.analyticalFilterStrength - 0.55f) * 1.8f;
 
         for (Blob b : in) {
+            float strength = analyticalStrengthForPoint(b.cx(), b.cy(), options, groups);
             float score = 0f;
             float bw = b.width();
             float bh = b.height();
@@ -1147,8 +1169,9 @@ public class OpenCvScoreProcessor {
             if (Math.min(bw, bh) >= Math.max(2f, staffSpacing * 0.30f)) score += 1f;
             if (nearestStaffDist <= Math.max(2f, staffSpacing * 0.45f)) score += 1f;
 
+            float localMinScore = minScore + (strength - options.analyticalFilterStrength) * 1.8f;
             boolean hardReject = ratio > 3.2f || ratio < 0.28f || areaNorm > 3.8f || areaNorm < 0.05f;
-            if (!hardReject && score >= minScore) {
+            if (!hardReject && score >= localMinScore) {
                 out.add(b);
             } else if (diagnostics != null) {
                 diagnostics.filteredAsNonNoteByAnalyticalPass++;
@@ -1168,6 +1191,21 @@ public class OpenCvScoreProcessor {
             nearest = Math.min(nearest, Math.abs(cy - gapY));
         }
         return nearest;
+    }
+
+
+    private float analyticalStrengthForPoint(float cx, float cy, ProcessingOptions options, List<StaffGroup> groups) {
+        float base = options.analyticalFilterStrength;
+        if (options.perStaffAnalyticalStrength == null || options.perStaffAnalyticalStrength.length == 0) {
+            return base;
+        }
+        StaffGroup g = nearestGroupForPoint(cx, cy, groups);
+        int idx = indexOfGroup(groups, g);
+        if (idx < 0 || idx >= options.perStaffAnalyticalStrength.length) {
+            return base;
+        }
+        float v = options.perStaffAnalyticalStrength[idx];
+        return Math.max(0f, Math.min(1f, v));
     }
 
     private List<Blob> dedupeNoteHeads(List<Blob> in, List<StaffGroup> groups, int staffSpacing, NoteDetectionDiagnostics diagnostics) {

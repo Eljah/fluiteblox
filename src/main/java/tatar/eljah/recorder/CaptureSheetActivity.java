@@ -17,11 +17,14 @@ import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 import tatar.eljah.fluitblox.R;
 
@@ -41,6 +44,15 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private float noiseLevel = 0.5f;
     private Thread processingThread;
     private int processingToken;
+    private LinearLayout staffSlidersLayout;
+    private final ArrayList<Float> perStaffFilterStrength = new ArrayList<Float>();
+    private final ArrayList<SeekBar> perStaffSeekBars = new ArrayList<SeekBar>();
+
+    private static final float BEST_MIN_AREA = 0.35f;
+    private static final float BEST_MAX_AREA = 2.6f;
+    private static final float BEST_MIN_FILL = 0.08f;
+    private static final float BEST_MIN_CIRCULARITY = 0.14f;
+    private static final float BEST_ANALYTICAL_STRENGTH = 0.85f;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -55,6 +67,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         thresholdValueText = findViewById(R.id.text_threshold_value);
         noiseValueText = findViewById(R.id.text_noise_value);
         notesOverlay = findViewById(R.id.image_notes_overlay);
+        staffSlidersLayout = findViewById(R.id.layout_staff_sliders);
         SeekBar thresholdSeek = findViewById(R.id.seek_threshold);
         SeekBar noiseSeek = findViewById(R.id.seek_noise);
 
@@ -253,7 +266,27 @@ public class CaptureSheetActivity extends AppCompatActivity {
 
     private OpenCvScoreProcessor.ProcessingOptions currentOptions() {
         int neighborhoodHits = noiseLevel >= 0.66f ? 5 : (noiseLevel >= 0.33f ? 4 : 3);
-        return new OpenCvScoreProcessor.ProcessingOptions(thresholdOffset, neighborhoodHits, noiseLevel);
+        float[] perStaff = null;
+        if (!perStaffFilterStrength.isEmpty()) {
+            perStaff = new float[perStaffFilterStrength.size()];
+            for (int i = 0; i < perStaff.length; i++) {
+                perStaff[i] = perStaffFilterStrength.get(i);
+            }
+        }
+        return new OpenCvScoreProcessor.ProcessingOptions(
+                thresholdOffset,
+                neighborhoodHits,
+                noiseLevel,
+                true,
+                true,
+                BEST_MIN_AREA,
+                BEST_MAX_AREA,
+                BEST_MIN_FILL,
+                0.95f,
+                BEST_MIN_CIRCULARITY,
+                true,
+                BEST_ANALYTICAL_STRENGTH,
+                perStaff);
     }
 
     private void rerunProcessing() {
@@ -285,6 +318,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                             updateOverlayBounds(preview, previewBitmap);
                             notesOverlay.setRecognizedNotes(result.piece.notes);
                             notesOverlay.setStaffCorridors(result.staffCorridors);
+                            syncStaffSliders(result);
                             analysisText.setText(getString(R.string.capture_analysis_template,
                                     result.perpendicularScore,
                                     result.staffRows,
@@ -364,6 +398,115 @@ public class CaptureSheetActivity extends AppCompatActivity {
         matrix.mapRect(rect);
         rect.offset(preview.getPaddingLeft(), preview.getPaddingTop());
         notesOverlay.setImageBounds(rect.left, rect.top, rect.right, rect.bottom);
+    }
+
+
+    private void syncStaffSliders(OpenCvScoreProcessor.ProcessingResult result) {
+        int staffCount = 0;
+        if (result != null && result.staffCorridors != null) {
+            staffCount = result.staffCorridors.size();
+        }
+        if (staffCount <= 0 && result != null) {
+            staffCount = Math.max(1, result.staffRows);
+        }
+        if (staffCount <= 0) {
+            staffCount = 1;
+        }
+
+        if (perStaffFilterStrength.size() != staffCount) {
+            perStaffFilterStrength.clear();
+            for (int i = 0; i < staffCount; i++) {
+                perStaffFilterStrength.add(BEST_ANALYTICAL_STRENGTH);
+            }
+            rebuildStaffSliders(staffCount);
+        }
+
+        int[] noteCounts = countNotesByStaff(result, staffCount);
+        for (int i = 0; i < perStaffSeekBars.size(); i++) {
+            SeekBar seekBar = perStaffSeekBars.get(i);
+            TextView label = (TextView) seekBar.getTag();
+            int pct = Math.round(perStaffFilterStrength.get(i) * 100f);
+            if (label != null) {
+                label.setText(getString(R.string.capture_staff_slider_item, i + 1, pct, noteCounts[i]));
+            }
+        }
+    }
+
+    private int[] countNotesByStaff(OpenCvScoreProcessor.ProcessingResult result, int staffCount) {
+        int[] counts = new int[staffCount];
+        if (result == null || result.piece == null || result.piece.notes == null) {
+            return counts;
+        }
+        List<OpenCvScoreProcessor.StaffCorridor> corridors = result.staffCorridors;
+        for (NoteEvent n : result.piece.notes) {
+            int idx = 0;
+            if (corridors != null && !corridors.isEmpty()) {
+                idx = nearestCorridorIndex(n.y, corridors);
+                if (idx < 0) idx = 0;
+            } else {
+                idx = Math.min(staffCount - 1, Math.max(0, (int) (n.y * staffCount)));
+            }
+            if (idx >= 0 && idx < counts.length) counts[idx]++;
+        }
+        return counts;
+    }
+
+    private int nearestCorridorIndex(float y, List<OpenCvScoreProcessor.StaffCorridor> corridors) {
+        int best = -1;
+        float bestDist = Float.MAX_VALUE;
+        for (int i = 0; i < corridors.size(); i++) {
+            OpenCvScoreProcessor.StaffCorridor c = corridors.get(i);
+            float cy = (c.top + c.bottom) * 0.5f;
+            float dist = Math.abs(y - cy);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    private void rebuildStaffSliders(int staffCount) {
+        if (staffSlidersLayout == null) return;
+        staffSlidersLayout.removeAllViews();
+        perStaffSeekBars.clear();
+        for (int i = 0; i < staffCount; i++) {
+            final int idx = i;
+            TextView label = new TextView(this);
+            int pct = Math.round(perStaffFilterStrength.get(i) * 100f);
+            label.setText(getString(R.string.capture_staff_slider_item, i + 1, pct, 0));
+            staffSlidersLayout.addView(label);
+
+            SeekBar seek = new SeekBar(this);
+            seek.setMax(100);
+            seek.setProgress(pct);
+            seek.setTag(label);
+            seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override
+                public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                    perStaffFilterStrength.set(idx, progress / 100f);
+                    TextView tv = (TextView) seekBar.getTag();
+                    if (tv != null) {
+                        int[] counts = countNotesByStaff(latestResult, perStaffFilterStrength.size());
+                        int notes = idx < counts.length ? counts[idx] : 0;
+                        tv.setText(getString(R.string.capture_staff_slider_item, idx + 1, progress, notes));
+                    }
+                    if (fromUser) {
+                        rerunProcessing();
+                    }
+                }
+
+                @Override
+                public void onStartTrackingTouch(SeekBar seekBar) {}
+
+                @Override
+                public void onStopTrackingTouch(SeekBar seekBar) {
+                    rerunProcessing();
+                }
+            });
+            staffSlidersLayout.addView(seek);
+            perStaffSeekBars.add(seek);
+        }
     }
 
     private void renderControlValues() {

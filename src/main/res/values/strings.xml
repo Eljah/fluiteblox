@@ -110,4 +110,6 @@
     <string name="hint_duration_eighth">восьмая</string>
     <string name="hint_duration_sixteenth">шестнадцатая</string>
     <string name="hint_duration_unknown">неизвестно</string>
+    <string name="capture_staff_slider_title">Подстройка фильтра по нотоносцам (общее значение после сканирования фиксируется автоматически).</string>
+    <string name="capture_staff_slider_item">Нотоносец %1$d: фильтр %2$d%%, нот %3$d</string>
 </resources>
