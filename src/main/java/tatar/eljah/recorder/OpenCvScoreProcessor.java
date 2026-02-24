@@ -1060,7 +1060,7 @@ public class OpenCvScoreProcessor {
                 if (diagnostics != null) diagnostics.rejectedByStaffPosition++;
                 rejected = true;
             }
-            if (rejected && isGapSizedBlobCandidate(r, area, fill, cx, cy, staffSpacing, groups)) {
+            if (options.recallFirstMode && rejected && isGapSizedBlobCandidate(r, area, fill, cx, cy, staffSpacing, groups)) {
                 rejected = false;
                 if (diagnostics != null) diagnostics.rescuedByGapSizedBlob++;
             }
