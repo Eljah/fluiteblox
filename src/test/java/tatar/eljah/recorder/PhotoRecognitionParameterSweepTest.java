@@ -39,14 +39,25 @@ public class PhotoRecognitionParameterSweepTest {
 
         OpenCvScoreProcessor processor = new OpenCvScoreProcessor();
 
-        OpenCvScoreProcessor.ProcessingOptions baselineOptions = new OpenCvScoreProcessor.ProcessingOptions(
+        OpenCvScoreProcessor.ProcessingOptions previousMethodOptions = new OpenCvScoreProcessor.ProcessingOptions(
                 7, 3, 0.5f, true, true,
-                0.6f, 4.0f, 0.18f, 0.9f, 0.32f, true, 0.75f);
-        OpenCvScoreProcessor.ProcessingResult baselineResult = processor.processArgb(width, height, argb, "sweep-baseline", baselineOptions);
-        if (!baselineResult.openCvUsed) {
-            throw new AssertionError("OpenCV mode required for baseline, got: " + baselineResult.processingMode);
+                0.6f, 4.0f, 0.18f, 0.9f, 0.32f, true, 0.75f,
+                null, false);
+        OpenCvScoreProcessor.ProcessingResult previousMethodResult = processor.processArgb(width, height, argb, "sweep-baseline-previous", previousMethodOptions);
+        if (!previousMethodResult.openCvUsed) {
+            throw new AssertionError("OpenCV mode required for baseline, got: " + previousMethodResult.processingMode);
         }
-        SweepResult baseline = evaluate(baselineResult, reference, baselineOptions);
+        SweepResult previousMethodBaseline = evaluate(previousMethodResult, reference, previousMethodOptions);
+
+        OpenCvScoreProcessor.ProcessingOptions lineStripeMethodOptions = new OpenCvScoreProcessor.ProcessingOptions(
+                7, 3, 0.5f, true, true,
+                0.6f, 4.0f, 0.18f, 0.9f, 0.32f, true, 0.75f,
+                null, true);
+        OpenCvScoreProcessor.ProcessingResult lineStripeMethodResult = processor.processArgb(width, height, argb, "sweep-baseline-line-stripe", lineStripeMethodOptions);
+        if (!lineStripeMethodResult.openCvUsed) {
+            throw new AssertionError("OpenCV mode required for line-stripe baseline, got: " + lineStripeMethodResult.processingMode);
+        }
+        SweepResult lineStripeBaseline = evaluate(lineStripeMethodResult, reference, lineStripeMethodOptions);
 
         float[] areaMinFactors = {0.35f, 0.6f, 1.0f};
         float[] areaMaxFactors = {2.6f, 4.0f, 5.5f};
@@ -54,7 +65,10 @@ public class PhotoRecognitionParameterSweepTest {
         float[] minCircularityValues = {0.14f, 0.24f, 0.32f};
         float[] analyticalStrengthValues = {0.60f, 0.85f};
 
-        SweepResult best = null;
+        SweepResult bestPrevious = null;
+        SweepResult bestLineStripe = null;
+        SweepResult bestPreviousLegacy = null;
+        SweepResult bestLineStripeLegacy = null;
         int tried = 0;
         for (float areaMin : areaMinFactors) {
             for (float areaMax : areaMaxFactors) {
@@ -64,7 +78,7 @@ public class PhotoRecognitionParameterSweepTest {
                 for (float minFill : minFillValues) {
                     for (float minCircularity : minCircularityValues) {
                         for (float analyticalStrength : analyticalStrengthValues) {
-                            OpenCvScoreProcessor.ProcessingOptions options = new OpenCvScoreProcessor.ProcessingOptions(
+                            OpenCvScoreProcessor.ProcessingOptions previousOptions = new OpenCvScoreProcessor.ProcessingOptions(
                                     7,
                                     3,
                                     0.5f,
@@ -76,17 +90,50 @@ public class PhotoRecognitionParameterSweepTest {
                                     0.95f,
                                     minCircularity,
                                     true,
-                                    analyticalStrength);
+                                    analyticalStrength,
+                                    null,
+                                    false);
 
-                            OpenCvScoreProcessor.ProcessingResult result = processor.processArgb(width, height, argb, "sweep", options);
-                            if (!result.openCvUsed) {
-                                throw new AssertionError("OpenCV mode required for sweep, got: " + result.processingMode);
+                            OpenCvScoreProcessor.ProcessingResult previousResult = processor.processArgb(width, height, argb, "sweep-previous", previousOptions);
+                            if (!previousResult.openCvUsed) {
+                                throw new AssertionError("OpenCV mode required for sweep, got: " + previousResult.processingMode);
+                            }
+                            SweepResult previousCandidate = evaluate(previousResult, reference, previousOptions);
+                            if (isBetterBySequence(previousCandidate, bestPrevious)) {
+                                bestPrevious = previousCandidate;
+                            }
+                            if (isBetterByLegacyError(previousCandidate, bestPreviousLegacy)) {
+                                bestPreviousLegacy = previousCandidate;
                             }
 
-                            SweepResult candidate = evaluate(result, reference, options);
+                            OpenCvScoreProcessor.ProcessingOptions lineStripeOptions = new OpenCvScoreProcessor.ProcessingOptions(
+                                    7,
+                                    3,
+                                    0.5f,
+                                    true,
+                                    true,
+                                    areaMin,
+                                    areaMax,
+                                    minFill,
+                                    0.95f,
+                                    minCircularity,
+                                    true,
+                                    analyticalStrength,
+                                    null,
+                                    true);
+
+                            OpenCvScoreProcessor.ProcessingResult lineStripeResult = processor.processArgb(width, height, argb, "sweep-line-stripe", lineStripeOptions);
+                            if (!lineStripeResult.openCvUsed) {
+                                throw new AssertionError("OpenCV mode required for sweep line-stripe, got: " + lineStripeResult.processingMode);
+                            }
+
+                            SweepResult lineStripeCandidate = evaluate(lineStripeResult, reference, lineStripeOptions);
                             tried++;
-                            if (best == null || candidate.error < best.error) {
-                                best = candidate;
+                            if (isBetterBySequence(lineStripeCandidate, bestLineStripe)) {
+                                bestLineStripe = lineStripeCandidate;
+                            }
+                            if (isBetterByLegacyError(lineStripeCandidate, bestLineStripeLegacy)) {
+                                bestLineStripeLegacy = lineStripeCandidate;
                             }
                         }
                     }
@@ -94,28 +141,50 @@ public class PhotoRecognitionParameterSweepTest {
             }
         }
 
-        if (best == null) {
+        if (bestPrevious == null || bestLineStripe == null
+                || bestPreviousLegacy == null || bestLineStripeLegacy == null) {
             throw new AssertionError("Sweep produced no results");
         }
 
         System.out.println("Swept combinations=" + tried + " (adaptive binarization OFF, noise suppression OFF, recall-first ON)");
-        printResult("Baseline", baseline);
-        printResult("Best", best);
+        printResult("Baseline previous", previousMethodBaseline);
+        printResult("Baseline line-stripe", lineStripeBaseline);
+        printResult("Best previous (sequence criterion)", bestPrevious);
+        printResult("Best line-stripe (sequence criterion)", bestLineStripe);
+        printResult("Best previous (legacy-hit criterion)", bestPreviousLegacy);
+        printResult("Best line-stripe (legacy-hit criterion)", bestLineStripeLegacy);
+
+        float seqImprovement = bestLineStripe.sequenceScore - bestPrevious.sequenceScore;
+        int runImprovement = bestLineStripe.totalSystemLongestRun - bestPrevious.totalSystemLongestRun;
+        System.out.println("Line-stripe sequence delta=" + format2(seqImprovement)
+                + " | run-length delta=" + runImprovement
+                + " (positive means line-stripe is better)");
+
+        float legacyErrorDelta = bestPreviousLegacy.error - bestLineStripeLegacy.error;
+        float legacyCoverageDelta = bestLineStripeLegacy.globalCoverage - bestPreviousLegacy.globalCoverage;
+        float legacyPrecisionDelta = bestLineStripeLegacy.globalPrecision - bestPreviousLegacy.globalPrecision;
+        System.out.println("Line-stripe legacy-hit delta: errorDelta=" + format2(legacyErrorDelta)
+                + ", coverageDelta=" + format2(legacyCoverageDelta)
+                + ", precisionDelta=" + format2(legacyPrecisionDelta)
+                + " (positive means line-stripe is better)");
+
+        printDetailedDivergence("Best previous (sequence criterion)", bestPrevious);
+        printDetailedDivergence("Best line-stripe (sequence criterion)", bestLineStripe);
 
         int confidentSystems = 0;
-        for (int i = 0; i < best.systemMetrics.size(); i++) {
-            SystemMetrics m = best.systemMetrics.get(i);
+        for (int i = 0; i < bestLineStripe.systemMetrics.size(); i++) {
+            SystemMetrics m = bestLineStripe.systemMetrics.get(i);
             if (m.coverage >= 0.50f && m.precision >= 0.50f) {
                 confidentSystems++;
             }
         }
 
-        System.out.println("Per-system confident matches=" + confidentSystems + "/" + best.systemMetrics.size());
-        System.out.println("Note: recall-first mode intentionally allows extra notes first, then analytical filter trims non-note-like objects.");
+        System.out.println("Per-system confident matches=" + confidentSystems + "/" + bestLineStripe.systemMetrics.size());
+        System.out.println("Note: line-stripe refinement checks black pixels on both sides of a staff line to separate line-vs-gap pitch placement.");
 
-        if (best.error > baseline.error + 0.001f) {
-            throw new AssertionError("Sweep did not improve error enough: baseline=" + format2(baseline.error)
-                    + ", best=" + format2(best.error));
+        if (bestLineStripe.totalSystemLongestRun + 1 < bestPrevious.totalSystemLongestRun) {
+            throw new AssertionError("Line-stripe variant lost too much contiguous sequence length: previousRun=" + bestPrevious.totalSystemLongestRun
+                    + ", lineStripeRun=" + bestLineStripe.totalSystemLongestRun);
         }
     }
 
@@ -129,12 +198,10 @@ public class PhotoRecognitionParameterSweepTest {
         System.out.println(label + " global: recognized=" + result.recognizedCount
                 + ", expected=" + result.expectedCount
                 + ", lcs=" + result.lcs
-                + ", coverage=" + format2(result.globalCoverage)
-                + ", precision=" + format2(result.globalPrecision)
+                + ", longestRun=" + result.globalLongestRun
+                + ", runScore=" + format2(result.sequenceScore)
                 + ", meanPitchDistance=" + format2(result.meanPitchDistance)
-                + ", countDelta=" + format2(result.normalizedCountDelta)
-                + ", systemPenalty=" + format2(result.systemPenalty)
-                + ", error=" + format2(result.error));
+                + ", legacyError=" + format2(result.error));
         if (result.diagnosticsSummary != null) {
             System.out.println("  diagnostics: " + result.diagnosticsSummary);
             if (result.primaryLossReason != null) {
@@ -147,8 +214,8 @@ public class PhotoRecognitionParameterSweepTest {
                     + ": exp=" + m.expectedCount
                     + ", rec=" + m.recognizedCount
                     + ", lcs=" + m.lcs
-                    + ", coverage=" + format2(m.coverage)
-                    + ", precision=" + format2(m.precision)
+                    + ", longestRun=" + m.longestRun
+                    + ", runNorm=" + format2(m.longestRunNormalized)
                     + ", pitchDist=" + format2(m.meanPitchDistance));
         }
     }
@@ -186,6 +253,8 @@ public class PhotoRecognitionParameterSweepTest {
             metric.coverage = coverage;
             metric.precision = precision;
             metric.meanPitchDistance = pitchDist;
+            metric.longestRun = longestCommonSubstring(expectedSystem, recognizedSystem);
+            metric.longestRunNormalized = expectedSystem.isEmpty() ? 1f : (float) metric.longestRun / (float) expectedSystem.size();
             systemMetrics.add(metric);
 
             float thisPenalty = (1f - coverage) * 0.55f
@@ -195,7 +264,18 @@ public class PhotoRecognitionParameterSweepTest {
         }
         systemPenalty = systemMetrics.isEmpty() ? 1f : (systemPenalty / systemMetrics.size());
 
-        // Итоговая ошибка: глобальная последовательность + количество + средняя дистанция по высоте
+        int globalLongestRun = longestCommonSubstring(expectedMidi, recognizedMidi);
+        int totalSystemLongestRun = 0;
+        float avgSystemRunNorm = 0f;
+        for (SystemMetrics m : systemMetrics) {
+            totalSystemLongestRun += m.longestRun;
+            avgSystemRunNorm += m.longestRunNormalized;
+        }
+        avgSystemRunNorm = systemMetrics.isEmpty() ? 0f : (avgSystemRunNorm / systemMetrics.size());
+        float globalRunNorm = expectedMidi.isEmpty() ? 1f : (float) globalLongestRun / (float) expectedMidi.size();
+        float sequenceScore = globalRunNorm * 0.35f + avgSystemRunNorm * 0.65f;
+
+        // Legacy error оставлен для справки в выводе.
         // и штраф за несовпадение по каждому нотоносцу (system-by-system).
         float error = (1f - globalCoverage) * 0.30f
                 + (1f - globalPrecision) * 0.20f
@@ -215,6 +295,11 @@ public class PhotoRecognitionParameterSweepTest {
         out.globalPrecision = globalPrecision;
         out.systemPenalty = systemPenalty;
         out.systemMetrics = systemMetrics;
+        out.globalLongestRun = globalLongestRun;
+        out.totalSystemLongestRun = totalSystemLongestRun;
+        out.sequenceScore = sequenceScore;
+        out.expectedBySystem = reference.perSystemMidi;
+        out.recognizedBySystem = recognizedBySystem;
         if (result.noteDiagnostics != null) {
             out.diagnosticsSummary = result.noteDiagnostics.summary();
             out.primaryLossReason = primaryLossReason(result.noteDiagnostics);
@@ -324,6 +409,110 @@ public class PhotoRecognitionParameterSweepTest {
             }
         }
         return dp[a.size()][b.size()];
+    }
+
+    private static int longestCommonSubstring(List<Integer> a, List<Integer> b) {
+        int[][] dp = new int[a.size() + 1][b.size() + 1];
+        int best = 0;
+        for (int i = 1; i <= a.size(); i++) {
+            for (int j = 1; j <= b.size(); j++) {
+                if (a.get(i - 1).equals(b.get(j - 1))) {
+                    dp[i][j] = dp[i - 1][j - 1] + 1;
+                    if (dp[i][j] > best) best = dp[i][j];
+                }
+            }
+        }
+        return best;
+    }
+
+    private static boolean isBetterByLegacyError(SweepResult candidate, SweepResult best) {
+        if (candidate == null) return false;
+        if (best == null) return true;
+        if (Math.abs(candidate.error - best.error) > 1e-5f) {
+            return candidate.error < best.error;
+        }
+        if (Math.abs(candidate.globalCoverage - best.globalCoverage) > 1e-5f) {
+            return candidate.globalCoverage > best.globalCoverage;
+        }
+        return candidate.globalPrecision > best.globalPrecision;
+    }
+
+    private static boolean isBetterBySequence(SweepResult candidate, SweepResult best) {
+        if (candidate == null) return false;
+        if (best == null) return true;
+        if (candidate.totalSystemLongestRun != best.totalSystemLongestRun) {
+            return candidate.totalSystemLongestRun > best.totalSystemLongestRun;
+        }
+        if (Math.abs(candidate.sequenceScore - best.sequenceScore) > 1e-5f) {
+            return candidate.sequenceScore > best.sequenceScore;
+        }
+        return candidate.meanPitchDistance < best.meanPitchDistance;
+    }
+
+    private static void printDetailedDivergence(String label, SweepResult result) {
+        System.out.println("Detailed divergence for " + label + ":");
+        for (int i = 0; i < result.systemMetrics.size(); i++) {
+            List<Integer> expected = i < result.expectedBySystem.size() ? result.expectedBySystem.get(i) : Collections.<Integer>emptyList();
+            List<Integer> recognized = i < result.recognizedBySystem.size() ? result.recognizedBySystem.get(i) : Collections.<Integer>emptyList();
+            System.out.println("  staff " + (i + 1) + " expected=" + expected.size() + ", recognized=" + recognized.size()
+                    + ", longestRun=" + result.systemMetrics.get(i).longestRun);
+            for (String line : buildAlignmentLines(expected, recognized)) {
+                System.out.println("    " + line);
+            }
+        }
+    }
+
+    private static List<String> buildAlignmentLines(List<Integer> expected, List<Integer> recognized) {
+        int n = expected.size();
+        int m = recognized.size();
+        int[][] dp = new int[n + 1][m + 1];
+        for (int i = 1; i <= n; i++) dp[i][0] = i;
+        for (int j = 1; j <= m; j++) dp[0][j] = j;
+        for (int i = 1; i <= n; i++) {
+            for (int j = 1; j <= m; j++) {
+                int cost = expected.get(i - 1).equals(recognized.get(j - 1)) ? 0 : 1;
+                dp[i][j] = Math.min(
+                        Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1),
+                        dp[i - 1][j - 1] + cost
+                );
+            }
+        }
+
+        List<String> reversed = new ArrayList<String>();
+        int i = n;
+        int j = m;
+        while (i > 0 || j > 0) {
+            if (i > 0 && j > 0) {
+                int cost = expected.get(i - 1).equals(recognized.get(j - 1)) ? 0 : 1;
+                if (dp[i][j] == dp[i - 1][j - 1] + cost) {
+                    String marker = cost == 0 ? "=" : "!";
+                    reversed.add(marker + " exp[" + (i - 1) + "]=" + midiName(expected.get(i - 1))
+                            + " vs rec[" + (j - 1) + "]=" + midiName(recognized.get(j - 1)));
+                    i--; j--; continue;
+                }
+            }
+            if (i > 0 && dp[i][j] == dp[i - 1][j] + 1) {
+                reversed.add("- exp[" + (i - 1) + "]=" + midiName(expected.get(i - 1)) + " (missed)");
+                i--; continue;
+            }
+            reversed.add("+ rec[" + (j - 1) + "]=" + midiName(recognized.get(j - 1)) + " (extra)");
+            j--;
+        }
+
+        Collections.reverse(reversed);
+        return reversed;
+    }
+
+    private static String midiName(int midi) {
+        String name = noteNameForMidi(midi);
+        int octave = (midi / 12) - 1;
+        return name + octave + "(" + midi + ")";
+    }
+
+    private static String noteNameForMidi(int midi) {
+        String[] names = new String[]{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+        int idx = ((midi % 12) + 12) % 12;
+        return names[idx];
     }
 
     private static String primaryLossReason(OpenCvScoreProcessor.NoteDetectionDiagnostics d) {
@@ -467,7 +656,12 @@ public class PhotoRecognitionParameterSweepTest {
         float globalPrecision;
         float systemPenalty;
         float error;
+        int globalLongestRun;
+        int totalSystemLongestRun;
+        float sequenceScore;
         List<SystemMetrics> systemMetrics;
+        List<List<Integer>> expectedBySystem;
+        List<List<Integer>> recognizedBySystem;
         String diagnosticsSummary;
         String primaryLossReason;
     }
@@ -476,6 +670,8 @@ public class PhotoRecognitionParameterSweepTest {
         int expectedCount;
         int recognizedCount;
         int lcs;
+        int longestRun;
+        float longestRunNormalized;
         float coverage;
         float precision;
         float meanPitchDistance;

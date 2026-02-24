@@ -136,4 +136,6 @@
     <string name="capture_edit_mode_down">Режим: сдвиг ноты вниз на 1 шаг (тап)</string>
     <string name="capture_panorama_open">Панорама (полный экран)</string>
     <string name="capture_panorama_close">Закрыть панораму</string>
+    <string name="capture_panorama_save">Сохранить</string>
+    <string name="capture_panorama_cancel">Отменить</string>
 </resources>
