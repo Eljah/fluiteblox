@@ -55,6 +55,8 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private FrameLayout processingMask;
     private final ArrayList<Float> perStaffFilterStrength = new ArrayList<Float>();
     private final ArrayList<SeekBar> perStaffSeekBars = new ArrayList<SeekBar>();
+    private final ArrayList<NoteEvent> panoramaDraftNotes = new ArrayList<NoteEvent>();
+    private boolean panoramaDirty;
 
     private static final float BEST_MIN_AREA = 0.35f;
     private static final float BEST_MAX_AREA = 2.6f;
@@ -86,13 +88,17 @@ public class CaptureSheetActivity extends AppCompatActivity {
         notesOverlay.setOnNotesEditedListener(new RecognitionOverlayView.OnNotesEditedListener() {
             @Override
             public void onNotesEdited(List<NoteEvent> notes) {
-                if (latestResult != null && latestResult.piece != null) {
-                    latestResult.piece.notes.clear();
-                    latestResult.piece.notes.addAll(notes);
-                    notesOverlay.setRecognizedNotes(notes);
-                    panoramaOverlay.setRecognizedNotes(notes);
-                    syncStaffSliders(latestResult);
+                applyEditedNotesToResult(notes, false);
+            }
+        });
+        panoramaOverlay.setOnNotesEditedListener(new RecognitionOverlayView.OnNotesEditedListener() {
+            @Override
+            public void onNotesEdited(List<NoteEvent> notes) {
+                panoramaDraftNotes.clear();
+                if (notes != null) {
+                    panoramaDraftNotes.addAll(notes);
                 }
+                panoramaDirty = true;
             }
         });
         staffSlidersLayout = findViewById(R.id.layout_staff_sliders);
@@ -162,10 +168,17 @@ public class CaptureSheetActivity extends AppCompatActivity {
             }
         });
 
-        findViewById(R.id.btn_panorama_close).setOnClickListener(new View.OnClickListener() {
+        findViewById(R.id.btn_panorama_cancel).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                exitPanoramaMode();
+                cancelPanoramaEdits();
+            }
+        });
+
+        findViewById(R.id.btn_panorama_save).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                savePanoramaEdits();
             }
         });
 
@@ -467,8 +480,51 @@ public class CaptureSheetActivity extends AppCompatActivity {
 
 
 
+    private void applyEditedNotesToResult(List<NoteEvent> notes, boolean fromPanorama) {
+        if (latestResult == null || latestResult.piece == null) {
+            return;
+        }
+        latestResult.piece.notes.clear();
+        if (notes != null) {
+            latestResult.piece.notes.addAll(notes);
+        }
+        if (!fromPanorama) {
+            panoramaDraftNotes.clear();
+            if (notes != null) {
+                panoramaDraftNotes.addAll(notes);
+            }
+        }
+        notesOverlay.setRecognizedNotes(latestResult.piece.notes);
+        panoramaOverlay.setRecognizedNotes(latestResult.piece.notes);
+        syncStaffSliders(latestResult);
+    }
+
+    private void savePanoramaEdits() {
+        if (panoramaDirty) {
+            applyEditedNotesToResult(new ArrayList<NoteEvent>(panoramaDraftNotes), true);
+        }
+        panoramaDirty = false;
+        exitPanoramaMode();
+    }
+
+    private void cancelPanoramaEdits() {
+        panoramaDirty = false;
+        panoramaDraftNotes.clear();
+        if (latestResult != null && latestResult.piece != null) {
+            panoramaDraftNotes.addAll(latestResult.piece.notes);
+            panoramaOverlay.setRecognizedNotes(latestResult.piece.notes);
+        }
+        exitPanoramaMode();
+    }
+
     private void enterPanoramaMode() {
         if (panoramaContainer == null) return;
+        panoramaDraftNotes.clear();
+        if (latestResult != null && latestResult.piece != null) {
+            panoramaDraftNotes.addAll(latestResult.piece.notes);
+            panoramaOverlay.setRecognizedNotes(latestResult.piece.notes);
+        }
+        panoramaDirty = false;
         panoramaContainer.setVisibility(View.VISIBLE);
         if (latestPreviewBitmap != null) {
             panoramaOverlay.post(new Runnable() {
@@ -600,6 +656,8 @@ public class CaptureSheetActivity extends AppCompatActivity {
     }
     private void resetPerImageState() {
         latestResult = null;
+        panoramaDirty = false;
+        panoramaDraftNotes.clear();
         perStaffFilterStrength.clear();
         perStaffSeekBars.clear();
         if (staffSlidersLayout != null) {

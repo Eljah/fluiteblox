@@ -199,7 +199,7 @@ public class RecognitionOverlayView extends View {
             float dx = Float.isNaN(lastTouchX) ? 0f : Math.abs(event.getX() - lastTouchX);
             float dy = Float.isNaN(lastTouchY) ? 0f : Math.abs(event.getY() - lastTouchY);
             if (interactionMode == InteractionMode.EDIT && dx < 12f && dy < 12f) {
-                openContextPopupAt(event.getX(), event.getY());
+                handleTapInEditMode(event.getX(), event.getY());
             }
             lastTouchX = Float.NaN;
             lastTouchY = Float.NaN;
@@ -211,6 +211,45 @@ public class RecognitionOverlayView extends View {
             lastTouchY = Float.NaN;
         }
         return super.onTouchEvent(event);
+    }
+
+    private void handleTapInEditMode(float viewX, float viewY) {
+        float[] norm = toNormalized(viewX, viewY);
+        float nx = norm[0];
+        float ny = norm[1];
+        if (nx < 0f || nx > 1f || ny < 0f || ny > 1f) {
+            popupVisible = false;
+            invalidate();
+            return;
+        }
+
+        int nearest = findNearestNote(nx, ny);
+        if (nearest >= 0) {
+            openContextPopupAt(viewX, viewY);
+            return;
+        }
+
+        if (isInsideStaffCorridor(nx, ny)) {
+            lastTapNormX = nx;
+            lastTapNormY = ny;
+            popupVisible = false;
+            popupItems.clear();
+            addAtTap("quarter", 0);
+            return;
+        }
+
+        popupVisible = false;
+        popupItems.clear();
+        invalidate();
+    }
+
+    private boolean isInsideStaffCorridor(float nx, float ny) {
+        for (OpenCvScoreProcessor.StaffCorridor c : staffCorridors) {
+            if (nx >= c.left && nx <= c.right && ny >= c.top && ny <= c.bottom) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void openContextPopupAt(float viewX, float viewY) {
