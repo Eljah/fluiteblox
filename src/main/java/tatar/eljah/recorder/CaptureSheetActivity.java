@@ -15,6 +15,7 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -69,6 +70,17 @@ public class CaptureSheetActivity extends AppCompatActivity {
         thresholdValueText = findViewById(R.id.text_threshold_value);
         noiseValueText = findViewById(R.id.text_noise_value);
         notesOverlay = findViewById(R.id.image_notes_overlay);
+        notesOverlay.setOnNotesEditedListener(new RecognitionOverlayView.OnNotesEditedListener() {
+            @Override
+            public void onNotesEdited(List<NoteEvent> notes) {
+                if (latestResult != null && latestResult.piece != null) {
+                    latestResult.piece.notes.clear();
+                    latestResult.piece.notes.addAll(notes);
+                    notesOverlay.setRecognizedNotes(notes);
+                    syncStaffSliders(latestResult);
+                }
+            }
+        });
         staffSlidersLayout = findViewById(R.id.layout_staff_sliders);
         processingMask = findViewById(R.id.layout_processing_mask);
         SeekBar thresholdSeek = findViewById(R.id.seek_threshold);
@@ -113,6 +125,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
             }
         });
         renderControlValues();
+        setupEditControls();
 
         findViewById(R.id.btn_open_camera).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -519,6 +532,40 @@ public class CaptureSheetActivity extends AppCompatActivity {
         }
     }
 
+
+
+    private void setupEditControls() {
+        bindEditButton(R.id.btn_edit_none, RecognitionOverlayView.EditMode.NONE);
+        bindEditButton(R.id.btn_edit_add, RecognitionOverlayView.EditMode.ADD);
+        bindEditButton(R.id.btn_edit_delete, RecognitionOverlayView.EditMode.DELETE);
+        bindEditButton(R.id.btn_edit_duration, RecognitionOverlayView.EditMode.CHANGE_DURATION);
+        bindEditButton(R.id.btn_edit_up, RecognitionOverlayView.EditMode.MOVE_UP);
+        bindEditButton(R.id.btn_edit_down, RecognitionOverlayView.EditMode.MOVE_DOWN);
+    }
+
+    private void bindEditButton(int id, final RecognitionOverlayView.EditMode mode) {
+        Button b = findViewById(id);
+        if (b == null) return;
+        b.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                notesOverlay.setEditMode(mode);
+                Toast.makeText(CaptureSheetActivity.this, getEditModeLabel(mode), Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    private String getEditModeLabel(RecognitionOverlayView.EditMode mode) {
+        switch (mode) {
+            case ADD: return getString(R.string.capture_edit_mode_add);
+            case DELETE: return getString(R.string.capture_edit_mode_delete);
+            case CHANGE_DURATION: return getString(R.string.capture_edit_mode_duration);
+            case MOVE_UP: return getString(R.string.capture_edit_mode_up);
+            case MOVE_DOWN: return getString(R.string.capture_edit_mode_down);
+            case NONE:
+            default: return getString(R.string.capture_edit_mode_none);
+        }
+    }
 
     private void resetPerImageState() {
         latestResult = null;

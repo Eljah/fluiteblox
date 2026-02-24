@@ -112,4 +112,17 @@
     <string name="hint_duration_unknown">неизвестно</string>
     <string name="capture_staff_slider_title">Подстройка фильтра по нотоносцам (общее значение после сканирования фиксируется автоматически).</string>
     <string name="capture_staff_slider_item">Нотоносец %1$d: фильтр %2$d%%, нот %3$d</string>
+    <string name="capture_edit_tools_title">Редактирование карты распознавания</string>
+    <string name="capture_edit_none">Пан/зум</string>
+    <string name="capture_edit_add">+ нота</string>
+    <string name="capture_edit_delete">- нота</string>
+    <string name="capture_edit_duration">Длит.</string>
+    <string name="capture_edit_up">Вверх</string>
+    <string name="capture_edit_down">Вниз</string>
+    <string name="capture_edit_mode_none">Режим: панорамирование/масштаб</string>
+    <string name="capture_edit_mode_add">Режим: добавить ноту (тап)</string>
+    <string name="capture_edit_mode_delete">Режим: удалить ноту (тап)</string>
+    <string name="capture_edit_mode_duration">Режим: смена длительности (тап)</string>
+    <string name="capture_edit_mode_up">Режим: сдвиг ноты вверх на 1 шаг (тап)</string>
+    <string name="capture_edit_mode_down">Режим: сдвиг ноты вниз на 1 шаг (тап)</string>
 </resources>

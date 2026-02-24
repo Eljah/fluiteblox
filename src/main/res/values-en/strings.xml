@@ -80,4 +80,17 @@
     <string name="hint_duration_unknown">unknown</string>
     <string name="capture_staff_slider_title">Per-staff filter tuning (common default is auto-fixed after scan).</string>
     <string name="capture_staff_slider_item">Staff %1$d: filter %2$d%%, notes %3$d</string>
+    <string name="capture_edit_tools_title">Recognition map editing</string>
+    <string name="capture_edit_none">Pan/zoom</string>
+    <string name="capture_edit_add">+ note</string>
+    <string name="capture_edit_delete">- note</string>
+    <string name="capture_edit_duration">Dur.</string>
+    <string name="capture_edit_up">Up</string>
+    <string name="capture_edit_down">Down</string>
+    <string name="capture_edit_mode_none">Mode: pan/zoom</string>
+    <string name="capture_edit_mode_add">Mode: add note (tap)</string>
+    <string name="capture_edit_mode_delete">Mode: delete note (tap)</string>
+    <string name="capture_edit_mode_duration">Mode: change duration (tap)</string>
+    <string name="capture_edit_mode_up">Mode: move note up by 1 step (tap)</string>
+    <string name="capture_edit_mode_down">Mode: move note down by 1 step (tap)</string>
 </resources>
