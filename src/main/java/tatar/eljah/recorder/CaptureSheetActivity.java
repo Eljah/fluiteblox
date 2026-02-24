@@ -46,6 +46,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private ScrollView mainScroll;
     private OpenCvScoreProcessor.ProcessingResult latestResult;
     private Bitmap sourceBitmapForProcessing;
+    private Bitmap latestPreviewBitmap;
     private int thresholdOffset = 7;
     private float noiseLevel = 0.5f;
     private Thread processingThread;
@@ -80,7 +81,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         mainScroll = findViewById(R.id.layout_main_scroll);
         notesOverlay.setUnderlayView(preview);
         panoramaOverlay.setUnderlayView(panoramaPreview);
-        panoramaOverlay.setInteractionMode(RecognitionOverlayView.InteractionMode.PAN_ONLY);
+        panoramaOverlay.setInteractionMode(RecognitionOverlayView.InteractionMode.EDIT);
         notesOverlay.setOnNotesEditedListener(new RecognitionOverlayView.OnNotesEditedListener() {
             @Override
             public void onNotesEdited(List<NoteEvent> notes) {
@@ -258,6 +259,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 resetPerImageState();
                 ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(bmp);
                 panoramaPreview.setImageBitmap(bmp);
+                latestPreviewBitmap = bmp;
                 rerunProcessing();
             }
         } else if (requestCode == REQ_PICK_IMAGE && resultCode == RESULT_OK && data != null && data.getData() != null) {
@@ -270,7 +272,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                     resetPerImageState();
                     ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(bmp);
                     panoramaPreview.setImageBitmap(bmp);
-                panoramaPreview.setImageBitmap(bmp);
+                    latestPreviewBitmap = bmp;
                     rerunProcessing();
                 } else {
                     Toast.makeText(this, R.string.capture_gallery_load_failed, Toast.LENGTH_SHORT).show();
@@ -363,6 +365,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                             }
                             latestResult = result;
                             Bitmap previewBitmap = result.debugOverlay != null ? result.debugOverlay : bmp;
+                            latestPreviewBitmap = previewBitmap;
                             ImageView preview = findViewById(R.id.image_preview);
                             preview.setImageBitmap(previewBitmap);
                             panoramaPreview.setImageBitmap(previewBitmap);
@@ -465,6 +468,14 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private void enterPanoramaMode() {
         if (panoramaContainer == null) return;
         panoramaContainer.setVisibility(View.VISIBLE);
+        if (latestPreviewBitmap != null) {
+            panoramaOverlay.post(new Runnable() {
+                @Override
+                public void run() {
+                    updateOverlayBounds(panoramaPreview, latestPreviewBitmap, panoramaOverlay);
+                }
+            });
+        }
         if (mainScroll != null) {
             mainScroll.setVisibility(View.GONE);
         }
