@@ -11,6 +11,7 @@ import org.opencv.core.Rect;
 import org.opencv.core.Size;
 import org.opencv.imgproc.CLAHE;
 import org.opencv.imgproc.Imgproc;
+import org.opencv.imgproc.Moments;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -1039,7 +1040,9 @@ public class OpenCvScoreProcessor {
             }
 
             float fill = (float) (area / Math.max(1.0, r.width * r.height));
-            if (fill < options.noteMinFill || fill > options.noteMaxFill) {
+            float effectiveMinFill = options.recallFirstMode ? options.noteMinFill : Math.max(0.22f, options.noteMinFill);
+            float effectiveMaxFill = options.recallFirstMode ? options.noteMaxFill : Math.min(0.90f, options.noteMaxFill);
+            if (fill < effectiveMinFill || fill > effectiveMaxFill) {
                 if (diagnostics != null) diagnostics.rejectedByFill++;
                 rejected = true;
             }
@@ -1076,8 +1079,11 @@ public class OpenCvScoreProcessor {
             b.maxX = r.x + r.width - 1;
             b.maxY = r.y + r.height - 1;
             b.area = (int) Math.max(1, Math.round(area));
-            b.sumX = (int) Math.round((r.x + r.width * 0.5f) * b.area);
-            b.sumY = (int) Math.round((r.y + r.height * 0.5f) * b.area);
+            Moments moments = Imgproc.moments(c);
+            float centroidX = moments.get_m00() == 0.0 ? (float) (r.x + r.width * 0.5f) : (float) (moments.get_m10() / moments.get_m00());
+            float centroidY = moments.get_m00() == 0.0 ? (float) (r.y + r.height * 0.5f) : (float) (moments.get_m01() / moments.get_m00());
+            b.sumX = (int) Math.round(centroidX * b.area);
+            b.sumY = (int) Math.round(centroidY * b.area);
             out.add(b);
             c.release();
         }
@@ -1111,7 +1117,7 @@ public class OpenCvScoreProcessor {
             return false;
         }
         float ratio = (float) r.width / (float) Math.max(1, r.height);
-        if (ratio < 0.40f || ratio > 2.60f) {
+        if (ratio < 0.55f || ratio > 2.20f) {
             return false;
         }
         float minArea = Math.max(6f, staffSpacing * staffSpacing * 0.12f);
@@ -1119,7 +1125,7 @@ public class OpenCvScoreProcessor {
         if (area < minArea || area > maxArea) {
             return false;
         }
-        if (fill < 0.08f || fill > 0.98f) {
+        if (fill < 0.20f || fill > 0.90f) {
             return false;
         }
         return isAllowedNotePositionRelaxed(cx, cy, groups);
@@ -1243,11 +1249,11 @@ public class OpenCvScoreProcessor {
         for (Blob b : keep) {
             StaffGroup g = nearestGroupForPoint(b.cx(), b.cy(), groups);
             int groupIdx = indexOfGroup(groups, g);
-            float slotW = Math.max(5f, staffSpacing * 0.85f);
+            float slotW = Math.max(6f, staffSpacing * 1.25f);
             int xSlot = Math.round(b.cx() / slotW);
             String key = groupIdx + ":" + xSlot;
             Blob prev = perSlot.get(key);
-            if (prev == null || b.area > prev.area) {
+            if (prev == null || noteHeadSlotScore(b, g, staffSpacing, groups) > noteHeadSlotScore(prev, g, staffSpacing, groups)) {
                 if (prev != null && diagnostics != null) diagnostics.removedBySlotDedupe++;
                 perSlot.put(key, b);
             } else if (diagnostics != null) {
@@ -1267,12 +1273,36 @@ public class OpenCvScoreProcessor {
         return out;
     }
 
+
+    private float noteHeadSlotScore(Blob b, StaffGroup g, int staffSpacing, List<StaffGroup> groups) {
+        float spacing = g == null ? Math.max(6f, staffSpacing) : Math.max(4f, g.spacing);
+        float areaNorm = b.area / Math.max(1f, spacing * spacing);
+        float ratio = b.width() / Math.max(1f, (float) b.height());
+        float nearestStepNorm = nearestStaffStepDistance(b.cx(), b.cy(), groups, staffSpacing) / Math.max(1f, spacing * 0.5f);
+
+        float areaScore = 1.2f - Math.abs(areaNorm - 0.75f);
+        float ratioScore = 1.1f - Math.abs(ratio - 1.1f);
+        float stepScore = 1.0f - nearestStepNorm;
+        float compactScore = Math.min(b.width(), b.height()) / Math.max(1f, Math.max(b.width(), b.height()));
+
+        return areaScore + ratioScore + stepScore + compactScore;
+    }
+
     private int indexOfGroup(List<StaffGroup> groups, StaffGroup group) {
         if (group == null) return -1;
         for (int i = 0; i < groups.size(); i++) {
             if (groups.get(i) == group) return i;
         }
         return -1;
+    }
+
+    private static class NoteHeadFeatures {
+        Blob blob;
+        StaffGroup group;
+        float xNorm;
+        float yNorm;
+        String duration;
+        int stepFromBottom;
     }
 
     private void fillNotesWithDurationFeatures(ScorePiece piece,
@@ -1287,49 +1317,200 @@ public class OpenCvScoreProcessor {
                                                ProcessingOptions options) {
         if (noteHeads.isEmpty()) return;
         List<Blob> orderedHeads = sortNoteHeadsReadingOrder(noteHeads, groups);
-        int measureSize = 4;
-        for (int i = 0; i < orderedHeads.size(); i++) {
-            Blob b = orderedHeads.get(i);
-            float xNorm = b.cx() / (float) Math.max(1, w - 1);
-            float yNorm = b.cy() / (float) Math.max(1, h - 1);
+        List<NoteHeadFeatures> features = new ArrayList<NoteHeadFeatures>();
+
+        for (Blob b : orderedHeads) {
             StaffGroup group = nearestGroupForPoint(b.cx(), b.cy(), groups);
-            int stepFromBottom = 0;
-            if (group != null) {
-                stepFromBottom = options != null && options.lineStripePitchRefinement
-                        ? refinedStepFromBottomByLineStripe(binaryMask, b, group, staffSpacing)
-                        : Math.round((group.linesY[4] - b.cy()) / (group.spacing / 2f));
-            }
-            int midi = midiForTrebleStaffStep(stepFromBottom);
-            String noteName = noteNameForMidi(midi);
-            int octave = octaveForMidi(midi);
-
             boolean hollow = isHollowHead(symbolMask, b);
-            int stemCount = detectStemCount(symbolMask, b, staffSpacing);
-            int flagCount = detectFlagCount(symbolMask, b, staffSpacing);
-            String duration = resolveDuration(hollow, stemCount, flagCount);
+            int stemCount = detectStemCount(symbolMask, b, group, staffSpacing);
+            int flagCount = detectFlagCount(symbolMask, b, group, staffSpacing);
 
+            NoteHeadFeatures f = new NoteHeadFeatures();
+            f.blob = b;
+            f.group = group;
+            f.xNorm = b.cx() / (float) Math.max(1, w - 1);
+            f.yNorm = b.cy() / (float) Math.max(1, h - 1);
+            f.duration = resolveDuration(hollow, stemCount, flagCount);
+            f.stepFromBottom = 0;
+            features.add(f);
+        }
+
+        refinePitchStepsSecondPass(features, binaryMask, staffMask, staffSpacing, options);
+
+        int measureSize = 4;
+        for (int i = 0; i < features.size(); i++) {
+            NoteHeadFeatures f = features.get(i);
+            int midi = midiForTrebleStaffStep(f.stepFromBottom);
             piece.notes.add(new NoteEvent(
-                    noteName, octave, duration, 1 + (i / measureSize), xNorm, yNorm
+                    noteNameForMidi(midi),
+                    octaveForMidi(midi),
+                    f.duration,
+                    1 + (i / measureSize),
+                    f.xNorm,
+                    f.yNorm
             ));
         }
     }
 
 
 
+
+    private void refinePitchStepsSecondPass(List<NoteHeadFeatures> features,
+                                            Mat binaryMask,
+                                            Mat staffMask,
+                                            int staffSpacing,
+                                            ProcessingOptions options) {
+        for (NoteHeadFeatures f : features) {
+            if (f.group == null) {
+                f.stepFromBottom = 0;
+                continue;
+            }
+            boolean useStripeRefinement = options != null && options.lineStripePitchRefinement;
+            if (!useStripeRefinement) {
+                f.stepFromBottom = Math.round((f.group.linesY[4] - f.blob.cy()) / (f.group.spacing / 2f));
+                continue;
+            }
+            f.stepFromBottom = refinedStepByKnownHeadPosition(f.blob, f.group, binaryMask, staffMask, staffSpacing);
+        }
+    }
+
+    private int refinedStepByKnownHeadPosition(Blob b,
+                                                StaffGroup group,
+                                                Mat binaryMask,
+                                                Mat staffMask,
+                                                int staffSpacing) {
+        float[] localLines = localStaffLinesAtX(staffMask, group, Math.round(b.cx()), staffSpacing);
+        if (localLines == null || localLines.length < 5) {
+            localLines = localStaffLinesAtX(binaryMask, group, Math.round(b.cx()), staffSpacing);
+        }
+        if (localLines == null || localLines.length < 5) {
+            localLines = group.linesY;
+        }
+
+        float cy = b.cy();
+        int nearestLine = 0;
+        float nearestLineDist = Float.MAX_VALUE;
+        for (int i = 0; i < 5; i++) {
+            float d = Math.abs(cy - localLines[i]);
+            if (d < nearestLineDist) {
+                nearestLineDist = d;
+                nearestLine = i;
+            }
+        }
+
+        float headBand = Math.max(1.8f, Math.min(Math.max(2f, group.spacing * 0.48f), b.height() * 0.42f));
+        boolean onLineByCenter = nearestLineDist <= headBand;
+        boolean onLineByInk = hasBlackOnBothSidesOfLine(binaryMask, b, localLines[nearestLine], group.spacing, staffSpacing);
+
+        int posIndex;
+        if (onLineByCenter && onLineByInk) {
+            posIndex = nearestLine * 2;
+        } else {
+            int connectivitySide = detectGapSideByWhiteConnectivity(binaryMask, b, localLines[nearestLine], staffSpacing);
+            if (connectivitySide < 0) {
+                posIndex = nearestLine * 2 - 1;
+            } else if (connectivitySide > 0) {
+                posIndex = nearestLine * 2 + 1;
+            } else {
+                float delta = cy - localLines[nearestLine];
+                if (nearestLine <= 0 && delta < 0f) {
+                    posIndex = -1;
+                } else if (nearestLine >= 4 && delta > 0f) {
+                    posIndex = 9;
+                } else {
+                    posIndex = delta < 0f ? (nearestLine * 2 - 1) : (nearestLine * 2 + 1);
+                }
+            }
+        }
+        return 8 - posIndex;
+    }
+
+
+    private int detectGapSideByWhiteConnectivity(Mat binaryMask, Blob b, float lineY, int staffSpacing) {
+        if (binaryMask == null || binaryMask.empty()) return 0;
+
+        int xPad = Math.max(2, staffSpacing / 3);
+        int yPad = Math.max(2, staffSpacing / 3);
+        int x0 = Math.max(0, b.minX - xPad);
+        int x1 = Math.min(binaryMask.cols() - 1, b.maxX + xPad);
+        int line = Math.max(1, Math.min(binaryMask.rows() - 2, Math.round(lineY)));
+
+        int aboveY0 = Math.max(0, line - yPad);
+        int aboveY1 = Math.max(aboveY0, line - 1);
+        int belowY0 = Math.min(binaryMask.rows() - 1, line + 1);
+        int belowY1 = Math.min(binaryMask.rows() - 1, line + yPad);
+
+        boolean aboveConnected = hasWhiteConnectionAcrossBand(binaryMask, x0, x1, aboveY0, aboveY1);
+        boolean belowConnected = hasWhiteConnectionAcrossBand(binaryMask, x0, x1, belowY0, belowY1);
+
+        if (aboveConnected && !belowConnected) return -1;
+        if (!aboveConnected && belowConnected) return 1;
+        return 0;
+    }
+
+    private boolean hasWhiteConnectionAcrossBand(Mat mask, int x0, int x1, int y0, int y1) {
+        if (x1 <= x0 || y1 < y0) return false;
+
+        int h = y1 - y0 + 1;
+        int w = x1 - x0 + 1;
+        if (h <= 0 || w <= 0) return false;
+
+        int leftX = 0;
+        int rightX = w - 1;
+        java.util.ArrayDeque<int[]> q = new java.util.ArrayDeque<int[]>();
+        boolean[][] visited = new boolean[h][w];
+
+        for (int y = 0; y < h; y++) {
+            if (isWhite(mask, x0 + leftX, y0 + y)) {
+                visited[y][leftX] = true;
+                q.add(new int[]{leftX, y});
+            }
+        }
+
+        int[] dx = new int[]{1, -1, 0, 0};
+        int[] dy = new int[]{0, 0, 1, -1};
+        while (!q.isEmpty()) {
+            int[] p = q.removeFirst();
+            int cx = p[0];
+            int cy = p[1];
+            if (cx == rightX) return true;
+            for (int i = 0; i < 4; i++) {
+                int nx = cx + dx[i];
+                int ny = cy + dy[i];
+                if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+                if (visited[ny][nx]) continue;
+                if (!isWhite(mask, x0 + nx, y0 + ny)) continue;
+                visited[ny][nx] = true;
+                q.add(new int[]{nx, ny});
+            }
+        }
+        return false;
+    }
+
+    private boolean isWhite(Mat mask, int x, int y) {
+        double[] px = mask.get(y, x);
+        return px == null || px.length == 0 || px[0] <= 0;
+    }
+
     private int refinedStepFromBottomByLineStripe(Mat binaryMask, Blob b, StaffGroup g, int staffSpacing) {
         float halfStep = Math.max(2f, g.spacing / 2f);
+        float[] localLines = localStaffLinesAtX(binaryMask, g, Math.round(b.cx()), staffSpacing);
+        if (localLines == null || localLines.length < 5) {
+            localLines = g.linesY;
+        }
+
         int bestIndex = -1;
         float bestDistance = Float.MAX_VALUE;
 
         for (int i = 0; i < 5; i++) {
-            float lineY = g.linesY[i];
+            float lineY = localLines[i];
             float d = Math.abs(b.cy() - lineY);
             if (d < bestDistance) {
                 bestDistance = d;
                 bestIndex = i * 2;
             }
             if (i < 4) {
-                float gapY = (g.linesY[i] + g.linesY[i + 1]) * 0.5f;
+                float gapY = (localLines[i] + localLines[i + 1]) * 0.5f;
                 float gd = Math.abs(b.cy() - gapY);
                 if (gd < bestDistance) {
                     bestDistance = gd;
@@ -1339,36 +1520,77 @@ public class OpenCvScoreProcessor {
         }
 
         if (bestIndex < 0) {
-            return Math.round((g.linesY[4] - b.cy()) / Math.max(1f, halfStep));
+            return Math.round((localLines[4] - b.cy()) / Math.max(1f, halfStep));
         }
 
         boolean lineCandidate = (bestIndex % 2 == 0);
         int lineIdx = bestIndex / 2;
-        if (lineCandidate && hasBlackOnBothSidesOfLine(binaryMask, b, g.linesY[lineIdx], g.spacing, staffSpacing)) {
+        if (lineCandidate && hasBlackOnBothSidesOfLine(binaryMask, b, localLines[lineIdx], g.spacing, staffSpacing)) {
             return 8 - bestIndex;
         }
 
         if (lineCandidate) {
-            int preferGapPosIndex = chooseNearestGapPositionIndexForLine(lineIdx, b.cy(), g);
+            int preferGapPosIndex = chooseNearestGapPositionIndexForLine(lineIdx, b.cy(), localLines);
             return 8 - preferGapPosIndex;
         }
 
         return 8 - bestIndex;
     }
 
-    private int chooseNearestGapPositionIndexForLine(int lineIdx, float cy, StaffGroup g) {
+
+    private float[] localStaffLinesAtX(Mat binaryMask, StaffGroup g, int centerX, int staffSpacing) {
+        if (binaryMask == null || binaryMask.empty() || g == null) {
+            return g == null ? null : g.linesY;
+        }
+        float[] out = new float[5];
+        int xHalf = Math.max(2, Math.round(Math.max(staffSpacing, g.spacing) * 0.9f));
+        int x0 = Math.max(0, centerX - xHalf);
+        int x1 = Math.min(binaryMask.cols() - 1, centerX + xHalf);
+        int yHalf = Math.max(2, Math.round(Math.max(staffSpacing, g.spacing) * 0.55f));
+
+        for (int i = 0; i < 5; i++) {
+            int baseY = Math.round(g.linesY[i]);
+            int ys = Math.max(0, baseY - yHalf);
+            int ye = Math.min(binaryMask.rows() - 1, baseY + yHalf);
+            int bestY = baseY;
+            int bestScore = -1;
+            for (int y = ys; y <= ye; y++) {
+                int dark = 0;
+                for (int x = x0; x <= x1; x++) {
+                    double[] px = binaryMask.get(y, x);
+                    if (px != null && px.length > 0 && px[0] > 0) {
+                        dark++;
+                    }
+                }
+                if (dark > bestScore) {
+                    bestScore = dark;
+                    bestY = y;
+                }
+            }
+            out[i] = bestY;
+        }
+
+        for (int i = 1; i < out.length; i++) {
+            if (out[i] <= out[i - 1]) {
+                out[i] = out[i - 1] + Math.max(1f, g.spacing * 0.45f);
+            }
+        }
+        return out;
+    }
+
+    private int chooseNearestGapPositionIndexForLine(int lineIdx, float cy, float[] linesY) {
         if (lineIdx <= 0) {
-            float topLineY = g.linesY[0];
+            float topLineY = linesY[0];
             // For edge ledger notes above the top line keep the outer gap index (-1), not an interior gap.
             return cy < topLineY ? -1 : 1;
         }
         if (lineIdx >= 4) {
-            float bottomLineY = g.linesY[4];
+            float bottomLineY = linesY[4];
             // For edge ledger notes below the bottom line keep the outer gap index (9), not an interior gap.
             return cy > bottomLineY ? 9 : 7;
         }
-        float upperGapY = (g.linesY[lineIdx - 1] + g.linesY[lineIdx]) * 0.5f;
-        float lowerGapY = (g.linesY[lineIdx] + g.linesY[lineIdx + 1]) * 0.5f;
+        float upperGapY = (linesY[lineIdx - 1] + linesY[lineIdx]) * 0.5f;
+        float lowerGapY = (linesY[lineIdx] + linesY[lineIdx + 1]) * 0.5f;
         int upperGapPosIndex = (lineIdx - 1) * 2 + 1;
         int lowerGapPosIndex = lineIdx * 2 + 1;
         return Math.abs(cy - upperGapY) <= Math.abs(cy - lowerGapY) ? upperGapPosIndex : lowerGapPosIndex;
@@ -1553,14 +1775,24 @@ public class OpenCvScoreProcessor {
         return fill < 0.45f;
     }
 
-    private int detectStemCount(Mat symbolMask, Blob b, int staffSpacing) {
+    private int detectStemCount(Mat symbolMask, Blob b, StaffGroup group, int staffSpacing) {
         int searchPad = Math.max(2, staffSpacing / 2);
         int x0 = Math.max(0, b.minX - searchPad);
         int x1 = Math.min(symbolMask.cols() - 1, b.maxX + searchPad);
-        int y0 = Math.max(0, b.minY - staffSpacing * 2);
-        int y1 = Math.min(symbolMask.rows() - 1, b.maxY + staffSpacing * 2);
-        int stemCols = 0;
-        int minRun = Math.max(staffSpacing, b.height() + staffSpacing / 2);
+        int y0;
+        int y1;
+        if (group != null) {
+            int pad = Math.max(staffSpacing, Math.round(group.spacing * 1.4f));
+            y0 = Math.max(0, Math.round(group.top()) - pad);
+            y1 = Math.min(symbolMask.rows() - 1, Math.round(group.bottom()) + pad);
+        } else {
+            y0 = Math.max(0, b.minY - staffSpacing * 3);
+            y1 = Math.min(symbolMask.rows() - 1, b.maxY + staffSpacing * 3);
+        }
+
+        int minRun = Math.max(staffSpacing + 2, (int) (b.height() + staffSpacing * 0.6f));
+        int bestColRun = 0;
+        int supportCols = 0;
         for (int x = x0; x <= x1; x++) {
             int run = 0;
             int best = 0;
@@ -1568,33 +1800,101 @@ public class OpenCvScoreProcessor {
                 if (symbolMask.get(y, x)[0] > 0) {
                     run++;
                     if (run > best) best = run;
-                } else run = 0;
+                } else {
+                    run = 0;
+                }
             }
-            if (best >= minRun) stemCols++;
+            if (best > bestColRun) bestColRun = best;
+            if (best >= minRun) supportCols++;
         }
-        return stemCols >= 2 ? 1 : 0;
+
+        return (bestColRun >= minRun && supportCols >= 2) ? 1 : 0;
     }
 
-    private int detectFlagCount(Mat symbolMask, Blob b, int staffSpacing) {
-        int x0 = Math.max(0, b.minX);
-        int x1 = Math.min(symbolMask.cols() - 1, b.maxX + staffSpacing * 2);
-        int y0 = Math.max(0, b.minY - staffSpacing * 2);
-        int y1 = Math.min(symbolMask.rows() - 1, b.maxY + staffSpacing * 2);
-        int horizontalRuns = 0;
-        int minRun = Math.max(3, staffSpacing / 2);
-        for (int y = y0; y <= y1; y++) {
+    private int detectFlagCount(Mat symbolMask, Blob b, StaffGroup group, int staffSpacing) {
+        if (group == null) {
+            return 0;
+        }
+
+        int searchPad = Math.max(2, staffSpacing / 2);
+        int x0 = Math.max(0, b.minX - searchPad);
+        int x1 = Math.min(symbolMask.cols() - 1, b.maxX + searchPad);
+        int pad = Math.max(staffSpacing, Math.round(group.spacing * 1.4f));
+        int y0 = Math.max(0, Math.round(group.top()) - pad);
+        int y1 = Math.min(symbolMask.rows() - 1, Math.round(group.bottom()) + pad);
+
+        int minRun = Math.max(staffSpacing + 2, (int) (b.height() + staffSpacing * 0.6f));
+        int stemX = -1;
+        int stemTop = y1;
+        int stemBottom = y0;
+        int bestSpan = 0;
+
+        for (int x = x0; x <= x1; x++) {
             int run = 0;
             int best = 0;
-            for (int x = x0; x <= x1; x++) {
+            int bestRunTop = -1;
+            int bestRunBottom = -1;
+            int runStart = -1;
+            for (int y = y0; y <= y1; y++) {
+                if (symbolMask.get(y, x)[0] > 0) {
+                    if (run == 0) runStart = y;
+                    run++;
+                    if (run > best) {
+                        best = run;
+                        bestRunTop = runStart;
+                        bestRunBottom = y;
+                    }
+                } else {
+                    run = 0;
+                    runStart = -1;
+                }
+            }
+            if (best >= minRun && best > bestSpan) {
+                bestSpan = best;
+                stemX = x;
+                stemTop = bestRunTop;
+                stemBottom = bestRunBottom;
+            }
+        }
+
+        if (stemX < 0) return 0;
+
+        boolean upStem = (b.cy() - stemTop) > (stemBottom - b.cy());
+        int flagAreaX0;
+        int flagAreaX1;
+        int flagAreaY0;
+        int flagAreaY1;
+
+        if (upStem) {
+            flagAreaX0 = stemX;
+            flagAreaX1 = Math.min(symbolMask.cols() - 1, stemX + Math.max(staffSpacing * 2, Math.round(group.spacing * 2f)));
+            flagAreaY0 = Math.max(0, stemTop - Math.max(staffSpacing, Math.round(group.spacing)));
+            flagAreaY1 = Math.min(symbolMask.rows() - 1, stemTop + Math.max(staffSpacing, Math.round(group.spacing * 0.8f)));
+        } else {
+            flagAreaX0 = Math.max(0, stemX - Math.max(staffSpacing * 2, Math.round(group.spacing * 2f)));
+            flagAreaX1 = stemX;
+            flagAreaY0 = Math.max(0, stemBottom - Math.max(staffSpacing, Math.round(group.spacing * 0.8f)));
+            flagAreaY1 = Math.min(symbolMask.rows() - 1, stemBottom + Math.max(staffSpacing, Math.round(group.spacing)));
+        }
+
+        int minHorizRun = Math.max(3, staffSpacing / 2);
+        int rowsWithRun = 0;
+        for (int y = flagAreaY0; y <= flagAreaY1; y++) {
+            int run = 0;
+            int best = 0;
+            for (int x = flagAreaX0; x <= flagAreaX1; x++) {
                 if (symbolMask.get(y, x)[0] > 0) {
                     run++;
                     if (run > best) best = run;
-                } else run = 0;
+                } else {
+                    run = 0;
+                }
             }
-            if (best >= minRun) horizontalRuns++;
+            if (best >= minHorizRun) rowsWithRun++;
         }
-        if (horizontalRuns >= 6) return 2;
-        if (horizontalRuns >= 3) return 1;
+
+        if (rowsWithRun >= 7) return 2;
+        if (rowsWithRun >= 4) return 1;
         return 0;
     }
 
