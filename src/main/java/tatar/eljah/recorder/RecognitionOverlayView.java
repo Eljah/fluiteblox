@@ -64,7 +64,11 @@ public class RecognitionOverlayView extends View {
     private boolean popupVisible;
     private final List<PopupItem> popupItems = new ArrayList<PopupItem>();
 
+    public enum InteractionMode { EDIT, PAN_ONLY }
+
     private View underlayView;
+    private InteractionMode interactionMode = InteractionMode.EDIT;
+    private boolean suppressNextUpAfterPopup;
 
     public RecognitionOverlayView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -100,6 +104,14 @@ public class RecognitionOverlayView extends View {
     public void setUnderlayView(View view) {
         this.underlayView = view;
         syncUnderlayTransform();
+    }
+
+    public void setInteractionMode(InteractionMode mode) {
+        this.interactionMode = mode == null ? InteractionMode.EDIT : mode;
+        popupVisible = false;
+        popupItems.clear();
+        selectedIndex = -1;
+        invalidate();
     }
 
     public void setOnNotesEditedListener(OnNotesEditedListener listener) {
@@ -145,7 +157,9 @@ public class RecognitionOverlayView extends View {
             float x = event.getX();
             float y = event.getY();
 
-            if (popupVisible && handlePopupTap(x, y)) {
+            if (interactionMode == InteractionMode.EDIT && popupVisible) {
+                handlePopupTap(x, y);
+                suppressNextUpAfterPopup = true;
                 return true;
             }
             popupVisible = false;
@@ -169,9 +183,15 @@ public class RecognitionOverlayView extends View {
         }
 
         if (event.getAction() == MotionEvent.ACTION_UP) {
+            if (suppressNextUpAfterPopup) {
+                suppressNextUpAfterPopup = false;
+                lastTouchX = Float.NaN;
+                lastTouchY = Float.NaN;
+                return true;
+            }
             float dx = Float.isNaN(lastTouchX) ? 0f : Math.abs(event.getX() - lastTouchX);
             float dy = Float.isNaN(lastTouchY) ? 0f : Math.abs(event.getY() - lastTouchY);
-            if (dx < 12f && dy < 12f) {
+            if (interactionMode == InteractionMode.EDIT && dx < 12f && dy < 12f) {
                 openContextPopupAt(event.getX(), event.getY());
             }
             lastTouchX = Float.NaN;
@@ -243,7 +263,7 @@ public class RecognitionOverlayView extends View {
         popupVisible = false;
         popupItems.clear();
         invalidate();
-        return false;
+        return true;
     }
 
     private void applyPopupAction(PopupAction action) {

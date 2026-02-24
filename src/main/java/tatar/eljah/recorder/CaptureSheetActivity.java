@@ -22,6 +22,7 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.FrameLayout;
+import android.widget.ScrollView;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -39,6 +40,10 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private TextView thresholdValueText;
     private TextView noiseValueText;
     private RecognitionOverlayView notesOverlay;
+    private RecognitionOverlayView panoramaOverlay;
+    private ImageView panoramaPreview;
+    private FrameLayout panoramaContainer;
+    private ScrollView mainScroll;
     private OpenCvScoreProcessor.ProcessingResult latestResult;
     private Bitmap sourceBitmapForProcessing;
     private int thresholdOffset = 7;
@@ -64,12 +69,18 @@ public class CaptureSheetActivity extends AppCompatActivity {
 
         final EditText titleInput = findViewById(R.id.input_piece_title);
         final ImageView preview = findViewById(R.id.image_preview);
+        panoramaPreview = findViewById(R.id.image_preview_panorama);
         analysisText = findViewById(R.id.text_analysis);
         analysisText.setTextIsSelectable(true);
         thresholdValueText = findViewById(R.id.text_threshold_value);
         noiseValueText = findViewById(R.id.text_noise_value);
         notesOverlay = findViewById(R.id.image_notes_overlay);
+        panoramaOverlay = findViewById(R.id.image_notes_overlay_panorama);
+        panoramaContainer = findViewById(R.id.layout_panorama_fullscreen);
+        mainScroll = findViewById(R.id.layout_main_scroll);
         notesOverlay.setUnderlayView(preview);
+        panoramaOverlay.setUnderlayView(panoramaPreview);
+        panoramaOverlay.setInteractionMode(RecognitionOverlayView.InteractionMode.PAN_ONLY);
         notesOverlay.setOnNotesEditedListener(new RecognitionOverlayView.OnNotesEditedListener() {
             @Override
             public void onNotesEdited(List<NoteEvent> notes) {
@@ -77,6 +88,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                     latestResult.piece.notes.clear();
                     latestResult.piece.notes.addAll(notes);
                     notesOverlay.setRecognizedNotes(notes);
+                    panoramaOverlay.setRecognizedNotes(notes);
                     syncStaffSliders(latestResult);
                 }
             }
@@ -137,6 +149,21 @@ public class CaptureSheetActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 openGallery();
+            }
+        });
+
+
+        findViewById(R.id.btn_panorama_open).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                enterPanoramaMode();
+            }
+        });
+
+        findViewById(R.id.btn_panorama_close).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                exitPanoramaMode();
             }
         });
 
@@ -230,6 +257,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 sourceBitmapForProcessing = bmp;
                 resetPerImageState();
                 ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(bmp);
+                panoramaPreview.setImageBitmap(bmp);
                 rerunProcessing();
             }
         } else if (requestCode == REQ_PICK_IMAGE && resultCode == RESULT_OK && data != null && data.getData() != null) {
@@ -241,6 +269,8 @@ public class CaptureSheetActivity extends AppCompatActivity {
                     sourceBitmapForProcessing = bmp;
                     resetPerImageState();
                     ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(bmp);
+                    panoramaPreview.setImageBitmap(bmp);
+                panoramaPreview.setImageBitmap(bmp);
                     rerunProcessing();
                 } else {
                     Toast.makeText(this, R.string.capture_gallery_load_failed, Toast.LENGTH_SHORT).show();
@@ -335,9 +365,13 @@ public class CaptureSheetActivity extends AppCompatActivity {
                             Bitmap previewBitmap = result.debugOverlay != null ? result.debugOverlay : bmp;
                             ImageView preview = findViewById(R.id.image_preview);
                             preview.setImageBitmap(previewBitmap);
+                            panoramaPreview.setImageBitmap(previewBitmap);
                             updateOverlayBounds(preview, previewBitmap);
+                            updateOverlayBounds(panoramaPreview, previewBitmap, panoramaOverlay);
                             notesOverlay.setRecognizedNotes(result.piece.notes);
+                            panoramaOverlay.setRecognizedNotes(result.piece.notes);
                             notesOverlay.setStaffCorridors(result.staffCorridors);
+                            panoramaOverlay.setStaffCorridors(result.staffCorridors);
                             syncStaffSliders(result);
                             setProcessingBusy(false);
                             analysisText.setText(getString(R.string.capture_analysis_template,
@@ -394,13 +428,17 @@ public class CaptureSheetActivity extends AppCompatActivity {
     }
 
     private void updateOverlayBounds(ImageView preview, Bitmap shownBitmap) {
-        if (preview == null || shownBitmap == null || notesOverlay == null) {
+        updateOverlayBounds(preview, shownBitmap, notesOverlay);
+    }
+
+    private void updateOverlayBounds(ImageView preview, Bitmap shownBitmap, RecognitionOverlayView targetOverlay) {
+        if (preview == null || shownBitmap == null || targetOverlay == null) {
             return;
         }
         int viewW = preview.getWidth();
         int viewH = preview.getHeight();
         if (viewW <= 0 || viewH <= 0) {
-            notesOverlay.setImageBounds(0f, 0f, 1f, 1f);
+            targetOverlay.setImageBounds(0f, 0f, 1f, 1f);
             return;
         }
 
@@ -411,7 +449,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
             float drawH = shownBitmap.getHeight() * scale;
             float left = (viewW - drawW) * 0.5f;
             float top = (viewH - drawH) * 0.5f;
-            notesOverlay.setImageBounds(left, top, left + drawW, top + drawH);
+            targetOverlay.setImageBounds(left, top, left + drawW, top + drawH);
             return;
         }
 
@@ -419,9 +457,26 @@ public class CaptureSheetActivity extends AppCompatActivity {
         Matrix matrix = new Matrix(preview.getImageMatrix());
         matrix.mapRect(rect);
         rect.offset(preview.getPaddingLeft(), preview.getPaddingTop());
-        notesOverlay.setImageBounds(rect.left, rect.top, rect.right, rect.bottom);
+        targetOverlay.setImageBounds(rect.left, rect.top, rect.right, rect.bottom);
     }
 
+
+
+    private void enterPanoramaMode() {
+        if (panoramaContainer == null) return;
+        panoramaContainer.setVisibility(View.VISIBLE);
+        if (mainScroll != null) {
+            mainScroll.setVisibility(View.GONE);
+        }
+    }
+
+    private void exitPanoramaMode() {
+        if (panoramaContainer == null) return;
+        panoramaContainer.setVisibility(View.GONE);
+        if (mainScroll != null) {
+            mainScroll.setVisibility(View.VISIBLE);
+        }
+    }
 
     private void syncStaffSliders(OpenCvScoreProcessor.ProcessingResult result) {
         int staffCount = 0;
@@ -538,6 +593,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
             staffSlidersLayout.removeAllViews();
         }
         analysisText.setText(getString(R.string.capture_waiting));
+        exitPanoramaMode();
     }
 
     private void setProcessingBusy(boolean busy) {

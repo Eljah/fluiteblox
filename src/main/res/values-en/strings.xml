@@ -93,4 +93,6 @@
     <string name="capture_edit_mode_duration">Mode: change duration (tap)</string>
     <string name="capture_edit_mode_up">Mode: move note up by 1 step (tap)</string>
     <string name="capture_edit_mode_down">Mode: move note down by 1 step (tap)</string>
+    <string name="capture_panorama_open">Open panorama (fullscreen)</string>
+    <string name="capture_panorama_close">Close panorama</string>
 </resources>
