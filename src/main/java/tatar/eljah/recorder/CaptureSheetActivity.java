@@ -338,7 +338,8 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 BEST_MIN_CIRCULARITY,
                 true,
                 BEST_ANALYTICAL_STRENGTH,
-                perStaff);
+                perStaff,
+                true);
     }
 
     private void rerunProcessing() {

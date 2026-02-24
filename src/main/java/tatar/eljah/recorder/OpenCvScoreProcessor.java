@@ -65,6 +65,7 @@ public class OpenCvScoreProcessor {
         public final boolean recallFirstMode;
         public final float analyticalFilterStrength;
         public final float[] perStaffAnalyticalStrength;
+        public final boolean lineStripePitchRefinement;
 
         public ProcessingOptions(int thresholdOffset, int symbolNeighborhoodHits, float noiseLevel) {
             this(thresholdOffset, symbolNeighborhoodHits, noiseLevel,
@@ -72,7 +73,7 @@ public class OpenCvScoreProcessor {
                     0.6f, 4.0f,
                     0.18f, 0.9f,
                     0.32f,
-                    false, 0.55f, null);
+                    false, 0.55f, null, false);
         }
 
         public ProcessingOptions(int thresholdOffset,
@@ -90,7 +91,7 @@ public class OpenCvScoreProcessor {
             this(thresholdOffset, symbolNeighborhoodHits, noiseLevel,
                     skipAdaptiveBinarization, skipMorphNoiseSuppression,
                     noteMinAreaFactor, noteMaxAreaFactor, noteMinFill, noteMaxFill, noteMinCircularity,
-                    recallFirstMode, analyticalFilterStrength, null);
+                    recallFirstMode, analyticalFilterStrength, null, false);
         }
 
         public ProcessingOptions(int thresholdOffset,
@@ -105,7 +106,8 @@ public class OpenCvScoreProcessor {
                                  float noteMinCircularity,
                                  boolean recallFirstMode,
                                  float analyticalFilterStrength,
-                                 float[] perStaffAnalyticalStrength) {
+                                 float[] perStaffAnalyticalStrength,
+                                 boolean lineStripePitchRefinement) {
             this.thresholdOffset = Math.max(1, Math.min(32, thresholdOffset));
             this.symbolNeighborhoodHits = Math.max(1, Math.min(9, symbolNeighborhoodHits));
             this.noiseLevel = Math.max(0f, Math.min(1f, noiseLevel));
@@ -119,6 +121,7 @@ public class OpenCvScoreProcessor {
             this.recallFirstMode = recallFirstMode;
             this.analyticalFilterStrength = Math.max(0.0f, Math.min(1.0f, analyticalFilterStrength));
             this.perStaffAnalyticalStrength = perStaffAnalyticalStrength == null ? null : perStaffAnalyticalStrength.clone();
+            this.lineStripePitchRefinement = lineStripePitchRefinement;
         }
 
         public static ProcessingOptions defaults() {
@@ -397,7 +400,7 @@ public class OpenCvScoreProcessor {
 
             NoteDetectionDiagnostics noteDiagnostics = new NoteDetectionDiagnostics();
             List<Blob> noteHeads = detectNoteHeadsOpenCv(symbolMask, w, h, staffSpacing, options, staffGroups, noteDiagnostics);
-            fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, staffMask, staffSpacing, w, h, staffGroups);
+            fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, binary, staffMask, staffSpacing, w, h, staffGroups, options);
 
             int staffRows = Math.max(1, Math.min(10, staffGroups.size()));
             int barlines = estimateBarsFromMask(binary, w, h, staffSpacing);
@@ -1275,11 +1278,13 @@ public class OpenCvScoreProcessor {
     private void fillNotesWithDurationFeatures(ScorePiece piece,
                                                List<Blob> noteHeads,
                                                Mat symbolMask,
+                                               Mat binaryMask,
                                                Mat staffMask,
                                                int staffSpacing,
                                                int w,
                                                int h,
-                                               List<StaffGroup> groups) {
+                                               List<StaffGroup> groups,
+                                               ProcessingOptions options) {
         if (noteHeads.isEmpty()) return;
         List<Blob> orderedHeads = sortNoteHeadsReadingOrder(noteHeads, groups);
         int measureSize = 4;
@@ -1290,7 +1295,9 @@ public class OpenCvScoreProcessor {
             StaffGroup group = nearestGroupForPoint(b.cx(), b.cy(), groups);
             int stepFromBottom = 0;
             if (group != null) {
-                stepFromBottom = Math.round((group.linesY[4] - b.cy()) / (group.spacing / 2f));
+                stepFromBottom = options != null && options.lineStripePitchRefinement
+                        ? refinedStepFromBottomByLineStripe(binaryMask, b, group, staffSpacing)
+                        : Math.round((group.linesY[4] - b.cy()) / (group.spacing / 2f));
             }
             int midi = midiForTrebleStaffStep(stepFromBottom);
             String noteName = noteNameForMidi(midi);
@@ -1307,6 +1314,104 @@ public class OpenCvScoreProcessor {
         }
     }
 
+
+
+    private int refinedStepFromBottomByLineStripe(Mat binaryMask, Blob b, StaffGroup g, int staffSpacing) {
+        float halfStep = Math.max(2f, g.spacing / 2f);
+        int bestIndex = -1;
+        float bestDistance = Float.MAX_VALUE;
+
+        for (int i = 0; i < 5; i++) {
+            float lineY = g.linesY[i];
+            float d = Math.abs(b.cy() - lineY);
+            if (d < bestDistance) {
+                bestDistance = d;
+                bestIndex = i * 2;
+            }
+            if (i < 4) {
+                float gapY = (g.linesY[i] + g.linesY[i + 1]) * 0.5f;
+                float gd = Math.abs(b.cy() - gapY);
+                if (gd < bestDistance) {
+                    bestDistance = gd;
+                    bestIndex = i * 2 + 1;
+                }
+            }
+        }
+
+        if (bestIndex < 0) {
+            return Math.round((g.linesY[4] - b.cy()) / Math.max(1f, halfStep));
+        }
+
+        boolean lineCandidate = (bestIndex % 2 == 0);
+        int lineIdx = bestIndex / 2;
+        if (lineCandidate && hasBlackOnBothSidesOfLine(binaryMask, b, g.linesY[lineIdx], g.spacing, staffSpacing)) {
+            return 8 - bestIndex;
+        }
+
+        if (lineCandidate) {
+            int preferGapIdx = chooseNearestGapIndexForLine(lineIdx, b.cy(), g);
+            return 8 - (preferGapIdx * 2 + 1);
+        }
+
+        return 8 - bestIndex;
+    }
+
+    private int chooseNearestGapIndexForLine(int lineIdx, float cy, StaffGroup g) {
+        if (lineIdx <= 0) return 0;
+        if (lineIdx >= 4) return 3;
+        float upperGapY = (g.linesY[lineIdx - 1] + g.linesY[lineIdx]) * 0.5f;
+        float lowerGapY = (g.linesY[lineIdx] + g.linesY[lineIdx + 1]) * 0.5f;
+        return Math.abs(cy - upperGapY) <= Math.abs(cy - lowerGapY) ? (lineIdx - 1) : lineIdx;
+    }
+
+    private boolean hasBlackOnBothSidesOfLine(Mat binaryMask, Blob b, float lineY, float spacing, int staffSpacing) {
+        if (binaryMask == null || binaryMask.empty()) {
+            return false;
+        }
+        int y = Math.max(1, Math.min(binaryMask.rows() - 2, Math.round(lineY)));
+        int interline = Math.max(2, Math.round(Math.max(spacing, staffSpacing)));
+        int corridorHalfH = Math.max(1, interline / 2);
+        int corridorWidth = Math.max(3, interline);
+        int x0 = Math.max(0, Math.round(b.cx()) - corridorWidth / 2);
+        int x1 = Math.min(binaryMask.cols() - 1, Math.round(b.cx()) + corridorWidth / 2);
+
+        int yTop = Math.max(0, y - corridorHalfH);
+        int yBottom = Math.min(binaryMask.rows() - 1, y + corridorHalfH);
+        int minBodyHeight = Math.max(1, Math.round(interline * 0.25f));
+
+        boolean upperBody = hasLargeBlackBody(binaryMask, x0, x1, yTop, y - 1, minBodyHeight);
+        boolean lowerBody = hasLargeBlackBody(binaryMask, x0, x1, y + 1, yBottom, minBodyHeight);
+        return upperBody && lowerBody;
+    }
+
+    private boolean hasLargeBlackBody(Mat mask,
+                                      int x0,
+                                      int x1,
+                                      int y0,
+                                      int y1,
+                                      int minBodyHeight) {
+        if (y1 < y0 || x1 < x0) return false;
+        int width = x1 - x0 + 1;
+        int minRowHits = Math.max(1, width / 6);
+        int run = 0;
+        int bestRun = 0;
+        for (int y = y0; y <= y1; y++) {
+            int dark = 0;
+            for (int x = x0; x <= x1; x++) {
+                double[] px = mask.get(y, x);
+                if (px != null && px.length > 0 && px[0] > 0) {
+                    dark++;
+                }
+            }
+            if (dark >= minRowHits) {
+                run++;
+                if (run > bestRun) bestRun = run;
+            } else {
+                run = 0;
+            }
+        }
+        return bestRun >= minBodyHeight;
+    }
 
     private List<Blob> sortNoteHeadsReadingOrder(List<Blob> noteHeads, final List<StaffGroup> groups) {
         List<Blob> ordered = new ArrayList<Blob>(noteHeads);
