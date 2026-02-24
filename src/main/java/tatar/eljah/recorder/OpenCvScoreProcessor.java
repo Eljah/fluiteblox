@@ -1349,19 +1349,29 @@ public class OpenCvScoreProcessor {
         }
 
         if (lineCandidate) {
-            int preferGapIdx = chooseNearestGapIndexForLine(lineIdx, b.cy(), g);
-            return 8 - (preferGapIdx * 2 + 1);
+            int preferGapPosIndex = chooseNearestGapPositionIndexForLine(lineIdx, b.cy(), g);
+            return 8 - preferGapPosIndex;
         }
 
         return 8 - bestIndex;
     }
 
-    private int chooseNearestGapIndexForLine(int lineIdx, float cy, StaffGroup g) {
-        if (lineIdx <= 0) return 0;
-        if (lineIdx >= 4) return 3;
+    private int chooseNearestGapPositionIndexForLine(int lineIdx, float cy, StaffGroup g) {
+        if (lineIdx <= 0) {
+            float topLineY = g.linesY[0];
+            // For edge ledger notes above the top line keep the outer gap index (-1), not an interior gap.
+            return cy < topLineY ? -1 : 1;
+        }
+        if (lineIdx >= 4) {
+            float bottomLineY = g.linesY[4];
+            // For edge ledger notes below the bottom line keep the outer gap index (9), not an interior gap.
+            return cy > bottomLineY ? 9 : 7;
+        }
         float upperGapY = (g.linesY[lineIdx - 1] + g.linesY[lineIdx]) * 0.5f;
         float lowerGapY = (g.linesY[lineIdx] + g.linesY[lineIdx + 1]) * 0.5f;
-        return Math.abs(cy - upperGapY) <= Math.abs(cy - lowerGapY) ? (lineIdx - 1) : lineIdx;
+        int upperGapPosIndex = (lineIdx - 1) * 2 + 1;
+        int lowerGapPosIndex = lineIdx * 2 + 1;
+        return Math.abs(cy - upperGapY) <= Math.abs(cy - lowerGapY) ? upperGapPosIndex : lowerGapPosIndex;
     }
 
     private boolean hasBlackOnBothSidesOfLine(Mat binaryMask, Blob b, float lineY, float spacing, int staffSpacing) {
