@@ -21,6 +21,7 @@ import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.FrameLayout;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -45,6 +46,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private Thread processingThread;
     private int processingToken;
     private LinearLayout staffSlidersLayout;
+    private FrameLayout processingMask;
     private final ArrayList<Float> perStaffFilterStrength = new ArrayList<Float>();
     private final ArrayList<SeekBar> perStaffSeekBars = new ArrayList<SeekBar>();
 
@@ -68,6 +70,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         noiseValueText = findViewById(R.id.text_noise_value);
         notesOverlay = findViewById(R.id.image_notes_overlay);
         staffSlidersLayout = findViewById(R.id.layout_staff_sliders);
+        processingMask = findViewById(R.id.layout_processing_mask);
         SeekBar thresholdSeek = findViewById(R.id.seek_threshold);
         SeekBar noiseSeek = findViewById(R.id.seek_noise);
 
@@ -213,6 +216,8 @@ public class CaptureSheetActivity extends AppCompatActivity {
             if (bmp != null) {
                 capturedBitmap = bmp;
                 sourceBitmapForProcessing = bmp;
+                resetPerImageState();
+                ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(bmp);
                 rerunProcessing();
             }
         } else if (requestCode == REQ_PICK_IMAGE && resultCode == RESULT_OK && data != null && data.getData() != null) {
@@ -222,6 +227,8 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 if (bmp != null) {
                     capturedBitmap = bmp;
                     sourceBitmapForProcessing = bmp;
+                    resetPerImageState();
+                    ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(bmp);
                     rerunProcessing();
                 } else {
                     Toast.makeText(this, R.string.capture_gallery_load_failed, Toast.LENGTH_SHORT).show();
@@ -294,6 +301,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         if (bmp == null) {
             return;
         }
+        setProcessingBusy(true);
         final OpenCvScoreProcessor.ProcessingOptions options = currentOptions();
         final int token = ++processingToken;
         Thread previous = processingThread;
@@ -319,6 +327,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                             notesOverlay.setRecognizedNotes(result.piece.notes);
                             notesOverlay.setStaffCorridors(result.staffCorridors);
                             syncStaffSliders(result);
+                            setProcessingBusy(false);
                             analysisText.setText(getString(R.string.capture_analysis_template,
                                     result.perpendicularScore,
                                     result.staffRows,
@@ -340,6 +349,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                             if (isFinishing() || token != processingToken) {
                                 return;
                             }
+                            setProcessingBusy(false);
                             Toast.makeText(CaptureSheetActivity.this, R.string.capture_gallery_load_failed, Toast.LENGTH_SHORT).show();
                             analysisText.setText(t.getClass().getSimpleName());
                         }
@@ -506,6 +516,23 @@ public class CaptureSheetActivity extends AppCompatActivity {
             });
             staffSlidersLayout.addView(seek);
             perStaffSeekBars.add(seek);
+        }
+    }
+
+
+    private void resetPerImageState() {
+        latestResult = null;
+        perStaffFilterStrength.clear();
+        perStaffSeekBars.clear();
+        if (staffSlidersLayout != null) {
+            staffSlidersLayout.removeAllViews();
+        }
+        analysisText.setText(getString(R.string.capture_waiting));
+    }
+
+    private void setProcessingBusy(boolean busy) {
+        if (processingMask != null) {
+            processingMask.setVisibility(busy ? View.VISIBLE : View.GONE);
         }
     }
 

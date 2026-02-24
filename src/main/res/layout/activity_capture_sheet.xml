@@ -53,6 +53,21 @@
                 android:id="@+id/image_notes_overlay"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
+
+            <FrameLayout
+                android:id="@+id/layout_processing_mask"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#80000000"
+                android:visibility="gone"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ProgressBar
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="center" />
+            </FrameLayout>
         </FrameLayout>
 
         <TextView
