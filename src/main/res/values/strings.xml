@@ -90,6 +90,9 @@
     <string name="play_panorama_back_to_nav">Назад к навигации</string>
     <string name="play_panorama_no_actual">нет данных</string>
     <string name="play_panorama_detail_template">Нота #%1$d, сыграно: %2$s</string>
+    <string name="play_panorama_extra_detail_template">Ожидалось: %1$s\nДлительность: %2$s\nОшибка длительности: %3$s</string>
+    <string name="play_panorama_yes">да</string>
+    <string name="play_panorama_no">нет</string>
 
 
     <string name="achievements_title">Достижения по произведениям</string>

@@ -49,6 +49,7 @@ public class ScorePlayActivity extends AppCompatActivity {
     private LinearLayout panoramaNavMenu;
     private TextView panoramaNoteText;
     private TextView panoramaDetailText;
+    private TextView panoramaDetailExtraText;
     private AudioManager audioManager;
     private int panoramaSelectedIndex = -1;
     private boolean panoramaDetailsMode;
@@ -98,6 +99,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         panoramaNavMenu = findViewById(R.id.panorama_nav_menu);
         panoramaNoteText = findViewById(R.id.text_panorama_note);
         panoramaDetailText = findViewById(R.id.text_panorama_detail);
+        panoramaDetailExtraText = findViewById(R.id.text_panorama_detail_extra);
         audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
 
         setupPanoramaControls();
@@ -264,6 +266,23 @@ public class ScorePlayActivity extends AppCompatActivity {
             actual = toEuropeanLabelFromFull(actual);
         }
         panoramaDetailText.setText(getString(R.string.play_panorama_detail_template, panoramaSelectedIndex + 1, actual));
+
+        boolean durationMismatch = overlayView.isDurationMismatch(panoramaSelectedIndex);
+        String durationLabel = durationLabelForPanorama(selected.duration);
+        String extraDetail = getString(
+                R.string.play_panorama_extra_detail_template,
+                selected.fullName(),
+                durationLabel,
+                durationMismatch ? getString(R.string.play_panorama_yes) : getString(R.string.play_panorama_no));
+        panoramaDetailExtraText.setText(extraDetail);
+    }
+
+    private String durationLabelForPanorama(String duration) {
+        if ("whole".equals(duration)) return getString(R.string.hint_duration_whole);
+        if ("half".equals(duration)) return getString(R.string.hint_duration_half);
+        if ("eighth".equals(duration)) return getString(R.string.hint_duration_eighth);
+        if ("16th".equals(duration)) return getString(R.string.hint_duration_sixteenth);
+        return getString(R.string.hint_duration_quarter);
     }
 
     private void updatePanoramaMenuState() {
@@ -273,6 +292,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         detailsButton.setVisibility(panoramaDetailsMode ? View.GONE : View.VISIBLE);
         backToNavButton.setVisibility(panoramaDetailsMode ? View.VISIBLE : View.GONE);
         panoramaDetailText.setVisibility(View.VISIBLE);
+        panoramaDetailExtraText.setVisibility(panoramaDetailsMode ? View.VISIBLE : View.GONE);
     }
 
     @Override
