@@ -84,6 +84,12 @@
     <string name="play_restarted">Прогресс сброшен. Начинайте с первой ноты.</string>
     <string name="play_simplified_mode">Упрощенный режим (#/b = та же нота)</string>
     <string name="play_header_with_fingering">Fluiteblox — %1$s</string>
+    <string name="play_panorama_up">Вверх</string>
+    <string name="play_panorama_down">Вниз</string>
+    <string name="play_panorama_show_details">Показать детали</string>
+    <string name="play_panorama_back_to_nav">Назад к навигации</string>
+    <string name="play_panorama_no_actual">нет данных</string>
+    <string name="play_panorama_detail_template">Нота #%1$d, сыграно: %2$s</string>
 
 
     <string name="achievements_title">Достижения по произведениям</string>
