@@ -63,6 +63,8 @@ public class RecognitionOverlayView extends View {
     private float lastTapNormY = -1f;
     private boolean popupVisible;
     private final List<PopupItem> popupItems = new ArrayList<PopupItem>();
+    private float popupAnchorX;
+    private float popupAnchorY;
 
     public enum InteractionMode { EDIT, PAN_ONLY }
 
@@ -232,6 +234,8 @@ public class RecognitionOverlayView extends View {
 
     private void buildPopupItems(float cx, float cy, boolean hasNote) {
         popupItems.clear();
+        popupAnchorX = cx;
+        popupAnchorY = cy;
         float w = 128f;
         float h = 54f;
         float gap = 8f;
@@ -239,7 +243,11 @@ public class RecognitionOverlayView extends View {
         String[] labels;
         PopupAction[] actions;
         if (hasNote) {
-            labels = new String[]{"Del", "Dur", "Up", "Down"};
+            String durationLabel = "Dur";
+            if (selectedIndex >= 0 && selectedIndex < notes.size()) {
+                durationLabel = "Dur: " + shortDurationLabel(notes.get(selectedIndex).duration);
+            }
+            labels = new String[]{"Del", durationLabel, "Up", "Down"};
             actions = new PopupAction[]{PopupAction.DELETE, PopupAction.DURATION, PopupAction.MOVE_UP, PopupAction.MOVE_DOWN};
         } else {
             labels = new String[]{"+1/4", "+1/2", "+1/8", "+Up", "+Down"};
@@ -255,12 +263,27 @@ public class RecognitionOverlayView extends View {
         }
     }
 
+    private String shortDurationLabel(String duration) {
+        if ("whole".equals(duration)) return "1";
+        if ("half".equals(duration)) return "1/2";
+        if ("quarter".equals(duration)) return "1/4";
+        if ("eighth".equals(duration)) return "1/8";
+        if ("sixteenth".equals(duration) || "16th".equals(duration)) return "1/16";
+        return "?";
+    }
+
     private boolean handlePopupTap(float x, float y) {
         for (PopupItem item : popupItems) {
             if (item.rect.contains(x, y)) {
-                applyPopupAction(item.action);
-                popupVisible = false;
-                popupItems.clear();
+                PopupAction action = item.action;
+                applyPopupAction(action);
+                if (action == PopupAction.DURATION && selectedIndex >= 0 && selectedIndex < notes.size()) {
+                    buildPopupItems(popupAnchorX, popupAnchorY, true);
+                    popupVisible = !popupItems.isEmpty();
+                } else {
+                    popupVisible = false;
+                    popupItems.clear();
+                }
                 invalidate();
                 return true;
             }

@@ -81,6 +81,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         mainScroll = findViewById(R.id.layout_main_scroll);
         notesOverlay.setUnderlayView(preview);
         panoramaOverlay.setUnderlayView(panoramaPreview);
+        notesOverlay.setInteractionMode(RecognitionOverlayView.InteractionMode.PAN_ONLY);
         panoramaOverlay.setInteractionMode(RecognitionOverlayView.InteractionMode.EDIT);
         notesOverlay.setOnNotesEditedListener(new RecognitionOverlayView.OnNotesEditedListener() {
             @Override
