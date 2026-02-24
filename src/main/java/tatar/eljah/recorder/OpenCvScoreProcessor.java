@@ -55,15 +55,89 @@ public class OpenCvScoreProcessor {
         public final int thresholdOffset;
         public final int symbolNeighborhoodHits;
         public final float noiseLevel;
+        public final boolean skipAdaptiveBinarization;
+        public final boolean skipMorphNoiseSuppression;
+        public final float noteMinAreaFactor;
+        public final float noteMaxAreaFactor;
+        public final float noteMinFill;
+        public final float noteMaxFill;
+        public final float noteMinCircularity;
+        public final boolean recallFirstMode;
+        public final float analyticalFilterStrength;
 
         public ProcessingOptions(int thresholdOffset, int symbolNeighborhoodHits, float noiseLevel) {
+            this(thresholdOffset, symbolNeighborhoodHits, noiseLevel,
+                    false, false,
+                    0.6f, 4.0f,
+                    0.18f, 0.9f,
+                    0.32f,
+                    false, 0.55f);
+        }
+
+        public ProcessingOptions(int thresholdOffset,
+                                 int symbolNeighborhoodHits,
+                                 float noiseLevel,
+                                 boolean skipAdaptiveBinarization,
+                                 boolean skipMorphNoiseSuppression,
+                                 float noteMinAreaFactor,
+                                 float noteMaxAreaFactor,
+                                 float noteMinFill,
+                                 float noteMaxFill,
+                                 float noteMinCircularity,
+                                 boolean recallFirstMode,
+                                 float analyticalFilterStrength) {
             this.thresholdOffset = Math.max(1, Math.min(32, thresholdOffset));
             this.symbolNeighborhoodHits = Math.max(1, Math.min(9, symbolNeighborhoodHits));
             this.noiseLevel = Math.max(0f, Math.min(1f, noiseLevel));
+            this.skipAdaptiveBinarization = skipAdaptiveBinarization;
+            this.skipMorphNoiseSuppression = skipMorphNoiseSuppression;
+            this.noteMinAreaFactor = Math.max(0.25f, Math.min(2.2f, noteMinAreaFactor));
+            this.noteMaxAreaFactor = Math.max(1.5f, Math.min(8.0f, noteMaxAreaFactor));
+            this.noteMinFill = Math.max(0.08f, Math.min(0.55f, noteMinFill));
+            this.noteMaxFill = Math.max(0.55f, Math.min(0.98f, noteMaxFill));
+            this.noteMinCircularity = Math.max(0.08f, Math.min(0.8f, noteMinCircularity));
+            this.recallFirstMode = recallFirstMode;
+            this.analyticalFilterStrength = Math.max(0.0f, Math.min(1.0f, analyticalFilterStrength));
         }
 
         public static ProcessingOptions defaults() {
             return new ProcessingOptions(7, 3, 0.5f);
+        }
+    }
+
+    public static class NoteDetectionDiagnostics {
+        public int totalContours;
+        public int rejectedByArea;
+        public int rejectedByBounds;
+        public int rejectedBySize;
+        public int rejectedByAspect;
+        public int rejectedByFill;
+        public int rejectedByPerimeter;
+        public int rejectedByCircularity;
+        public int rejectedByStaffPosition;
+        public int keptBeforeDedupe;
+        public int removedByCenterDistanceDedupe;
+        public int removedBySlotDedupe;
+        public int rescuedByGapSizedBlob;
+        public int filteredAsNonNoteByAnalyticalPass;
+        public int finalKept;
+
+        public String summary() {
+            return "contours=" + totalContours
+                    + ", reject(area=" + rejectedByArea
+                    + ", bounds=" + rejectedByBounds
+                    + ", size=" + rejectedBySize
+                    + ", aspect=" + rejectedByAspect
+                    + ", fill=" + rejectedByFill
+                    + ", perimeter=" + rejectedByPerimeter
+                    + ", circularity=" + rejectedByCircularity
+                    + ", staffPos=" + rejectedByStaffPosition + ")"
+                    + ", kept(beforeDedupe=" + keptBeforeDedupe
+                    + ", final=" + finalKept
+                    + ", dedupeCenter=" + removedByCenterDistanceDedupe
+                    + ", dedupeSlot=" + removedBySlotDedupe
+                    + ", rescuedGapBlob=" + rescuedByGapSizedBlob
+                    + ", analyticalFiltered=" + filteredAsNonNoteByAnalyticalPass + ")";
         }
     }
 
@@ -77,13 +151,14 @@ public class OpenCvScoreProcessor {
         public final String processingMode;
         public final boolean openCvUsed;
         public final String openCvStackTrace;
+        public final NoteDetectionDiagnostics noteDiagnostics;
 
         public ProcessingResult(ScorePiece piece,
                                 int staffRows,
                                 int barlines,
                                 int perpendicularScore,
                                 Bitmap debugOverlay) {
-            this(piece, staffRows, barlines, perpendicularScore, debugOverlay, new ArrayList<StaffCorridor>(), "legacy", false, null);
+            this(piece, staffRows, barlines, perpendicularScore, debugOverlay, new ArrayList<StaffCorridor>(), "legacy", false, null, null);
         }
 
         public ProcessingResult(ScorePiece piece,
@@ -92,7 +167,7 @@ public class OpenCvScoreProcessor {
                                 int perpendicularScore,
                                 Bitmap debugOverlay,
                                 List<StaffCorridor> staffCorridors) {
-            this(piece, staffRows, barlines, perpendicularScore, debugOverlay, staffCorridors, "opencv", true, null);
+            this(piece, staffRows, barlines, perpendicularScore, debugOverlay, staffCorridors, "opencv", true, null, null);
         }
 
         public ProcessingResult(ScorePiece piece,
@@ -103,7 +178,8 @@ public class OpenCvScoreProcessor {
                                 List<StaffCorridor> staffCorridors,
                                 String processingMode,
                                 boolean openCvUsed,
-                                String openCvStackTrace) {
+                                String openCvStackTrace,
+                                NoteDetectionDiagnostics noteDiagnostics) {
             this.piece = piece;
             this.staffRows = staffRows;
             this.barlines = barlines;
@@ -113,6 +189,7 @@ public class OpenCvScoreProcessor {
             this.processingMode = processingMode == null ? "legacy" : processingMode;
             this.openCvUsed = openCvUsed;
             this.openCvStackTrace = openCvStackTrace;
+            this.noteDiagnostics = noteDiagnostics;
         }
     }
 
@@ -245,7 +322,7 @@ public class OpenCvScoreProcessor {
         fillNotes(piece, noteHeads, staffSpacing, w, h);
 
         Bitmap debugOverlay = safeBuildDebugOverlay(binary, staffMask, symbolMask, w, h);
-        return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay, new ArrayList<StaffCorridor>(), "legacy", false, openCvStackTrace);
+        return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay, new ArrayList<StaffCorridor>(), "legacy", false, openCvStackTrace, null);
     }
 
     private ProcessingResult processWithOpenCv(int w, int h, int[] argb, String title, ProcessingOptions options) {
@@ -262,21 +339,25 @@ public class OpenCvScoreProcessor {
         try {
             gray = bitmapToGrayMat(argb, w, h);
 
-            contrast = new Mat();
-            clahe = Imgproc.createCLAHE(2.4, new Size(8, 8));
-            clahe.apply(gray, contrast);
-
-            norm = new Mat();
-            Imgproc.medianBlur(contrast, norm, 3);
-
             binary = new Mat();
-            int blockSize = Math.max(15, (Math.min(w, h) / 20) | 1);
-            double c = options.thresholdOffset;
-            Imgproc.adaptiveThreshold(norm, binary, 255,
-                    Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
-                    Imgproc.THRESH_BINARY_INV,
-                    blockSize,
-                    c);
+            if (options.skipAdaptiveBinarization) {
+                Imgproc.threshold(gray, binary, 0, 255, Imgproc.THRESH_BINARY_INV + Imgproc.THRESH_OTSU);
+            } else {
+                contrast = new Mat();
+                clahe = Imgproc.createCLAHE(2.4, new Size(8, 8));
+                clahe.apply(gray, contrast);
+
+                norm = new Mat();
+                Imgproc.medianBlur(contrast, norm, 3);
+
+                int blockSize = Math.max(15, (Math.min(w, h) / 20) | 1);
+                double c = options.thresholdOffset;
+                Imgproc.adaptiveThreshold(norm, binary, 255,
+                        Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+                        Imgproc.THRESH_BINARY_INV,
+                        blockSize,
+                        c);
+            }
 
             int staffSpacing = estimateStaffSpacingOpenCv(binary);
             staffMask = detectStaffMaskOpenCv(binary, staffSpacing);
@@ -285,13 +366,16 @@ public class OpenCvScoreProcessor {
             symbolMask = new Mat();
             Core.subtract(binary, staffMask, symbolMask);
 
-            int morphK = options.noiseLevel >= 0.66f ? 3 : 2;
-            kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(morphK, morphK));
-            Imgproc.morphologyEx(symbolMask, symbolMask, Imgproc.MORPH_OPEN, kernel);
-            Imgproc.morphologyEx(symbolMask, symbolMask, Imgproc.MORPH_CLOSE, kernel);
+            if (!options.skipMorphNoiseSuppression) {
+                int morphK = options.noiseLevel >= 0.66f ? 3 : 2;
+                kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(morphK, morphK));
+                Imgproc.morphologyEx(symbolMask, symbolMask, Imgproc.MORPH_OPEN, kernel);
+                Imgproc.morphologyEx(symbolMask, symbolMask, Imgproc.MORPH_CLOSE, kernel);
+            }
             applyStaffCorridorMask(symbolMask, staffGroups, w, h);
 
-            List<Blob> noteHeads = detectNoteHeadsOpenCv(symbolMask, w, h, staffSpacing, options.noiseLevel, staffGroups);
+            NoteDetectionDiagnostics noteDiagnostics = new NoteDetectionDiagnostics();
+            List<Blob> noteHeads = detectNoteHeadsOpenCv(symbolMask, w, h, staffSpacing, options, staffGroups, noteDiagnostics);
             fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, staffMask, staffSpacing, w, h, staffGroups);
 
             int staffRows = Math.max(1, Math.min(10, staffGroups.size()));
@@ -300,7 +384,7 @@ public class OpenCvScoreProcessor {
             List<StaffCorridor> corridors = buildStaffCorridors(staffGroups, w, h);
 
             Bitmap debugOverlay = safeBuildDebugOverlayFromMats(binary, staffMask, symbolMask, w, h);
-            return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay, corridors);
+            return new ProcessingResult(piece, staffRows, barlines, perpendicular, debugOverlay, corridors, "opencv", true, null, noteDiagnostics);
         } finally {
             if (gray != null) gray.release();
             if (contrast != null) contrast.release();
@@ -887,7 +971,7 @@ public class OpenCvScoreProcessor {
         return out;
     }
 
-    private List<Blob> detectNoteHeadsOpenCv(Mat symbolMask, int w, int h, int staffSpacing, float noiseLevel, List<StaffGroup> groups) {
+    private List<Blob> detectNoteHeadsOpenCv(Mat symbolMask, int w, int h, int staffSpacing, ProcessingOptions options, List<StaffGroup> groups, NoteDetectionDiagnostics diagnostics) {
         List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
         Mat hierarchy = new Mat();
         Mat contoursInput = symbolMask.clone();
@@ -895,53 +979,75 @@ public class OpenCvScoreProcessor {
             Imgproc.findContours(contoursInput, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
 
         List<Blob> out = new ArrayList<Blob>();
-        int minArea = Math.max(8, (int) ((staffSpacing * staffSpacing / 8f) * (0.6f + noiseLevel * 1.2f)));
-        int maxArea = Math.max(1200, staffSpacing * staffSpacing * 4);
-        float minSize = Math.max(3f, staffSpacing * 0.35f);
-        float maxSize = Math.max(10f, staffSpacing * 2.4f);
+        if (diagnostics != null) diagnostics.totalContours = contours.size();
+        float recallScale = options.recallFirstMode ? 0.75f : 1.0f;
+        int minArea = Math.max(6, (int) ((staffSpacing * staffSpacing / 8f) * options.noteMinAreaFactor * recallScale));
+        int maxArea = Math.max(1200, (int) (staffSpacing * staffSpacing * options.noteMaxAreaFactor * (options.recallFirstMode ? 1.25f : 1.0f)));
+        float minSize = Math.max(3f, staffSpacing * (options.recallFirstMode ? 0.28f : 0.35f));
+        float maxSize = Math.max(10f, staffSpacing * (options.recallFirstMode ? 2.9f : 2.4f));
         for (MatOfPoint c : contours) {
             double area = Imgproc.contourArea(c);
-            if (area < minArea || area > maxArea) {
-                c.release();
-                continue;
-            }
             Rect r = Imgproc.boundingRect(c);
+            float cx = r.x + r.width * 0.5f;
+            float cy = r.y + r.height * 0.5f;
+
+            boolean rejected = false;
+            boolean areaRejected = area < minArea || area > maxArea;
+            if (areaRejected) {
+                if (diagnostics != null) diagnostics.rejectedByArea++;
+                rejected = true;
+            }
             if (r.width < 3 || r.height < 3 || r.width > w / 6 || r.height > h / 5) {
-                c.release();
-                continue;
+                if (diagnostics != null) diagnostics.rejectedByBounds++;
+                rejected = true;
             }
             if (r.width < minSize || r.height < minSize || r.width > maxSize || r.height > maxSize) {
-                c.release();
-                continue;
+                if (diagnostics != null) diagnostics.rejectedBySize++;
+                rejected = true;
             }
-            float ratio = (float) r.width / (float) r.height;
-            if (ratio < 0.5f || ratio > 2.0f) {
-                c.release();
-                continue;
+
+            float ratio = (float) r.width / (float) Math.max(1, r.height);
+            float minRatio = options.recallFirstMode ? 0.35f : 0.5f;
+            float maxRatio = options.recallFirstMode ? 2.8f : 2.0f;
+            if (ratio < minRatio || ratio > maxRatio) {
+                if (diagnostics != null) diagnostics.rejectedByAspect++;
+                rejected = true;
             }
+
             float fill = (float) (area / Math.max(1.0, r.width * r.height));
-            if (fill < 0.18f || fill > 0.9f) {
-                c.release();
-                continue;
+            if (fill < options.noteMinFill || fill > options.noteMaxFill) {
+                if (diagnostics != null) diagnostics.rejectedByFill++;
+                rejected = true;
             }
+
             org.opencv.core.MatOfPoint2f curve = new org.opencv.core.MatOfPoint2f(c.toArray());
             double perimeter = Imgproc.arcLength(curve, true);
             curve.release();
             if (perimeter <= 0.0) {
-                c.release();
-                continue;
+                if (diagnostics != null) diagnostics.rejectedByPerimeter++;
+                rejected = true;
             }
-            double circularity = (4.0 * Math.PI * area) / (perimeter * perimeter);
-            if (circularity < 0.32 || circularity > 1.5) {
-                c.release();
-                continue;
+
+            double circularity = perimeter <= 0.0 ? 0.0 : (4.0 * Math.PI * area) / (perimeter * perimeter);
+            float minCircularity = options.recallFirstMode ? Math.max(0.08f, options.noteMinCircularity * 0.65f) : options.noteMinCircularity;
+            if (circularity < minCircularity || circularity > 1.5) {
+                if (diagnostics != null) diagnostics.rejectedByCircularity++;
+                rejected = true;
             }
-            float cx = r.x + r.width * 0.5f;
-            float cy = r.y + r.height * 0.5f;
+
             if (!isAllowedNotePosition(cx, cy, groups)) {
+                if (diagnostics != null) diagnostics.rejectedByStaffPosition++;
+                rejected = true;
+            }
+            if (rejected && isGapSizedBlobCandidate(r, area, fill, cx, cy, staffSpacing, groups)) {
+                rejected = false;
+                if (diagnostics != null) diagnostics.rescuedByGapSizedBlob++;
+            }
+            if (rejected) {
                 c.release();
                 continue;
             }
+
             Blob b = new Blob(r.x, r.y);
             b.maxX = r.x + r.width - 1;
             b.maxY = r.y + r.height - 1;
@@ -958,14 +1064,113 @@ public class OpenCvScoreProcessor {
                 return a.minX - b.minX;
             }
         });
-            return dedupeNoteHeads(out, groups, staffSpacing);
+            if (diagnostics != null) diagnostics.keptBeforeDedupe = out.size();
+            List<Blob> deduped = dedupeNoteHeads(out, groups, staffSpacing, diagnostics);
+            return filterAnalyticallyNonNoteLike(deduped, staffSpacing, groups, options, diagnostics);
         } finally {
             contoursInput.release();
             hierarchy.release();
         }
     }
 
-    private List<Blob> dedupeNoteHeads(List<Blob> in, List<StaffGroup> groups, int staffSpacing) {
+
+    private boolean isGapSizedBlobCandidate(Rect r,
+                                            double area,
+                                            float fill,
+                                            float cx,
+                                            float cy,
+                                            int staffSpacing,
+                                            List<StaffGroup> groups) {
+        float minDim = Math.max(3f, staffSpacing * 0.45f);
+        float maxDim = Math.max(8f, staffSpacing * 1.90f);
+        if (r.width < minDim || r.width > maxDim || r.height < minDim || r.height > maxDim) {
+            return false;
+        }
+        float ratio = (float) r.width / (float) Math.max(1, r.height);
+        if (ratio < 0.40f || ratio > 2.60f) {
+            return false;
+        }
+        float minArea = Math.max(6f, staffSpacing * staffSpacing * 0.12f);
+        float maxArea = Math.max(36f, staffSpacing * staffSpacing * 2.80f);
+        if (area < minArea || area > maxArea) {
+            return false;
+        }
+        if (fill < 0.08f || fill > 0.98f) {
+            return false;
+        }
+        return isAllowedNotePositionRelaxed(cx, cy, groups);
+    }
+
+    private boolean isAllowedNotePositionRelaxed(float cx, float cy, List<StaffGroup> groups) {
+        StaffGroup g = nearestGroupForPoint(cx, cy, groups);
+        if (g == null) return false;
+        float xMargin = Math.max(2f, g.spacing * 0.9f);
+        if (cx < g.xStart + xMargin || cx > g.xEnd - xMargin) return false;
+        float minY = g.top() - g.spacing * 2.2f;
+        float maxY = g.bottom() + g.spacing * 2.2f;
+        if (cy < minY || cy > maxY) return false;
+
+        float halfStep = g.spacing / 2f;
+        float nearest = Float.MAX_VALUE;
+        for (int i = 0; i < 5; i++) {
+            nearest = Math.min(nearest, Math.abs(cy - g.linesY[i]));
+        }
+        for (int i = 0; i < 4; i++) {
+            float gapY = (g.linesY[i] + g.linesY[i + 1]) * 0.5f;
+            nearest = Math.min(nearest, Math.abs(cy - gapY));
+        }
+        return nearest <= Math.max(2f, halfStep * 1.9f);
+    }
+
+
+    private List<Blob> filterAnalyticallyNonNoteLike(List<Blob> in,
+                                                     int staffSpacing,
+                                                     List<StaffGroup> groups,
+                                                     ProcessingOptions options,
+                                                     NoteDetectionDiagnostics diagnostics) {
+        if (in.isEmpty()) return in;
+        List<Blob> out = new ArrayList<Blob>();
+        float minScore = options.recallFirstMode ? 3.6f : 4.0f;
+        minScore += (options.analyticalFilterStrength - 0.55f) * 1.8f;
+
+        for (Blob b : in) {
+            float score = 0f;
+            float bw = b.width();
+            float bh = b.height();
+            float ratio = bw / Math.max(1f, bh);
+            float areaNorm = b.area / Math.max(1f, (float) (staffSpacing * staffSpacing));
+            float nearestStaffDist = nearestStaffStepDistance(b.cx(), b.cy(), groups, staffSpacing);
+
+            if (ratio >= 0.45f && ratio <= 2.4f) score += 1f;
+            if (areaNorm >= 0.10f && areaNorm <= 2.8f) score += 1f;
+            if (Math.max(bw, bh) <= staffSpacing * 2.2f) score += 1f;
+            if (Math.min(bw, bh) >= Math.max(2f, staffSpacing * 0.30f)) score += 1f;
+            if (nearestStaffDist <= Math.max(2f, staffSpacing * 0.45f)) score += 1f;
+
+            boolean hardReject = ratio > 3.2f || ratio < 0.28f || areaNorm > 3.8f || areaNorm < 0.05f;
+            if (!hardReject && score >= minScore) {
+                out.add(b);
+            } else if (diagnostics != null) {
+                diagnostics.filteredAsNonNoteByAnalyticalPass++;
+            }
+        }
+        if (diagnostics != null) diagnostics.finalKept = out.size();
+        return out;
+    }
+
+    private float nearestStaffStepDistance(float cx, float cy, List<StaffGroup> groups, int staffSpacing) {
+        StaffGroup g = nearestGroupForPoint(cx, cy, groups);
+        if (g == null) return staffSpacing * 2f;
+        float nearest = Float.MAX_VALUE;
+        for (int i = 0; i < 5; i++) nearest = Math.min(nearest, Math.abs(cy - g.linesY[i]));
+        for (int i = 0; i < 4; i++) {
+            float gapY = (g.linesY[i] + g.linesY[i + 1]) * 0.5f;
+            nearest = Math.min(nearest, Math.abs(cy - gapY));
+        }
+        return nearest;
+    }
+
+    private List<Blob> dedupeNoteHeads(List<Blob> in, List<StaffGroup> groups, int staffSpacing, NoteDetectionDiagnostics diagnostics) {
         if (in.size() < 2) return in;
         List<Blob> sorted = new ArrayList<Blob>(in);
         Collections.sort(sorted, new Comparator<Blob>() {
@@ -986,6 +1191,7 @@ public class OpenCvScoreProcessor {
                 float dy = cy - k.cy();
                 if (Math.sqrt(dx * dx + dy * dy) < minCenterDist) {
                     overlap = true;
+                    if (diagnostics != null) diagnostics.removedByCenterDistanceDedupe++;
                     break;
                 }
             }
@@ -996,12 +1202,15 @@ public class OpenCvScoreProcessor {
         for (Blob b : keep) {
             StaffGroup g = nearestGroupForPoint(b.cx(), b.cy(), groups);
             int groupIdx = indexOfGroup(groups, g);
-            float slotW = Math.max(7f, staffSpacing * 1.25f);
+            float slotW = Math.max(5f, staffSpacing * 0.85f);
             int xSlot = Math.round(b.cx() / slotW);
             String key = groupIdx + ":" + xSlot;
             Blob prev = perSlot.get(key);
             if (prev == null || b.area > prev.area) {
+                if (prev != null && diagnostics != null) diagnostics.removedBySlotDedupe++;
                 perSlot.put(key, b);
+            } else if (diagnostics != null) {
+                diagnostics.removedBySlotDedupe++;
             }
         }
 
@@ -1013,6 +1222,7 @@ public class OpenCvScoreProcessor {
                 return a.minX - b.minX;
             }
         });
+        if (diagnostics != null) diagnostics.finalKept = out.size();
         return out;
     }
 
@@ -1033,9 +1243,10 @@ public class OpenCvScoreProcessor {
                                                int h,
                                                List<StaffGroup> groups) {
         if (noteHeads.isEmpty()) return;
+        List<Blob> orderedHeads = sortNoteHeadsReadingOrder(noteHeads, groups);
         int measureSize = 4;
-        for (int i = 0; i < noteHeads.size(); i++) {
-            Blob b = noteHeads.get(i);
+        for (int i = 0; i < orderedHeads.size(); i++) {
+            Blob b = orderedHeads.get(i);
             float xNorm = b.cx() / (float) Math.max(1, w - 1);
             float yNorm = b.cy() / (float) Math.max(1, h - 1);
             StaffGroup group = nearestGroupForPoint(b.cx(), b.cy(), groups);
@@ -1043,7 +1254,7 @@ public class OpenCvScoreProcessor {
             if (group != null) {
                 stepFromBottom = Math.round((group.linesY[4] - b.cy()) / (group.spacing / 2f));
             }
-            int midi = MusicNotation.midiFor("C", 4) + stepFromBottom;
+            int midi = midiForTrebleStaffStep(stepFromBottom);
             String noteName = noteNameForMidi(midi);
             int octave = octaveForMidi(midi);
 
@@ -1058,13 +1269,37 @@ public class OpenCvScoreProcessor {
         }
     }
 
+
+    private List<Blob> sortNoteHeadsReadingOrder(List<Blob> noteHeads, final List<StaffGroup> groups) {
+        List<Blob> ordered = new ArrayList<Blob>(noteHeads);
+        Collections.sort(ordered, new Comparator<Blob>() {
+            @Override
+            public int compare(Blob a, Blob b) {
+                StaffGroup ga = nearestGroupForPoint(a.cx(), a.cy(), groups);
+                StaffGroup gb = nearestGroupForPoint(b.cx(), b.cy(), groups);
+                int ia = indexOfGroup(groups, ga);
+                int ib = indexOfGroup(groups, gb);
+                if (ia < 0) ia = Integer.MAX_VALUE / 4;
+                if (ib < 0) ib = Integer.MAX_VALUE / 4;
+                if (ia != ib) {
+                    return ia - ib;
+                }
+                if (a.minX != b.minX) {
+                    return a.minX - b.minX;
+                }
+                return a.minY - b.minY;
+            }
+        });
+        return ordered;
+    }
+
     private boolean isAllowedNotePosition(float cx, float cy, List<StaffGroup> groups) {
         StaffGroup g = nearestGroupForPoint(cx, cy, groups);
         if (g == null) return false;
         float xMargin = Math.max(2f, g.spacing * 0.7f);
         if (cx < g.xStart + xMargin || cx > g.xEnd - xMargin) return false;
-        float minY = g.top() - g.spacing * 1.2f;
-        float maxY = g.bottom() + g.spacing * 1.2f;
+        float minY = g.top() - g.spacing * 1.6f;
+        float maxY = g.bottom() + g.spacing * 1.6f;
         if (cy < minY || cy > maxY) return false;
 
         float halfStep = g.spacing / 2f;
@@ -1087,7 +1322,7 @@ public class OpenCvScoreProcessor {
         nearest = Math.min(nearest, Math.abs(cy - below1));
         nearest = Math.min(nearest, Math.abs(cy - below2));
 
-        return nearest <= Math.max(2f, halfStep * 0.95f);
+        return nearest <= Math.max(2f, halfStep * 1.30f);
     }
 
     private StaffGroup nearestGroupFor(float cx, List<StaffGroup> groups) {
@@ -1125,6 +1360,16 @@ public class OpenCvScoreProcessor {
             }
         }
         return best;
+    }
+
+    private int midiForTrebleStaffStep(int stepFromBottom) {
+        String[] naturalCycle = new String[]{"C", "D", "E", "F", "G", "A", "B"};
+        int baseIndex = 2; // E
+        int noteIndex = baseIndex + stepFromBottom;
+        int octaveShift = Math.floorDiv(noteIndex, 7);
+        int idx = ((noteIndex % 7) + 7) % 7;
+        int octave = 4 + octaveShift;
+        return MusicNotation.midiFor(naturalCycle[idx], octave);
     }
 
     private String noteNameForMidi(int midi) {
