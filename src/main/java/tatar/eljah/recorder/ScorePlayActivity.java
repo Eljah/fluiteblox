@@ -1,7 +1,6 @@
 package tatar.eljah.recorder;
 
 import android.Manifest;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioManager;
@@ -15,9 +14,10 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.CheckBox;
-import android.widget.RadioButton;
+import android.widget.LinearLayout;
 import android.widget.RadioGroup;
 import android.widget.TextView;
+import android.widget.FrameLayout;
 
 import tatar.eljah.audio.AudioSettingsStore;
 import tatar.eljah.audio.PitchAnalyzer;
@@ -44,7 +44,15 @@ public class ScorePlayActivity extends AppCompatActivity {
 
     private TextView status;
     private PitchOverlayView overlayView;
+    private PitchOverlayView panoramaOverlayView;
+    private FrameLayout panoramaOverlayContainer;
+    private LinearLayout panoramaNavMenu;
+    private TextView panoramaNoteText;
+    private TextView panoramaDetailText;
+    private TextView panoramaDetailExtraText;
     private AudioManager audioManager;
+    private int panoramaSelectedIndex = -1;
+    private boolean panoramaDetailsMode;
 
     private volatile boolean midiPlaybackRequested;
     private Thread midiThread;
@@ -86,7 +94,15 @@ public class ScorePlayActivity extends AppCompatActivity {
 
         status = findViewById(R.id.text_status);
         overlayView = findViewById(R.id.pitch_overlay);
+        panoramaOverlayView = findViewById(R.id.pitch_overlay_panorama);
+        panoramaOverlayContainer = findViewById(R.id.panorama_overlay);
+        panoramaNavMenu = findViewById(R.id.panorama_nav_menu);
+        panoramaNoteText = findViewById(R.id.text_panorama_note);
+        panoramaDetailText = findViewById(R.id.text_panorama_detail);
+        panoramaDetailExtraText = findViewById(R.id.text_panorama_detail_extra);
         audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+
+        setupPanoramaControls();
 
         if (piece == null || piece.notes.isEmpty()) {
             status.setText(R.string.play_no_piece);
@@ -111,18 +127,7 @@ public class ScorePlayActivity extends AppCompatActivity {
         overlayView.setOnPlayedNoteClickListener(new PitchOverlayView.OnPlayedNoteClickListener() {
             @Override
             public void onPlayedNoteClick(int index, String expectedFullName, String actualFullName) {
-                Intent intent = new Intent(ScorePlayActivity.this, FingeringHintActivity.class);
-                intent.putExtra("expected", expectedFullName);
-                intent.putExtra("actual", actualFullName);
-                intent.putExtra("note_index", index + 1);
-                intent.putExtra("duration_mismatch", overlayView.isDurationMismatch(index));
-                if (piece != null && index >= 0 && index < piece.notes.size()) {
-                    intent.putExtra("expected_duration", piece.notes.get(index).duration);
-                    if (actualDurationMsByIndex != null && index < actualDurationMsByIndex.length && actualDurationMsByIndex[index] > 0L) {
-                        intent.putExtra("actual_duration_ms", actualDurationMsByIndex[index]);
-                    }
-                }
-                startActivity(intent);
+                openPanoramaContext(index);
             }
         });
 
@@ -170,6 +175,124 @@ public class ScorePlayActivity extends AppCompatActivity {
 
         overlayView.setMicMode(true);
         ensureMicListening();
+    }
+
+    private void setupPanoramaControls() {
+        Button closeButton = findViewById(R.id.btn_panorama_close);
+        Button upButton = findViewById(R.id.btn_panorama_up);
+        Button downButton = findViewById(R.id.btn_panorama_down);
+        final Button detailsButton = findViewById(R.id.btn_panorama_toggle_menu);
+        final Button backToNavButton = findViewById(R.id.btn_panorama_back_to_nav);
+
+        closeButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                closePanoramaContext();
+            }
+        });
+        upButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                shiftPanoramaSelection(-1);
+            }
+        });
+        downButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                shiftPanoramaSelection(1);
+            }
+        });
+        detailsButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                panoramaDetailsMode = true;
+                updatePanoramaMenuState();
+            }
+        });
+        backToNavButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                panoramaDetailsMode = false;
+                updatePanoramaMenuState();
+            }
+        });
+        updatePanoramaMenuState();
+    }
+
+    private void openPanoramaContext(int index) {
+        if (piece == null || piece.notes == null || piece.notes.isEmpty()) {
+            return;
+        }
+        panoramaOverlayContainer.setVisibility(View.VISIBLE);
+        panoramaOverlayView.setNotes(piece.notes);
+        panoramaDetailsMode = false;
+        panoramaSelectedIndex = Math.max(0, Math.min(piece.notes.size() - 1, index));
+        refreshPanoramaSelection();
+        updatePanoramaMenuState();
+    }
+
+    private void closePanoramaContext() {
+        panoramaOverlayContainer.setVisibility(View.GONE);
+        panoramaSelectedIndex = -1;
+        panoramaDetailsMode = false;
+    }
+
+    private void shiftPanoramaSelection(int delta) {
+        if (piece == null || piece.notes == null || piece.notes.isEmpty() || panoramaSelectedIndex < 0) {
+            return;
+        }
+        int nextIndex = panoramaSelectedIndex + delta;
+        if (nextIndex < 0 || nextIndex >= piece.notes.size()) {
+            return;
+        }
+        panoramaSelectedIndex = nextIndex;
+        refreshPanoramaSelection();
+    }
+
+    private void refreshPanoramaSelection() {
+        if (piece == null || panoramaSelectedIndex < 0 || panoramaSelectedIndex >= piece.notes.size()) {
+            return;
+        }
+        NoteEvent selected = piece.notes.get(panoramaSelectedIndex);
+        panoramaOverlayView.setPointer(panoramaSelectedIndex);
+        panoramaOverlayView.setFrequencies(expectedFrequencyFor(selected), 0f);
+
+        String expectedLabel = MusicNotation.toLocalizedLabel(this, selected.noteName, selected.octave);
+        panoramaNoteText.setText(expectedLabel);
+        String actual = overlayView.actualPitchFor(panoramaSelectedIndex);
+        if (actual == null || actual.isEmpty()) {
+            actual = getString(R.string.play_panorama_no_actual);
+        } else {
+            actual = toEuropeanLabelFromFull(actual);
+        }
+        panoramaDetailText.setText(getString(R.string.play_panorama_detail_template, panoramaSelectedIndex + 1, actual));
+
+        boolean durationMismatch = overlayView.isDurationMismatch(panoramaSelectedIndex);
+        String durationLabel = durationLabelForPanorama(selected.duration);
+        String extraDetail = getString(
+                R.string.play_panorama_extra_detail_template,
+                selected.fullName(),
+                durationLabel,
+                durationMismatch ? getString(R.string.play_panorama_yes) : getString(R.string.play_panorama_no));
+        panoramaDetailExtraText.setText(extraDetail);
+    }
+
+    private String durationLabelForPanorama(String duration) {
+        if ("whole".equals(duration)) return getString(R.string.hint_duration_whole);
+        if ("half".equals(duration)) return getString(R.string.hint_duration_half);
+        if ("eighth".equals(duration)) return getString(R.string.hint_duration_eighth);
+        if ("16th".equals(duration)) return getString(R.string.hint_duration_sixteenth);
+        return getString(R.string.hint_duration_quarter);
+    }
+
+    private void updatePanoramaMenuState() {
+        Button detailsButton = findViewById(R.id.btn_panorama_toggle_menu);
+        Button backToNavButton = findViewById(R.id.btn_panorama_back_to_nav);
+        panoramaNavMenu.setVisibility(panoramaDetailsMode ? View.GONE : View.VISIBLE);
+        detailsButton.setVisibility(panoramaDetailsMode ? View.GONE : View.VISIBLE);
+        backToNavButton.setVisibility(panoramaDetailsMode ? View.VISIBLE : View.GONE);
+        panoramaDetailText.setVisibility(View.VISIBLE);
+        panoramaDetailExtraText.setVisibility(panoramaDetailsMode ? View.VISIBLE : View.GONE);
     }
 
     @Override
@@ -878,6 +1001,15 @@ public class ScorePlayActivity extends AppCompatActivity {
                 status.setText(R.string.play_microphone_denied);
             }
         }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (panoramaOverlayContainer != null && panoramaOverlayContainer.getVisibility() == View.VISIBLE) {
+            closePanoramaContext();
+            return;
+        }
+        super.onBackPressed();
     }
 
     @Override

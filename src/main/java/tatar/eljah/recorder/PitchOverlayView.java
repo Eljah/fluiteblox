@@ -418,6 +418,19 @@ public class PitchOverlayView extends View {
     private void ensureDurationMismatchCapacity() { while (durationMismatchByIndex.size() < notes.size()) durationMismatchByIndex.add(false); }
     private void ensureMatchedCapacity() { while (matchedByIndex.size() < notes.size()) matchedByIndex.add(false); while (matchedActualByIndex.size() < notes.size()) matchedActualByIndex.add(null); }
 
+    public String actualPitchFor(int index) {
+        if (index < 0 || index >= notes.size()) {
+            return null;
+        }
+        if (hasMismatch(index)) {
+            return mismatchActualByIndex.get(index);
+        }
+        if (isMatched(index)) {
+            return matchedActualByIndex.get(index);
+        }
+        return null;
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (event.getAction() != MotionEvent.ACTION_UP) return true;
