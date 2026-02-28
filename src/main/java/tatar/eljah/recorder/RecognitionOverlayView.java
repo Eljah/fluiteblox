@@ -501,7 +501,10 @@ public class RecognitionOverlayView extends View {
                 best = i;
             }
         }
-        return bestDist <= 0.08f ? best : -1;
+        float zoomAdjusted = 0.08f / Math.max(1f, zoom);
+        float corridorAdjusted = inferHalfStepNorm(ny) * 1.35f;
+        float selectionRadius = Math.max(0.012f, Math.min(0.08f, Math.min(zoomAdjusted, corridorAdjusted)));
+        return bestDist <= selectionRadius ? best : -1;
     }
 
     private float[] toNormalized(float viewX, float viewY) {
