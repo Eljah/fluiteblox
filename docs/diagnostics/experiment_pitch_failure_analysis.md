@@ -28,7 +28,7 @@
 4. `experiment_step4_thin_artifacts_blurred.png.b64`
 5. `experiment_step5_blobs_merged_narrow_gaps.png.b64`
 6. `experiment_step6_blobs_sorted_area_annotated.png.b64` — подписи rank по площади (1 = самый большой) наносятся на результат `step5`
-7. `experiment_step7_noteheads_round_large_top13.png.b64` — выбор 13 головок нот после sorted как сочетание «крупный + округлый»
+7. `experiment_step7_noteheads_round_large_top13.png.b64` — выбор 13 головок нот после sorted как сочетание «крупный + округлый», с shape-gate: отсекаются слишком длинные/низкие blob-ы и кандидаты с недостаточной овальностью (roundness < 0.68)
 8. `experiment_step8_blobs_all.png.b64` — кандидаты на распознавание берутся из step7 (top13 round+large) и оставляются только blob-ы с `roundLargeScore >= 50.364708` (hard boundary)
 9. `experiment_step9_blobs_filtered_overlap_monophony.png.b64`
 

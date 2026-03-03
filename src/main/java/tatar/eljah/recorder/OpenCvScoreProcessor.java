@@ -1472,12 +1472,25 @@ public class OpenCvScoreProcessor {
 
         List<Blob> out = new ArrayList<Blob>();
         for (Blob b : in) {
+            if (!isRoundLargeShapeCandidate(b, staffSpacing)) continue;
             if (roundLargeScore(b) >= boundary) {
                 out.add(b);
             }
         }
         if (out.isEmpty()) return in;
         return out;
+    }
+
+    private boolean isRoundLargeShapeCandidate(Blob b, int staffSpacing) {
+        float w = Math.max(1f, b.width());
+        float h = Math.max(1f, b.height());
+        float aspect = w / h;
+        float roundness = 1.0f / (1.0f + Math.abs(aspect - 1.0f));
+        float minDim = Math.min(w, h);
+        float spacing = Math.max(1f, (float) staffSpacing);
+        boolean tooThinFlat = aspect >= 1.45f && minDim <= spacing * 0.85f;
+        if (tooThinFlat) return false;
+        return roundness >= 0.68f;
     }
 
     private float roundLargeScore(Blob b) {

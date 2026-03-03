@@ -188,6 +188,7 @@ public class ExperimentPitchDebugArtifactsExporter {
             System.out.println("Stage1(blur thin) blobs: raw=" + stage1.size() + ", overlapKept=" + stage1Overlap.kept.size() + ", monoKept=" + stage1Mono.kept.size());
             System.out.println("Stage2(merge narrow gaps) blobs: raw=" + stage2.size() + ", overlapKept=" + stage2Overlap.kept.size() + ", monoKept=" + stage2Mono.kept.size());
             System.out.println("Step8(blobs from step7 over hard boundary=" + HARD_ROUND_LARGE_BOUNDARY + "): " + recognitionCandidates.size());
+            printTopRoundLargeDiagnostics(topRoundLarge);
             printProxyStats("Before new steps (noStems)", before);
             printProxyStats("After blur thin artifacts", afterBlur);
             printProxyStats("After merge narrow gaps", afterMerge);
@@ -599,6 +600,19 @@ public class ExperimentPitchDebugArtifactsExporter {
 
 
 
+
+    private static void printTopRoundLargeDiagnostics(List<Rect> selected) {
+        for (int i = 0; i < selected.size(); i++) {
+            Rect r = selected.get(i);
+            float aspect = r.width / (float) Math.max(1, r.height);
+            System.out.println("Step7 top" + (i + 1)
+                    + ": w=" + r.width
+                    + ", h=" + r.height
+                    + ", aspect=" + String.format(java.util.Locale.US, "%.3f", aspect)
+                    + ", score=" + String.format(java.util.Locale.US, "%.3f", roundLargeScore(r)));
+        }
+    }
+
     private static List<Rect> filterByHardBoundary(List<Rect> rects, float boundary) {
         List<Rect> out = new ArrayList<Rect>();
         for (Rect r : rects) {
@@ -610,7 +624,13 @@ public class ExperimentPitchDebugArtifactsExporter {
     }
 
     private static List<Rect> selectTopRoundLarge(List<Rect> rects, int topN) {
-        List<Rect> sorted = new ArrayList<Rect>(rects);
+        List<Rect> ovalCandidates = new ArrayList<Rect>();
+        for (Rect r : rects) {
+            if (isRoundLargeShapeCandidate(r)) {
+                ovalCandidates.add(r);
+            }
+        }
+        List<Rect> sorted = new ArrayList<Rect>(ovalCandidates.isEmpty() ? rects : ovalCandidates);
         Collections.sort(sorted, new Comparator<Rect>() {
             @Override
             public int compare(Rect a, Rect b) {
@@ -623,7 +643,18 @@ public class ExperimentPitchDebugArtifactsExporter {
         return sorted;
     }
 
+    private static boolean isRoundLargeShapeCandidate(Rect r) {
+        float w = Math.max(1f, r.width);
+        float h = Math.max(1f, r.height);
+        float aspect = w / h;
+        float roundness = 1.0f / (1.0f + Math.abs(aspect - 1.0f));
+        boolean tooThinFlat = aspect >= 1.45f && h <= 8f;
+        if (tooThinFlat) return false;
+        return roundness >= 0.68f;
+    }
+
     private static float roundLargeScore(Rect r) {
+
         float area = (float) Math.max(1.0, r.area());
         float aspect = r.width / (float) Math.max(1, r.height);
         float roundness = 1.0f / (1.0f + Math.abs(aspect - 1.0f));
