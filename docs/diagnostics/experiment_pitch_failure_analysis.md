@@ -28,9 +28,10 @@
 4. `experiment_step4_thin_artifacts_blurred.png.b64`
 5. `experiment_step5_blobs_merged_narrow_gaps.png.b64`
 6. `experiment_step6_blobs_sorted_area_annotated.png.b64` — подписи rank по площади (1 = самый большой) наносятся на результат `step5`
-7. `experiment_step7_noteheads_round_large_top13.png.b64` — сначала отбрасываются blob-ы с чрезмерным `width/height`, затем оставшиеся кандидаты ранжируются по площади (`area`) и берутся top-13
-8. `experiment_step8_blobs_all.png.b64` — кандидаты на распознавание берутся из step7 и оставляются только blob-ы с `area >= 48.0` (hard boundary)
-9. `experiment_step9_blobs_filtered_overlap_monophony.png.b64`
+7. `experiment_step7_aspect_ratio_filtered.png.b64` — отдельный шаг: удаляются blob-ы с чрезмерным `width/height` (длинные по X при малой высоте)
+8. `experiment_step8_noteheads_area_top13.png.b64` — из step7 кандидаты ранжируются по площади (`area`), берутся top-13
+9. `experiment_step9_blobs_all.png.b64` — кандидаты на распознавание из step8 после hard boundary `area >= 48.0`
+10. `experiment_step10_blobs_filtered_overlap_monophony.png.b64`
 
 ## Пороги/формулы
 

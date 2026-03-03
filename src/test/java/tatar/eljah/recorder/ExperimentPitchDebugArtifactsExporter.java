@@ -160,8 +160,10 @@ public class ExperimentPitchDebugArtifactsExporter {
             BufferedImage filteredBlobView = drawFilteredBlobs(gray, stage2Mono.kept, mergeRemoved(stage2Overlap.removed, stage2Mono.removed));
             // Sorted-by-area view must use merged step5 data.
             BufferedImage sortedByAreaView = drawAreaOrderOnMergedMask(mergedView, stage2);
-            List<Rect> topRoundLarge = selectTopByAreaAfterAspect(stage2, 13);
-            BufferedImage roundLargeView = drawRoundLargeSelection(mergedView, stage2, topRoundLarge);
+            List<Rect> aspectFiltered = filterByAspectRatio(stage2);
+            BufferedImage aspectFilteredView = drawRoundLargeSelection(mergedView, stage2, aspectFiltered);
+            List<Rect> topRoundLarge = selectTopByArea(aspectFiltered, 13);
+            BufferedImage roundLargeView = drawRoundLargeSelection(mergedView, aspectFiltered, topRoundLarge);
             List<Rect> recognitionCandidates = filterByHardAreaBoundary(topRoundLarge, HARD_NOTEHEAD_AREA_BOUNDARY);
             BufferedImage allBlobView = drawBlobsOnGray(gray, recognitionCandidates, new Scalar(0, 120, 255));
 
@@ -176,9 +178,10 @@ public class ExperimentPitchDebugArtifactsExporter {
             savePngAndBase64(blurThinView, new File(outDir, "experiment_step4_thin_artifacts_blurred"));
             savePngAndBase64(mergedView, new File(outDir, "experiment_step5_blobs_merged_narrow_gaps"));
             savePngAndBase64(sortedByAreaView, new File(outDir, "experiment_step6_blobs_sorted_area_annotated"));
-            savePngAndBase64(roundLargeView, new File(outDir, "experiment_step7_noteheads_round_large_top13"));
-            savePngAndBase64(allBlobView, new File(outDir, "experiment_step8_blobs_all"));
-            savePngAndBase64(filteredBlobView, new File(outDir, "experiment_step9_blobs_filtered_overlap_monophony"));
+            savePngAndBase64(aspectFilteredView, new File(outDir, "experiment_step7_aspect_ratio_filtered"));
+            savePngAndBase64(roundLargeView, new File(outDir, "experiment_step8_noteheads_area_top13"));
+            savePngAndBase64(allBlobView, new File(outDir, "experiment_step9_blobs_all"));
+            savePngAndBase64(filteredBlobView, new File(outDir, "experiment_step10_blobs_filtered_overlap_monophony"));
 
             RecognitionProxyStats before = computeProxyStats(image, stage0Mono.kept);
             RecognitionProxyStats afterBlur = computeProxyStats(image, stage1Mono.kept);
@@ -188,7 +191,8 @@ public class ExperimentPitchDebugArtifactsExporter {
             System.out.println("Stage0(noStems) blobs: raw=" + stage0.size() + ", overlapKept=" + stage0Overlap.kept.size() + ", monoKept=" + stage0Mono.kept.size());
             System.out.println("Stage1(blur thin) blobs: raw=" + stage1.size() + ", overlapKept=" + stage1Overlap.kept.size() + ", monoKept=" + stage1Mono.kept.size());
             System.out.println("Stage2(merge narrow gaps) blobs: raw=" + stage2.size() + ", overlapKept=" + stage2Overlap.kept.size() + ", monoKept=" + stage2Mono.kept.size());
-            System.out.println("Step8(blobs from step7 over hard area boundary=" + HARD_NOTEHEAD_AREA_BOUNDARY + "): " + recognitionCandidates.size());
+            System.out.println("Step7(aspect ratio filtered): " + aspectFiltered.size());
+            System.out.println("Step9(blobs from step8 over hard area boundary=" + HARD_NOTEHEAD_AREA_BOUNDARY + "): " + recognitionCandidates.size());
             printTopRoundLargeDiagnostics(topRoundLarge);
             printProxyStats("Before new steps (noStems)", before);
             printProxyStats("After blur thin artifacts", afterBlur);
@@ -606,7 +610,7 @@ public class ExperimentPitchDebugArtifactsExporter {
         for (int i = 0; i < selected.size(); i++) {
             Rect r = selected.get(i);
             float aspect = r.width / (float) Math.max(1, r.height);
-            System.out.println("Step7 top" + (i + 1)
+            System.out.println("Step8 top" + (i + 1)
                     + ": w=" + r.width
                     + ", h=" + r.height
                     + ", aspect=" + String.format(java.util.Locale.US, "%.3f", aspect)
@@ -624,14 +628,16 @@ public class ExperimentPitchDebugArtifactsExporter {
         return out.isEmpty() ? new ArrayList<Rect>(rects) : out;
     }
 
-    private static List<Rect> selectTopByAreaAfterAspect(List<Rect> rects, int topN) {
-        List<Rect> ovalCandidates = new ArrayList<Rect>();
+    private static List<Rect> filterByAspectRatio(List<Rect> rects) {
+        List<Rect> out = new ArrayList<Rect>();
         for (Rect r : rects) {
-            if (isRoundLargeShapeCandidate(r)) {
-                ovalCandidates.add(r);
-            }
+            if (isRoundLargeShapeCandidate(r)) out.add(r);
         }
-        List<Rect> sorted = new ArrayList<Rect>(ovalCandidates.isEmpty() ? rects : ovalCandidates);
+        return out.isEmpty() ? new ArrayList<Rect>(rects) : out;
+    }
+
+    private static List<Rect> selectTopByArea(List<Rect> rects, int topN) {
+        List<Rect> sorted = new ArrayList<Rect>(rects);
         Collections.sort(sorted, new Comparator<Rect>() {
             @Override
             public int compare(Rect a, Rect b) {
