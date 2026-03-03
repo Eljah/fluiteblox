@@ -1052,7 +1052,7 @@ public class OpenCvScoreProcessor {
             Imgproc.morphologyEx(stemMask, stemMask, Imgproc.MORPH_CLOSE, cleanup);
 
             int estimatedLineThickness = estimateStaffLineThicknessFromMask(staffMask, staffSpacing);
-            int maxStemWidth = Math.max(2, Math.round(Math.max(estimatedLineThickness * 2.5f, staffSpacing * 0.55f)));
+            int maxStemWidth = Math.max(2, Math.round(Math.max(estimatedLineThickness * 2.0f, staffSpacing * 0.35f)));
             int minStemHeight = Math.max(4, Math.round(staffSpacing * 2.5f));
 
             contoursInput = stemMask.clone();
@@ -1099,7 +1099,7 @@ public class OpenCvScoreProcessor {
         }
         if (samples == 0) return Math.max(1, Math.round(staffSpacing * 0.25f));
         int avg = Math.max(1, Math.round(longest / (float) samples));
-        int maxLineThickness = Math.max(3, Math.round(staffSpacing * 0.60f));
+        int maxLineThickness = Math.max(2, Math.round(staffSpacing * 0.35f));
         return Math.max(1, Math.min(maxLineThickness, avg));
     }
 
