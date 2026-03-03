@@ -131,8 +131,8 @@ public class ExperimentPitchDebugArtifactsExporter {
             // Step5: vertical-only merge to join note-head halves split by removed staff lines.
             step4PipelineMask.copyTo(mergedNarrowGaps);
 
-            // Vertical close to merge note-head halves split by removed staff line (gap ~= lineThickness).
-            int mergeHeight = Math.max(3, lineThickness * 2 + 1);
+            // Vertical close to merge note-head halves only when the gap is about one staff-line thickness.
+            int mergeHeight = Math.max(3, lineThickness + 1);
             if (mergeHeight % 2 == 0) mergeHeight += 1;
             kMergeV = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1, mergeHeight));
             Imgproc.morphologyEx(mergedNarrowGaps, mergedNarrowGaps, Imgproc.MORPH_CLOSE, kMergeV);

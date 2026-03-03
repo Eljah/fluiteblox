@@ -38,7 +38,7 @@
 - Single-pixel line cleanup on step3: `MORPH_OPEN` с ядром `2x2` (цель: полностью выбелить 1px артефакты за один проход)
 - Blur thin artifacts (усилен): `GaussianBlur(step3PipelineMask, 5x5)` + `threshold=142` + `MORPH_OPEN` квадратным ядром `thinEraseSize = max(2, lineThickness + 1)` + монотонный guard `Core.max(blurRebinarized, step3PipelineMask, blurRebinarized)` (чтобы step4 не возвращал линии, уже выбеленные на step3) + финальная жёсткая бинаризация `threshold=127`
 - Merge narrow gaps (берёт **точно** результат step4):
-  - вертикальная склейка половинок головок: `mergeHeight = max(3, lineThickness * 2 + 1)` + kernel `Size(1, mergeHeight)` + `MORPH_CLOSE`
+  - вертикальная склейка половинок головок: `mergeHeight = max(3, lineThickness + 1)` + kernel `Size(1, mergeHeight)` + `MORPH_CLOSE` (менее агрессивно: склеиваем в основном щели на ширину линейки)
   - горизонтального разрастания на merge-шаге нет (kernel по X равен 1)
   - финальная бинаризация `threshold=127`
 - Blob area filter: `minArea=4`, `maxArea=6000`
