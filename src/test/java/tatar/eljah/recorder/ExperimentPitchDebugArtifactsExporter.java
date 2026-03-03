@@ -29,7 +29,7 @@ import java.util.List;
 public class ExperimentPitchDebugArtifactsExporter {
 
     private static final float HARD_NOTEHEAD_AREA_BOUNDARY = 48.0f;
-    private static final float MAX_HEAD_ASPECT_RATIO = 1.40f;
+    private static final float MAX_HEAD_ASPECT_RATIO = 2.0f;
 
     static {
         UnsatisfiedLinkError last = null;
@@ -162,7 +162,7 @@ public class ExperimentPitchDebugArtifactsExporter {
             // Sorted-by-area view must use merged step5 data.
             BufferedImage sortedByAreaView = drawAreaOrderOnMergedMask(mergedView, stage2);
             List<Rect> aspectFiltered = filterByAspectRatio(stage2);
-            aspectFilteredMask = buildMaskFromRects(mergedNarrowGaps.rows(), mergedNarrowGaps.cols(), aspectFiltered);
+            aspectFilteredMask = filterMaskByAspectRatio(mergedNarrowGaps, MAX_HEAD_ASPECT_RATIO);
             BufferedImage aspectFilteredView = binaryMaskToWhiteBg(aspectFilteredMask);
             List<Rect> step7Blobs = detectBlobs(aspectFilteredMask, 4, 6000);
             List<Rect> topRoundLarge = selectTopByArea(step7Blobs, 13);
@@ -659,21 +659,30 @@ public class ExperimentPitchDebugArtifactsExporter {
         float h = Math.max(1f, r.height);
         float aspect = w / h;
         float roundness = 1.0f / (1.0f + Math.abs(aspect - 1.0f));
-        boolean tooThinFlat = aspect > MAX_HEAD_ASPECT_RATIO && h <= 8f;
-        if (tooThinFlat) return false;
+        if (aspect >= MAX_HEAD_ASPECT_RATIO) return false;
         return roundness >= 0.58f;
     }
 
-    private static Mat buildMaskFromRects(int rows, int cols, List<Rect> rects) {
-        Mat mask = Mat.zeros(rows, cols, CvType.CV_8UC1);
-        for (Rect r : rects) {
-            Imgproc.rectangle(mask,
-                    new Point(r.x, r.y),
-                    new Point(r.x + Math.max(1, r.width), r.y + Math.max(1, r.height)),
-                    new Scalar(255),
-                    -1);
+    private static Mat filterMaskByAspectRatio(Mat sourceMask, float maxAspectRatio) {
+        Mat filtered = sourceMask.clone();
+        Mat contoursInput = sourceMask.clone();
+        Mat hierarchy = new Mat();
+        List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
+        try {
+            Imgproc.findContours(contoursInput, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+            for (MatOfPoint c : contours) {
+                Rect r = Imgproc.boundingRect(c);
+                float aspect = r.width / (float) Math.max(1, r.height);
+                if (aspect >= maxAspectRatio) {
+                    Imgproc.drawContours(filtered, Collections.singletonList(c), -1, new Scalar(0), -1);
+                }
+                c.release();
+            }
+            return filtered;
+        } finally {
+            contoursInput.release();
+            hierarchy.release();
         }
-        return mask;
     }
 
     private static BufferedImage drawRoundLargeSelection(BufferedImage baseMask, List<Rect> allRects, List<Rect> selected) {
