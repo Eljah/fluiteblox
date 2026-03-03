@@ -28,7 +28,8 @@ import java.util.List;
 
 public class ExperimentPitchDebugArtifactsExporter {
 
-    private static final float HARD_ROUND_LARGE_BOUNDARY = 50.364708f;
+    private static final float HARD_NOTEHEAD_AREA_BOUNDARY = 48.0f;
+    private static final float MAX_HEAD_ASPECT_RATIO = 1.40f;
 
     static {
         UnsatisfiedLinkError last = null;
@@ -159,9 +160,9 @@ public class ExperimentPitchDebugArtifactsExporter {
             BufferedImage filteredBlobView = drawFilteredBlobs(gray, stage2Mono.kept, mergeRemoved(stage2Overlap.removed, stage2Mono.removed));
             // Sorted-by-area view must use merged step5 data.
             BufferedImage sortedByAreaView = drawAreaOrderOnMergedMask(mergedView, stage2);
-            List<Rect> topRoundLarge = selectTopRoundLarge(stage2, 13);
+            List<Rect> topRoundLarge = selectTopByAreaAfterAspect(stage2, 13);
             BufferedImage roundLargeView = drawRoundLargeSelection(mergedView, stage2, topRoundLarge);
-            List<Rect> recognitionCandidates = filterByHardBoundary(topRoundLarge, HARD_ROUND_LARGE_BOUNDARY);
+            List<Rect> recognitionCandidates = filterByHardAreaBoundary(topRoundLarge, HARD_NOTEHEAD_AREA_BOUNDARY);
             BufferedImage allBlobView = drawBlobsOnGray(gray, recognitionCandidates, new Scalar(0, 120, 255));
 
             File outDir = new File("docs/diagnostics");
@@ -187,7 +188,7 @@ public class ExperimentPitchDebugArtifactsExporter {
             System.out.println("Stage0(noStems) blobs: raw=" + stage0.size() + ", overlapKept=" + stage0Overlap.kept.size() + ", monoKept=" + stage0Mono.kept.size());
             System.out.println("Stage1(blur thin) blobs: raw=" + stage1.size() + ", overlapKept=" + stage1Overlap.kept.size() + ", monoKept=" + stage1Mono.kept.size());
             System.out.println("Stage2(merge narrow gaps) blobs: raw=" + stage2.size() + ", overlapKept=" + stage2Overlap.kept.size() + ", monoKept=" + stage2Mono.kept.size());
-            System.out.println("Step8(blobs from step7 over hard boundary=" + HARD_ROUND_LARGE_BOUNDARY + "): " + recognitionCandidates.size());
+            System.out.println("Step8(blobs from step7 over hard area boundary=" + HARD_NOTEHEAD_AREA_BOUNDARY + "): " + recognitionCandidates.size());
             printTopRoundLargeDiagnostics(topRoundLarge);
             printProxyStats("Before new steps (noStems)", before);
             printProxyStats("After blur thin artifacts", afterBlur);
@@ -609,21 +610,21 @@ public class ExperimentPitchDebugArtifactsExporter {
                     + ": w=" + r.width
                     + ", h=" + r.height
                     + ", aspect=" + String.format(java.util.Locale.US, "%.3f", aspect)
-                    + ", score=" + String.format(java.util.Locale.US, "%.3f", roundLargeScore(r)));
+                    + ", area=" + String.format(java.util.Locale.US, "%.1f", Math.max(1.0, r.area())));
         }
     }
 
-    private static List<Rect> filterByHardBoundary(List<Rect> rects, float boundary) {
+    private static List<Rect> filterByHardAreaBoundary(List<Rect> rects, float boundary) {
         List<Rect> out = new ArrayList<Rect>();
         for (Rect r : rects) {
-            if (roundLargeScore(r) >= boundary) {
+            if (Math.max(1.0, r.area()) >= boundary) {
                 out.add(r);
             }
         }
         return out.isEmpty() ? new ArrayList<Rect>(rects) : out;
     }
 
-    private static List<Rect> selectTopRoundLarge(List<Rect> rects, int topN) {
+    private static List<Rect> selectTopByAreaAfterAspect(List<Rect> rects, int topN) {
         List<Rect> ovalCandidates = new ArrayList<Rect>();
         for (Rect r : rects) {
             if (isRoundLargeShapeCandidate(r)) {
@@ -634,7 +635,7 @@ public class ExperimentPitchDebugArtifactsExporter {
         Collections.sort(sorted, new Comparator<Rect>() {
             @Override
             public int compare(Rect a, Rect b) {
-                return Float.compare(roundLargeScore(b), roundLargeScore(a));
+                return Double.compare(b.area(), a.area());
             }
         });
         if (sorted.size() > topN) {
@@ -648,17 +649,9 @@ public class ExperimentPitchDebugArtifactsExporter {
         float h = Math.max(1f, r.height);
         float aspect = w / h;
         float roundness = 1.0f / (1.0f + Math.abs(aspect - 1.0f));
-        boolean tooThinFlat = aspect >= 1.45f && h <= 8f;
+        boolean tooThinFlat = aspect > MAX_HEAD_ASPECT_RATIO && h <= 8f;
         if (tooThinFlat) return false;
-        return roundness >= 0.68f;
-    }
-
-    private static float roundLargeScore(Rect r) {
-
-        float area = (float) Math.max(1.0, r.area());
-        float aspect = r.width / (float) Math.max(1, r.height);
-        float roundness = 1.0f / (1.0f + Math.abs(aspect - 1.0f));
-        return area * (0.5f + 0.5f * roundness);
+        return roundness >= 0.58f;
     }
 
     private static BufferedImage drawRoundLargeSelection(BufferedImage baseMask, List<Rect> allRects, List<Rect> selected) {

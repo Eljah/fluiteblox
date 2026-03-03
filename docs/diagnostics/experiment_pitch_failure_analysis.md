@@ -28,8 +28,8 @@
 4. `experiment_step4_thin_artifacts_blurred.png.b64`
 5. `experiment_step5_blobs_merged_narrow_gaps.png.b64`
 6. `experiment_step6_blobs_sorted_area_annotated.png.b64` — подписи rank по площади (1 = самый большой) наносятся на результат `step5`
-7. `experiment_step7_noteheads_round_large_top13.png.b64` — выбор 13 головок нот после sorted как сочетание «крупный + округлый», с shape-gate: отсекаются слишком длинные/низкие blob-ы и кандидаты с недостаточной овальностью (roundness < 0.68)
-8. `experiment_step8_blobs_all.png.b64` — кандидаты на распознавание берутся из step7 (top13 round+large) и оставляются только blob-ы с `roundLargeScore >= 50.364708` (hard boundary)
+7. `experiment_step7_noteheads_round_large_top13.png.b64` — сначала отбрасываются blob-ы с чрезмерным `width/height`, затем оставшиеся кандидаты ранжируются по площади (`area`) и берутся top-13
+8. `experiment_step8_blobs_all.png.b64` — кандидаты на распознавание берутся из step7 и оставляются только blob-ы с `area >= 48.0` (hard boundary)
 9. `experiment_step9_blobs_filtered_overlap_monophony.png.b64`
 
 ## Пороги/формулы
@@ -42,9 +42,9 @@
   - горизонтального разрастания на merge-шаге нет (kernel по X равен 1)
   - финальная бинаризация `threshold=127`
 - Blob area filter: `minArea=4`, `maxArea=6000`
-- Top13 round+large selection (после sorted на step5): score = `area * (0.5 + 0.5 * (1 / (1 + abs(aspect-1))))`, где `aspect = width/height`; берутся top-13
+- Top13 notehead selection (после sorted на step5): сначала отсеиваются blob-ы с чрезмерным `width/height`, затем оставшиеся ранжируются по `area`; берутся top-13
 
-- Main recognition gate (OpenCvScoreProcessor): boundary откалиброван на `experiment.png` (`EXPERIMENT_ROUND_LARGE_BOUNDARY = 50.364708`, `(score13 + score14)/2` на step5 для experiment), но применяется с нормализацией по `staffSpacing^2`: `boundary = 50.364708 * (staffSpacing / EXPERIMENT_BASE_STAFF_SPACING)^2`. Это сохраняет инвариантность к масштабу/разрешению страницы.
+- Main recognition gate (OpenCvScoreProcessor): boundary откалиброван на `experiment.png` как граница площади между blob-ами #13 и #14 и зафиксирован как `EXPERIMENT_NOTEHEAD_AREA_BOUNDARY = 48.0`; в рантайме применяется с нормализацией по `staffSpacing^2`: `boundary = 48.0 * (staffSpacing / EXPERIMENT_BASE_STAFF_SPACING)^2`.
 - Monophony winner score:
   - `score = area - 9*sizePenalty - 12*aspectPenalty - 18*thinPenalty`
 

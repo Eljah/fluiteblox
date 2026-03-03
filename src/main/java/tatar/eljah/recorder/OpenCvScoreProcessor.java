@@ -30,9 +30,9 @@ public class OpenCvScoreProcessor {
     private static final boolean OPENCV_READY;
     private static final String OPENCV_INIT_STACKTRACE;
     private static volatile boolean opencvRuntimeDisabled;
-    // Calibrated on experiment.png: boundary = (score13 + score14) / 2 on step5 merged blobs.
-    private static final float EXPERIMENT_ROUND_LARGE_BOUNDARY = 50.364708f;
-    // Experiment baseline spacing used to scale round/large boundary across resolutions.
+    // Calibrated on experiment.png: area boundary between ranked #13 and #14 blob on step5 merged blobs.
+    private static final float EXPERIMENT_NOTEHEAD_AREA_BOUNDARY = 48.0f;
+    // Experiment baseline spacing used to scale area boundary across resolutions.
     private static final float EXPERIMENT_BASE_STAFF_SPACING = 13.0f;
 
     static {
@@ -435,7 +435,7 @@ public class OpenCvScoreProcessor {
             NoteDetectionDiagnostics noteDiagnostics = new NoteDetectionDiagnostics();
             List<Blob> noteHeadsRaw = detectNoteHeadsOpenCv(noteHeadMask, w, h, staffSpacing, options, staffGroups, noteDiagnostics);
             List<Blob> noteHeads = suppressIntersectionDominatedHeads(noteHeadsRaw, staffMask, stemMask, staffSpacing);
-            noteHeads = filterByFixedRoundLargeBoundary(noteHeads, staffSpacing);
+            noteHeads = filterByFixedAreaBoundary(noteHeads, staffSpacing);
             fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, stemMask, binary, staffMask, staffSpacing, w, h, staffGroups, options);
 
             int staffRows = Math.max(1, Math.min(10, staffGroups.size()));
@@ -1464,16 +1464,16 @@ public class OpenCvScoreProcessor {
         return -1;
     }
 
-    private List<Blob> filterByFixedRoundLargeBoundary(List<Blob> in, int staffSpacing) {
+    private List<Blob> filterByFixedAreaBoundary(List<Blob> in, int staffSpacing) {
         if (in == null || in.isEmpty()) return in;
         float spacing = Math.max(1f, (float) staffSpacing);
         float scale = (spacing * spacing) / (EXPERIMENT_BASE_STAFF_SPACING * EXPERIMENT_BASE_STAFF_SPACING);
-        float boundary = EXPERIMENT_ROUND_LARGE_BOUNDARY * scale;
+        float boundary = EXPERIMENT_NOTEHEAD_AREA_BOUNDARY * scale;
 
         List<Blob> out = new ArrayList<Blob>();
         for (Blob b : in) {
             if (!isRoundLargeShapeCandidate(b, staffSpacing)) continue;
-            if (roundLargeScore(b) >= boundary) {
+            if (blobAreaScore(b) >= boundary) {
                 out.add(b);
             }
         }
@@ -1488,16 +1488,13 @@ public class OpenCvScoreProcessor {
         float roundness = 1.0f / (1.0f + Math.abs(aspect - 1.0f));
         float minDim = Math.min(w, h);
         float spacing = Math.max(1f, (float) staffSpacing);
-        boolean tooThinFlat = aspect >= 1.45f && minDim <= spacing * 0.85f;
+        boolean tooThinFlat = aspect >= 1.40f && minDim <= spacing * 0.95f;
         if (tooThinFlat) return false;
-        return roundness >= 0.68f;
+        return roundness >= 0.58f;
     }
 
-    private float roundLargeScore(Blob b) {
-        float area = Math.max(1f, b.area);
-        float aspect = b.width() / (float) Math.max(1, b.height());
-        float roundness = 1.0f / (1.0f + Math.abs(aspect - 1.0f));
-        return area * (0.5f + 0.5f * roundness);
+    private float blobAreaScore(Blob b) {
+        return Math.max(1f, b.area);
     }
 
     private void fillNotesWithDurationFeatures(ScorePiece piece,
