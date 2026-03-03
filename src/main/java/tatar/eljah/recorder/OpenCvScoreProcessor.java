@@ -32,6 +32,8 @@ public class OpenCvScoreProcessor {
     private static volatile boolean opencvRuntimeDisabled;
     // Calibrated on experiment.png: boundary = (score13 + score14) / 2 on step5 merged blobs.
     private static final float EXPERIMENT_ROUND_LARGE_BOUNDARY = 50.364708f;
+    // Experiment baseline spacing used to scale round/large boundary across resolutions.
+    private static final float EXPERIMENT_BASE_STAFF_SPACING = 13.0f;
 
     static {
         boolean loaded;
@@ -433,7 +435,7 @@ public class OpenCvScoreProcessor {
             NoteDetectionDiagnostics noteDiagnostics = new NoteDetectionDiagnostics();
             List<Blob> noteHeadsRaw = detectNoteHeadsOpenCv(noteHeadMask, w, h, staffSpacing, options, staffGroups, noteDiagnostics);
             List<Blob> noteHeads = suppressIntersectionDominatedHeads(noteHeadsRaw, staffMask, stemMask, staffSpacing);
-            noteHeads = filterByFixedRoundLargeBoundary(noteHeads);
+            noteHeads = filterByFixedRoundLargeBoundary(noteHeads, staffSpacing);
             fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, stemMask, binary, staffMask, staffSpacing, w, h, staffGroups, options);
 
             int staffRows = Math.max(1, Math.min(10, staffGroups.size()));
@@ -1049,7 +1051,8 @@ public class OpenCvScoreProcessor {
             cleanup = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1, cleanupKernel));
             Imgproc.morphologyEx(stemMask, stemMask, Imgproc.MORPH_CLOSE, cleanup);
 
-            int maxStemWidth = Math.max(1, estimateStaffLineThicknessFromMask(staffMask, staffSpacing) * 2);
+            int estimatedLineThickness = estimateStaffLineThicknessFromMask(staffMask, staffSpacing);
+            int maxStemWidth = Math.max(2, Math.round(Math.max(estimatedLineThickness * 2.5f, staffSpacing * 0.55f)));
             int minStemHeight = Math.max(4, Math.round(staffSpacing * 2.5f));
 
             contoursInput = stemMask.clone();
@@ -1096,7 +1099,8 @@ public class OpenCvScoreProcessor {
         }
         if (samples == 0) return Math.max(1, Math.round(staffSpacing * 0.25f));
         int avg = Math.max(1, Math.round(longest / (float) samples));
-        return Math.max(1, Math.min(4, avg));
+        int maxLineThickness = Math.max(3, Math.round(staffSpacing * 0.60f));
+        return Math.max(1, Math.min(maxLineThickness, avg));
     }
 
     private Mat createExpandedLineSubtractMask(Mat sourceMask, int staffSpacing, boolean horizontalLine) {
@@ -1460,11 +1464,15 @@ public class OpenCvScoreProcessor {
         return -1;
     }
 
-    private List<Blob> filterByFixedRoundLargeBoundary(List<Blob> in) {
+    private List<Blob> filterByFixedRoundLargeBoundary(List<Blob> in, int staffSpacing) {
         if (in == null || in.isEmpty()) return in;
+        float spacing = Math.max(1f, (float) staffSpacing);
+        float scale = (spacing * spacing) / (EXPERIMENT_BASE_STAFF_SPACING * EXPERIMENT_BASE_STAFF_SPACING);
+        float boundary = EXPERIMENT_ROUND_LARGE_BOUNDARY * scale;
+
         List<Blob> out = new ArrayList<Blob>();
         for (Blob b : in) {
-            if (roundLargeScore(b) >= EXPERIMENT_ROUND_LARGE_BOUNDARY) {
+            if (roundLargeScore(b) >= boundary) {
                 out.add(b);
             }
         }

@@ -44,7 +44,7 @@
 - Blob area filter: `minArea=4`, `maxArea=6000`
 - Top13 round+large selection (после sorted на step5): score = `area * (0.5 + 0.5 * (1 / (1 + abs(aspect-1))))`, где `aspect = width/height`; берутся top-13
 
-- Main recognition gate (OpenCvScoreProcessor): boundary откалиброван на `experiment.png` и зафиксирован константой `EXPERIMENT_ROUND_LARGE_BOUNDARY = 50.364708` (получено как `(score13 + score14)/2` на step5 для experiment). Для любых других изображений в ноты проходят blob-ы со score `roundLargeScore >= 50.364708`.
+- Main recognition gate (OpenCvScoreProcessor): boundary откалиброван на `experiment.png` (`EXPERIMENT_ROUND_LARGE_BOUNDARY = 50.364708`, `(score13 + score14)/2` на step5 для experiment), но применяется с нормализацией по `staffSpacing^2`: `boundary = 50.364708 * (staffSpacing / EXPERIMENT_BASE_STAFF_SPACING)^2`. Это сохраняет инвариантность к масштабу/разрешению страницы.
 - Monophony winner score:
   - `score = area - 9*sizePenalty - 12*aspectPenalty - 18*thinPenalty`
 
