@@ -70,6 +70,7 @@ public class ExperimentPitchDebugArtifactsExporter {
         Mat blurRebinarized = new Mat();
         Mat step4PipelineMask = new Mat();
         Mat mergedNarrowGaps = new Mat();
+        Mat aspectFilteredMask = null;
 
         Mat kH = null;
         Mat kV = null;
@@ -161,9 +162,11 @@ public class ExperimentPitchDebugArtifactsExporter {
             // Sorted-by-area view must use merged step5 data.
             BufferedImage sortedByAreaView = drawAreaOrderOnMergedMask(mergedView, stage2);
             List<Rect> aspectFiltered = filterByAspectRatio(stage2);
-            BufferedImage aspectFilteredView = drawRoundLargeSelection(mergedView, stage2, aspectFiltered);
-            List<Rect> topRoundLarge = selectTopByArea(aspectFiltered, 13);
-            BufferedImage roundLargeView = drawRoundLargeSelection(mergedView, aspectFiltered, topRoundLarge);
+            aspectFilteredMask = buildMaskFromRects(mergedNarrowGaps.rows(), mergedNarrowGaps.cols(), aspectFiltered);
+            BufferedImage aspectFilteredView = binaryMaskToWhiteBg(aspectFilteredMask);
+            List<Rect> step7Blobs = detectBlobs(aspectFilteredMask, 4, 6000);
+            List<Rect> topRoundLarge = selectTopByArea(step7Blobs, 13);
+            BufferedImage roundLargeView = drawRoundLargeSelection(aspectFilteredView, step7Blobs, topRoundLarge);
             List<Rect> recognitionCandidates = filterByHardAreaBoundary(topRoundLarge, HARD_NOTEHEAD_AREA_BOUNDARY);
             BufferedImage allBlobView = drawBlobsOnGray(gray, recognitionCandidates, new Scalar(0, 120, 255));
 
@@ -211,6 +214,7 @@ public class ExperimentPitchDebugArtifactsExporter {
             blurRebinarized.release();
             step4PipelineMask.release();
             mergedNarrowGaps.release();
+            if (aspectFilteredMask != null) aspectFilteredMask.release();
             if (kH != null) kH.release();
             if (kV != null) kV.release();
             if (kStem != null) kStem.release();
@@ -658,6 +662,18 @@ public class ExperimentPitchDebugArtifactsExporter {
         boolean tooThinFlat = aspect > MAX_HEAD_ASPECT_RATIO && h <= 8f;
         if (tooThinFlat) return false;
         return roundness >= 0.58f;
+    }
+
+    private static Mat buildMaskFromRects(int rows, int cols, List<Rect> rects) {
+        Mat mask = Mat.zeros(rows, cols, CvType.CV_8UC1);
+        for (Rect r : rects) {
+            Imgproc.rectangle(mask,
+                    new Point(r.x, r.y),
+                    new Point(r.x + Math.max(1, r.width), r.y + Math.max(1, r.height)),
+                    new Scalar(255),
+                    -1);
+        }
+        return mask;
     }
 
     private static BufferedImage drawRoundLargeSelection(BufferedImage baseMask, List<Rect> allRects, List<Rect> selected) {
