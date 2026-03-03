@@ -9,6 +9,7 @@ import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint;
 import org.opencv.core.Rect;
 import org.opencv.core.Size;
+import org.opencv.core.Scalar;
 import org.opencv.imgproc.CLAHE;
 import org.opencv.imgproc.Imgproc;
 
@@ -29,6 +30,8 @@ public class OpenCvScoreProcessor {
     private static final boolean OPENCV_READY;
     private static final String OPENCV_INIT_STACKTRACE;
     private static volatile boolean opencvRuntimeDisabled;
+    // Calibrated on experiment.png: boundary = (score13 + score14) / 2 on step5 merged blobs.
+    private static final float EXPERIMENT_ROUND_LARGE_BOUNDARY = 50.364708f;
 
     static {
         boolean loaded;
@@ -66,6 +69,7 @@ public class OpenCvScoreProcessor {
         public final float analyticalFilterStrength;
         public final float[] perStaffAnalyticalStrength;
         public final boolean lineStripePitchRefinement;
+        public final boolean requireOpenCv;
 
         public ProcessingOptions(int thresholdOffset, int symbolNeighborhoodHits, float noiseLevel) {
             this(thresholdOffset, symbolNeighborhoodHits, noiseLevel,
@@ -73,7 +77,7 @@ public class OpenCvScoreProcessor {
                     0.6f, 4.0f,
                     0.18f, 0.9f,
                     0.32f,
-                    false, 0.55f, null, false);
+                    false, 0.55f, null, false, false);
         }
 
         public ProcessingOptions(int thresholdOffset,
@@ -91,7 +95,7 @@ public class OpenCvScoreProcessor {
             this(thresholdOffset, symbolNeighborhoodHits, noiseLevel,
                     skipAdaptiveBinarization, skipMorphNoiseSuppression,
                     noteMinAreaFactor, noteMaxAreaFactor, noteMinFill, noteMaxFill, noteMinCircularity,
-                    recallFirstMode, analyticalFilterStrength, null, false);
+                    recallFirstMode, analyticalFilterStrength, null, false, false);
         }
 
         public ProcessingOptions(int thresholdOffset,
@@ -107,7 +111,8 @@ public class OpenCvScoreProcessor {
                                  boolean recallFirstMode,
                                  float analyticalFilterStrength,
                                  float[] perStaffAnalyticalStrength,
-                                 boolean lineStripePitchRefinement) {
+                                 boolean lineStripePitchRefinement,
+                                 boolean requireOpenCv) {
             this.thresholdOffset = Math.max(1, Math.min(32, thresholdOffset));
             this.symbolNeighborhoodHits = Math.max(1, Math.min(9, symbolNeighborhoodHits));
             this.noiseLevel = Math.max(0f, Math.min(1f, noiseLevel));
@@ -122,6 +127,15 @@ public class OpenCvScoreProcessor {
             this.analyticalFilterStrength = Math.max(0.0f, Math.min(1.0f, analyticalFilterStrength));
             this.perStaffAnalyticalStrength = perStaffAnalyticalStrength == null ? null : perStaffAnalyticalStrength.clone();
             this.lineStripePitchRefinement = lineStripePitchRefinement;
+            this.requireOpenCv = requireOpenCv;
+        }
+
+
+        public ProcessingOptions withRequireOpenCv(boolean required) {
+            return new ProcessingOptions(thresholdOffset, symbolNeighborhoodHits, noiseLevel,
+                    skipAdaptiveBinarization, skipMorphNoiseSuppression,
+                    noteMinAreaFactor, noteMaxAreaFactor, noteMinFill, noteMaxFill, noteMinCircularity,
+                    recallFirstMode, analyticalFilterStrength, perStaffAnalyticalStrength, lineStripePitchRefinement, required);
         }
 
         public static ProcessingOptions defaults() {
@@ -305,17 +319,25 @@ public class OpenCvScoreProcessor {
     }
 
     public ProcessingResult processArgb(int width, int height, int[] argb, String title, ProcessingOptions options) {
+        ProcessingOptions safeOptions = options == null ? ProcessingOptions.defaults() : options;
         if (OPENCV_READY && !opencvRuntimeDisabled) {
             try {
-                return processWithOpenCv(width, height, argb, title, options);
+                return processWithOpenCv(width, height, argb, title, safeOptions);
             } catch (Throwable t) {
                 opencvRuntimeDisabled = true;
-                return processLegacy(width, height, argb, title, options, stackTraceToString(t));
+                String trace = stackTraceToString(t);
+                if (safeOptions.requireOpenCv) {
+                    throw new IllegalStateException("OpenCV processing failed; legacy fallback is disabled", t);
+                }
+                return processLegacy(width, height, argb, title, safeOptions, trace);
             }
         }
 
         String reason = OPENCV_READY ? "OpenCV runtime disabled after previous failure" : OPENCV_INIT_STACKTRACE;
-        return processLegacy(width, height, argb, title, options, reason);
+        if (safeOptions.requireOpenCv) {
+            throw new IllegalStateException("OpenCV unavailable; legacy fallback is disabled. " + reason);
+        }
+        return processLegacy(width, height, argb, title, safeOptions, reason);
     }
 
     private ProcessingResult processLegacy(int w, int h, int[] argb, String title, ProcessingOptions options) {
@@ -358,7 +380,11 @@ public class OpenCvScoreProcessor {
         Mat norm = null;
         Mat binary = null;
         Mat staffMask = null;
+        Mat staffSubtractMask = null;
         Mat symbolMask = null;
+        Mat stemMask = null;
+        Mat stemSubtractMask = null;
+        Mat noteHeadMask = null;
         Mat kernel = null;
         try {
             gray = bitmapToGrayMat(argb, w, h);
@@ -387,8 +413,9 @@ public class OpenCvScoreProcessor {
             staffMask = detectStaffMaskOpenCv(binary, staffSpacing);
             List<StaffGroup> staffGroups = extractStaffGroups(staffMask, staffSpacing);
             rebuildStaffMaskFromGroups(staffMask, staffGroups, w, h);
+            staffSubtractMask = createExpandedLineSubtractMask(staffMask, staffSpacing, true);
             symbolMask = new Mat();
-            Core.subtract(binary, staffMask, symbolMask);
+            Core.subtract(binary, staffSubtractMask, symbolMask);
 
             if (!options.skipMorphNoiseSuppression) {
                 int morphK = options.noiseLevel >= 0.66f ? 3 : 2;
@@ -398,9 +425,16 @@ public class OpenCvScoreProcessor {
             }
             applyStaffCorridorMask(symbolMask, staffGroups, w, h);
 
+            stemMask = detectStemMaskOpenCv(symbolMask, staffMask, staffSpacing);
+            stemSubtractMask = createExpandedLineSubtractMask(stemMask, staffSpacing, false);
+            noteHeadMask = new Mat();
+            Core.subtract(symbolMask, stemSubtractMask, noteHeadMask);
+
             NoteDetectionDiagnostics noteDiagnostics = new NoteDetectionDiagnostics();
-            List<Blob> noteHeads = detectNoteHeadsOpenCv(symbolMask, w, h, staffSpacing, options, staffGroups, noteDiagnostics);
-            fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, binary, staffMask, staffSpacing, w, h, staffGroups, options);
+            List<Blob> noteHeadsRaw = detectNoteHeadsOpenCv(noteHeadMask, w, h, staffSpacing, options, staffGroups, noteDiagnostics);
+            List<Blob> noteHeads = suppressIntersectionDominatedHeads(noteHeadsRaw, staffMask, stemMask, staffSpacing);
+            noteHeads = filterByFixedRoundLargeBoundary(noteHeads);
+            fillNotesWithDurationFeatures(piece, noteHeads, symbolMask, stemMask, binary, staffMask, staffSpacing, w, h, staffGroups, options);
 
             int staffRows = Math.max(1, Math.min(10, staffGroups.size()));
             int barlines = estimateBarsFromMask(binary, w, h, staffSpacing);
@@ -416,7 +450,11 @@ public class OpenCvScoreProcessor {
             if (norm != null) norm.release();
             if (binary != null) binary.release();
             if (staffMask != null) staffMask.release();
+            if (staffSubtractMask != null) staffSubtractMask.release();
             if (symbolMask != null) symbolMask.release();
+            if (stemMask != null) stemMask.release();
+            if (stemSubtractMask != null) stemSubtractMask.release();
+            if (noteHeadMask != null) noteHeadMask.release();
             if (kernel != null) kernel.release();
         }
     }
@@ -995,6 +1033,153 @@ public class OpenCvScoreProcessor {
         return out;
     }
 
+    private Mat detectStemMaskOpenCv(Mat symbolMask, Mat staffMask, int staffSpacing) {
+        Mat verticalKernel = null;
+        Mat cleanup = null;
+        Mat stemMask = new Mat();
+        Mat filteredStemMask = Mat.zeros(symbolMask.rows(), symbolMask.cols(), CvType.CV_8UC1);
+        Mat contoursInput = null;
+        Mat hierarchy = new Mat();
+        List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
+        try {
+            int stemKernelH = Math.max(5, Math.round(staffSpacing * 2.2f));
+            verticalKernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1, stemKernelH));
+            Imgproc.morphologyEx(symbolMask, stemMask, Imgproc.MORPH_OPEN, verticalKernel);
+            int cleanupKernel = Math.max(1, Math.round(staffSpacing * 0.33f));
+            cleanup = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1, cleanupKernel));
+            Imgproc.morphologyEx(stemMask, stemMask, Imgproc.MORPH_CLOSE, cleanup);
+
+            int maxStemWidth = Math.max(1, estimateStaffLineThicknessFromMask(staffMask, staffSpacing) * 2);
+            int minStemHeight = Math.max(4, Math.round(staffSpacing * 2.5f));
+
+            contoursInput = stemMask.clone();
+            Imgproc.findContours(contoursInput, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+            for (MatOfPoint contour : contours) {
+                Rect r = Imgproc.boundingRect(contour);
+                if (r.width <= maxStemWidth && r.height >= minStemHeight) {
+                    Imgproc.drawContours(filteredStemMask, Collections.singletonList(contour), -1, new Scalar(255), -1);
+                }
+                contour.release();
+            }
+            stemMask.release();
+            return filteredStemMask;
+        } finally {
+            if (verticalKernel != null) verticalKernel.release();
+            if (cleanup != null) cleanup.release();
+            if (contoursInput != null) contoursInput.release();
+            hierarchy.release();
+        }
+    }
+
+    private int estimateStaffLineThicknessFromMask(Mat staffMask, int staffSpacing) {
+        if (staffMask == null || staffMask.empty()) return Math.max(1, Math.round(staffSpacing * 0.25f));
+        int h = staffMask.rows();
+        int w = staffMask.cols();
+        int longest = 0;
+        int samples = 0;
+        int step = Math.max(1, w / 64);
+        for (int x = 0; x < w; x += step) {
+            int run = 0;
+            int best = 0;
+            for (int y = 0; y < h; y++) {
+                if (staffMask.get(y, x)[0] > 0) {
+                    run++;
+                    if (run > best) best = run;
+                } else {
+                    run = 0;
+                }
+            }
+            if (best > 0) {
+                longest += best;
+                samples++;
+            }
+        }
+        if (samples == 0) return Math.max(1, Math.round(staffSpacing * 0.25f));
+        int avg = Math.max(1, Math.round(longest / (float) samples));
+        return Math.max(1, Math.min(4, avg));
+    }
+
+    private Mat createExpandedLineSubtractMask(Mat sourceMask, int staffSpacing, boolean horizontalLine) {
+        Mat expanded = new Mat();
+        Mat kernel = null;
+        try {
+            int crossThickness = oddAtLeast(horizontalLine
+                    ? Math.max(3, Math.round(staffSpacing * 0.65f))
+                    : Math.max(3, Math.round(staffSpacing * 0.55f)));
+            int alongThickness = oddAtLeast(horizontalLine
+                    ? Math.max(3, Math.round(staffSpacing * 0.30f))
+                    : Math.max(3, Math.round(staffSpacing * 0.35f)));
+            int kW = horizontalLine ? alongThickness : crossThickness;
+            int kH = horizontalLine ? crossThickness : alongThickness;
+            kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(kW, kH));
+            Imgproc.dilate(sourceMask, expanded, kernel);
+            return expanded;
+        } finally {
+            if (kernel != null) kernel.release();
+        }
+    }
+
+    private int oddAtLeast(int value) {
+        return (Math.max(1, value) | 1);
+    }
+
+    private List<Blob> suppressIntersectionDominatedHeads(List<Blob> in, Mat staffMask, Mat stemMask, int staffSpacing) {
+        if (in == null || in.isEmpty() || staffMask == null || stemMask == null) {
+            return in == null ? new ArrayList<Blob>() : in;
+        }
+        Mat staffDilated = new Mat();
+        Mat stemDilated = new Mat();
+        Mat intersections = new Mat();
+        Mat k = null;
+        try {
+            int kSize = Math.max(3, (staffSpacing / 3) | 1);
+            k = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(kSize, kSize));
+            Imgproc.dilate(staffMask, staffDilated, k);
+            Imgproc.dilate(stemMask, stemDilated, k);
+            Core.bitwise_and(staffDilated, stemDilated, intersections);
+
+            List<Blob> out = new ArrayList<Blob>();
+            for (Blob b : in) {
+                int x0 = Math.max(0, b.minX);
+                int x1 = Math.min(intersections.cols() - 1, b.maxX);
+                int y0 = Math.max(0, b.minY);
+                int y1 = Math.min(intersections.rows() - 1, b.maxY);
+                int hits = 0;
+                int total = 0;
+                for (int y = y0; y <= y1; y++) {
+                    for (int x = x0; x <= x1; x++) {
+                        total++;
+                        if (intersections.get(y, x)[0] > 0) hits++;
+                    }
+                }
+                float ratio = total == 0 ? 0f : (hits / (float) total);
+                int minHeadH = Math.max(3, Math.round(staffSpacing * 0.38f));
+                if (ratio > 0.20f || b.height() < minHeadH || isLikelyHorizontalResidue(b, staffSpacing)) {
+                    continue;
+                }
+                out.add(b);
+            }
+            return out;
+        } finally {
+            staffDilated.release();
+            stemDilated.release();
+            intersections.release();
+            if (k != null) k.release();
+        }
+    }
+
+    private boolean isLikelyHorizontalResidue(Blob b, int staffSpacing) {
+        float w = b.width();
+        float h = b.height();
+        if (h <= 0f) return true;
+        float ratio = w / h;
+        float areaNorm = b.area / Math.max(1f, (float) (staffSpacing * staffSpacing));
+        boolean thin = h <= Math.max(2f, staffSpacing * 0.30f);
+        boolean wide = ratio >= 2.6f;
+        boolean tiny = areaNorm <= 0.30f;
+        return thin && wide && tiny;
+    }
+
     private List<Blob> detectNoteHeadsOpenCv(Mat symbolMask, int w, int h, int staffSpacing, ProcessingOptions options, List<StaffGroup> groups, NoteDetectionDiagnostics diagnostics) {
         List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
         Mat hierarchy = new Mat();
@@ -1275,9 +1460,29 @@ public class OpenCvScoreProcessor {
         return -1;
     }
 
+    private List<Blob> filterByFixedRoundLargeBoundary(List<Blob> in) {
+        if (in == null || in.isEmpty()) return in;
+        List<Blob> out = new ArrayList<Blob>();
+        for (Blob b : in) {
+            if (roundLargeScore(b) >= EXPERIMENT_ROUND_LARGE_BOUNDARY) {
+                out.add(b);
+            }
+        }
+        if (out.isEmpty()) return in;
+        return out;
+    }
+
+    private float roundLargeScore(Blob b) {
+        float area = Math.max(1f, b.area);
+        float aspect = b.width() / (float) Math.max(1, b.height());
+        float roundness = 1.0f / (1.0f + Math.abs(aspect - 1.0f));
+        return area * (0.5f + 0.5f * roundness);
+    }
+
     private void fillNotesWithDurationFeatures(ScorePiece piece,
                                                List<Blob> noteHeads,
                                                Mat symbolMask,
+                                               Mat stemMask,
                                                Mat binaryMask,
                                                Mat staffMask,
                                                int staffSpacing,
@@ -1287,6 +1492,8 @@ public class OpenCvScoreProcessor {
                                                ProcessingOptions options) {
         if (noteHeads.isEmpty()) return;
         List<Blob> orderedHeads = sortNoteHeadsReadingOrder(noteHeads, groups);
+        orderedHeads = resolveOverlappingXCandidates(orderedHeads, groups, staffSpacing);
+        orderedHeads = enforceMonophonicX(orderedHeads, groups, staffSpacing, stemMask);
         int measureSize = 4;
         for (int i = 0; i < orderedHeads.size(); i++) {
             Blob b = orderedHeads.get(i);
@@ -1304,7 +1511,7 @@ public class OpenCvScoreProcessor {
             int octave = octaveForMidi(midi);
 
             boolean hollow = isHollowHead(symbolMask, b);
-            int stemCount = detectStemCount(symbolMask, b, staffSpacing);
+            int stemCount = detectStemCount(stemMask, b, staffSpacing);
             int flagCount = detectFlagCount(symbolMask, b, staffSpacing);
             String duration = resolveDuration(hollow, stemCount, flagCount);
 
@@ -1315,6 +1522,135 @@ public class OpenCvScoreProcessor {
     }
 
 
+
+    private List<Blob> resolveOverlappingXCandidates(List<Blob> orderedHeads,
+                                                    List<StaffGroup> groups,
+                                                    int staffSpacing) {
+        if (orderedHeads == null || orderedHeads.size() < 2) return orderedHeads;
+        List<Blob> sorted = new ArrayList<Blob>(orderedHeads);
+        Collections.sort(sorted, new Comparator<Blob>() {
+            @Override
+            public int compare(Blob a, Blob b) {
+                StaffGroup ga = nearestGroupForPoint(a.cx(), a.cy(), groups);
+                StaffGroup gb = nearestGroupForPoint(b.cx(), b.cy(), groups);
+                int ia = indexOfGroup(groups, ga);
+                int ib = indexOfGroup(groups, gb);
+                if (ia != ib) return ia - ib;
+                return Float.compare(a.minX, b.minX);
+            }
+        });
+
+        List<Blob> out = new ArrayList<Blob>();
+        for (Blob candidate : sorted) {
+            int replaceAt = -1;
+            for (int i = 0; i < out.size(); i++) {
+                Blob kept = out.get(i);
+                if (!sameStaffGroup(candidate, kept, groups)) continue;
+                if (!xRangesOverlap(candidate, kept, staffSpacing)) continue;
+                replaceAt = i;
+                break;
+            }
+            if (replaceAt < 0) {
+                out.add(candidate);
+                continue;
+            }
+            Blob kept = out.get(replaceAt);
+            if (blobDominanceScore(candidate, staffSpacing) > blobDominanceScore(kept, staffSpacing)) {
+                out.set(replaceAt, candidate);
+            }
+        }
+        Collections.sort(out, new Comparator<Blob>() {
+            @Override
+            public int compare(Blob a, Blob b) {
+                return Float.compare(a.cx(), b.cx());
+            }
+        });
+        return out;
+    }
+
+    private boolean sameStaffGroup(Blob a, Blob b, List<StaffGroup> groups) {
+        return indexOfGroup(groups, nearestGroupForPoint(a.cx(), a.cy(), groups))
+                == indexOfGroup(groups, nearestGroupForPoint(b.cx(), b.cy(), groups));
+    }
+
+    private boolean xRangesOverlap(Blob a, Blob b, int staffSpacing) {
+        int pad = Math.max(1, staffSpacing / 6);
+        int a0 = a.minX - pad;
+        int a1 = a.maxX + pad;
+        int b0 = b.minX - pad;
+        int b1 = b.maxX + pad;
+        return a0 <= b1 && b0 <= a1;
+    }
+
+    private float blobDominanceScore(Blob b, int staffSpacing) {
+        float areaNorm = b.area / Math.max(1f, (float) (staffSpacing * staffSpacing));
+        float w = b.width();
+        float h = b.height();
+        float ratio = w / Math.max(1f, h);
+        float roundness = 1f - Math.min(1f, Math.abs((float) Math.log(Math.max(0.05f, ratio))) / 1.6f);
+        float sizeScore = Math.min(2.2f, areaNorm * 1.4f);
+        return sizeScore + (roundness * 1.8f);
+    }
+
+    private List<Blob> enforceMonophonicX(List<Blob> orderedHeads, List<StaffGroup> groups, int staffSpacing, Mat stemMask) {
+        if (orderedHeads == null || orderedHeads.size() < 2) return orderedHeads;
+        float slotW = Math.max(4f, staffSpacing * 0.70f);
+        java.util.HashMap<String, Blob> bestPerSlot = new java.util.HashMap<String, Blob>();
+        for (Blob b : orderedHeads) {
+            StaffGroup g = nearestGroupForPoint(b.cx(), b.cy(), groups);
+            int groupIdx = indexOfGroup(groups, g);
+            int xSlot = Math.round(b.cx() / slotW);
+            String key = groupIdx + ":" + xSlot;
+            Blob prev = bestPerSlot.get(key);
+            if (prev == null) {
+                bestPerSlot.put(key, b);
+                continue;
+            }
+            float prevScore = monophonicBlobScore(prev, groups, staffSpacing, stemMask);
+            float curScore = monophonicBlobScore(b, groups, staffSpacing, stemMask);
+            if (curScore > prevScore + 0.12f || (Math.abs(curScore - prevScore) <= 0.12f && b.area > prev.area)) {
+                bestPerSlot.put(key, b);
+            }
+        }
+        List<Blob> out = new ArrayList<Blob>(bestPerSlot.values());
+        Collections.sort(out, new Comparator<Blob>() {
+            @Override
+            public int compare(Blob a, Blob b) {
+                StaffGroup ga = nearestGroupForPoint(a.cx(), a.cy(), groups);
+                StaffGroup gb = nearestGroupForPoint(b.cx(), b.cy(), groups);
+                int ia = indexOfGroup(groups, ga);
+                int ib = indexOfGroup(groups, gb);
+                if (ia != ib) return ia - ib;
+                return Float.compare(a.cx(), b.cx());
+            }
+        });
+        return out;
+    }
+
+    private float monophonicBlobScore(Blob b, List<StaffGroup> groups, int staffSpacing, Mat stemMask) {
+        float score = 0f;
+        float w = b.width();
+        float h = b.height();
+        float ratio = w / Math.max(1f, h);
+        float areaNorm = b.area / Math.max(1f, (float) (staffSpacing * staffSpacing));
+        float staffDist = nearestStaffStepDistance(b.cx(), b.cy(), groups, staffSpacing);
+
+        if (ratio >= 0.55f && ratio <= 2.20f) score += 2.2f;
+        else if (ratio >= 0.38f && ratio <= 2.80f) score += 0.8f;
+        else score -= 1.6f;
+
+        if (areaNorm >= 0.10f && areaNorm <= 2.5f) score += 1.0f;
+        else score -= 0.8f;
+
+        float distNorm = staffDist / Math.max(1f, staffSpacing * 0.35f);
+        score += Math.max(-1.4f, 1.9f - distNorm);
+
+        if (Math.min(w, h) >= Math.max(3f, staffSpacing * 0.42f)) score += 0.7f;
+
+        int stemCount = stemMask == null ? 0 : detectStemCount(stemMask, b, staffSpacing);
+        score += stemCount > 0 ? 1.1f : -0.2f;
+        return score;
+    }
 
     private int refinedStepFromBottomByLineStripe(Mat binaryMask, Blob b, StaffGroup g, int staffSpacing) {
         float halfStep = Math.max(2f, g.spacing / 2f);
@@ -1553,19 +1889,19 @@ public class OpenCvScoreProcessor {
         return fill < 0.45f;
     }
 
-    private int detectStemCount(Mat symbolMask, Blob b, int staffSpacing) {
+    private int detectStemCount(Mat stemMask, Blob b, int staffSpacing) {
         int searchPad = Math.max(2, staffSpacing / 2);
         int x0 = Math.max(0, b.minX - searchPad);
-        int x1 = Math.min(symbolMask.cols() - 1, b.maxX + searchPad);
+        int x1 = Math.min(stemMask.cols() - 1, b.maxX + searchPad);
         int y0 = Math.max(0, b.minY - staffSpacing * 2);
-        int y1 = Math.min(symbolMask.rows() - 1, b.maxY + staffSpacing * 2);
+        int y1 = Math.min(stemMask.rows() - 1, b.maxY + staffSpacing * 2);
         int stemCols = 0;
         int minRun = Math.max(staffSpacing, b.height() + staffSpacing / 2);
         for (int x = x0; x <= x1; x++) {
             int run = 0;
             int best = 0;
             for (int y = y0; y <= y1; y++) {
-                if (symbolMask.get(y, x)[0] > 0) {
+                if (stemMask.get(y, x)[0] > 0) {
                     run++;
                     if (run > best) best = run;
                 } else run = 0;

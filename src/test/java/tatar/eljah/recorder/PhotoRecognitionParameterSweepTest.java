@@ -42,7 +42,7 @@ public class PhotoRecognitionParameterSweepTest {
         OpenCvScoreProcessor.ProcessingOptions previousMethodOptions = new OpenCvScoreProcessor.ProcessingOptions(
                 7, 3, 0.5f, true, true,
                 0.6f, 4.0f, 0.18f, 0.9f, 0.32f, true, 0.75f,
-                null, false);
+                null, false, false);
         OpenCvScoreProcessor.ProcessingResult previousMethodResult = processor.processArgb(width, height, argb, "sweep-baseline-previous", previousMethodOptions);
         if (!previousMethodResult.openCvUsed) {
             throw new AssertionError("OpenCV mode required for baseline, got: " + previousMethodResult.processingMode);
@@ -52,7 +52,7 @@ public class PhotoRecognitionParameterSweepTest {
         OpenCvScoreProcessor.ProcessingOptions lineStripeMethodOptions = new OpenCvScoreProcessor.ProcessingOptions(
                 7, 3, 0.5f, true, true,
                 0.6f, 4.0f, 0.18f, 0.9f, 0.32f, true, 0.75f,
-                null, true);
+                null, true, false);
         OpenCvScoreProcessor.ProcessingResult lineStripeMethodResult = processor.processArgb(width, height, argb, "sweep-baseline-line-stripe", lineStripeMethodOptions);
         if (!lineStripeMethodResult.openCvUsed) {
             throw new AssertionError("OpenCV mode required for line-stripe baseline, got: " + lineStripeMethodResult.processingMode);
@@ -92,6 +92,7 @@ public class PhotoRecognitionParameterSweepTest {
                                     true,
                                     analyticalStrength,
                                     null,
+                                    false,
                                     false);
 
                             OpenCvScoreProcessor.ProcessingResult previousResult = processor.processArgb(width, height, argb, "sweep-previous", previousOptions);
@@ -120,7 +121,8 @@ public class PhotoRecognitionParameterSweepTest {
                                     true,
                                     analyticalStrength,
                                     null,
-                                    true);
+                                    true,
+                                    false);
 
                             OpenCvScoreProcessor.ProcessingResult lineStripeResult = processor.processArgb(width, height, argb, "sweep-line-stripe", lineStripeOptions);
                             if (!lineStripeResult.openCvUsed) {
