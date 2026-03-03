@@ -28,6 +28,8 @@ import java.util.List;
 
 public class ExperimentPitchDebugArtifactsExporter {
 
+    private static final float HARD_ROUND_LARGE_BOUNDARY = 50.364708f;
+
     static {
         UnsatisfiedLinkError last = null;
         for (String lib : new String[]{"opencv_java460", "opencv_java4", "opencv_java"}) {
@@ -154,12 +156,13 @@ public class ExperimentPitchDebugArtifactsExporter {
             BlobFilterResult stage2Overlap = filterOverlappingSmaller(stage2);
             BlobFilterResult stage2Mono = filterMonophonicByX(stage2Overlap.kept, lineThickness, staffSpacing);
 
-            BufferedImage allBlobView = drawBlobsOnGray(gray, stage2, new Scalar(0, 120, 255));
             BufferedImage filteredBlobView = drawFilteredBlobs(gray, stage2Mono.kept, mergeRemoved(stage2Overlap.removed, stage2Mono.removed));
             // Sorted-by-area view must use merged step5 data.
             BufferedImage sortedByAreaView = drawAreaOrderOnMergedMask(mergedView, stage2);
             List<Rect> topRoundLarge = selectTopRoundLarge(stage2, 13);
             BufferedImage roundLargeView = drawRoundLargeSelection(mergedView, stage2, topRoundLarge);
+            List<Rect> recognitionCandidates = filterByHardBoundary(topRoundLarge, HARD_ROUND_LARGE_BOUNDARY);
+            BufferedImage allBlobView = drawBlobsOnGray(gray, recognitionCandidates, new Scalar(0, 120, 255));
 
             File outDir = new File("docs/diagnostics");
             if (!outDir.exists() && !outDir.mkdirs()) {
@@ -184,6 +187,7 @@ public class ExperimentPitchDebugArtifactsExporter {
             System.out.println("Stage0(noStems) blobs: raw=" + stage0.size() + ", overlapKept=" + stage0Overlap.kept.size() + ", monoKept=" + stage0Mono.kept.size());
             System.out.println("Stage1(blur thin) blobs: raw=" + stage1.size() + ", overlapKept=" + stage1Overlap.kept.size() + ", monoKept=" + stage1Mono.kept.size());
             System.out.println("Stage2(merge narrow gaps) blobs: raw=" + stage2.size() + ", overlapKept=" + stage2Overlap.kept.size() + ", monoKept=" + stage2Mono.kept.size());
+            System.out.println("Step8(blobs from step7 over hard boundary=" + HARD_ROUND_LARGE_BOUNDARY + "): " + recognitionCandidates.size());
             printProxyStats("Before new steps (noStems)", before);
             printProxyStats("After blur thin artifacts", afterBlur);
             printProxyStats("After merge narrow gaps", afterMerge);
@@ -593,6 +597,17 @@ public class ExperimentPitchDebugArtifactsExporter {
         return out;
     }
 
+
+
+    private static List<Rect> filterByHardBoundary(List<Rect> rects, float boundary) {
+        List<Rect> out = new ArrayList<Rect>();
+        for (Rect r : rects) {
+            if (roundLargeScore(r) >= boundary) {
+                out.add(r);
+            }
+        }
+        return out.isEmpty() ? new ArrayList<Rect>(rects) : out;
+    }
 
     private static List<Rect> selectTopRoundLarge(List<Rect> rects, int topN) {
         List<Rect> sorted = new ArrayList<Rect>(rects);
