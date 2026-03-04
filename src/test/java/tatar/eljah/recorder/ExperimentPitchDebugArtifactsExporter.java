@@ -9,8 +9,12 @@ import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
 import javax.imageio.ImageIO;
+import javax.xml.parsers.DocumentBuilderFactory;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
@@ -200,6 +204,8 @@ public class ExperimentPitchDebugArtifactsExporter {
             printProxyStats("Before new steps (noStems)", before);
             printProxyStats("After blur thin artifacts", afterBlur);
             printProxyStats("After merge narrow gaps", afterMerge);
+
+            runStep9ReferenceComparisons(recognitionCandidates, image.getWidth(), image.getHeight());
         } finally {
             gray.release();
             binary.release();
@@ -774,6 +780,114 @@ public class ExperimentPitchDebugArtifactsExporter {
         byte[] bytes = Files.readAllBytes(png.toPath());
         String encoded = Base64.getEncoder().encodeToString(bytes);
         Files.write(b64.toPath(), encoded.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void runStep9ReferenceComparisons(List<Rect> step9Rects, int w, int h) {
+        try {
+            File xml = new File("Free-trial-photo-2026-02-13-14-27-38.xml");
+            File experiment = new File("experiment.png");
+            File photo = new File("photo_2026-02-13_14-27-38.jpg");
+            if (!xml.exists() || !experiment.exists() || !photo.exists()) {
+                System.out.println("Step9 note comparison skipped: missing xml/experiment/photo files.");
+                return;
+            }
+
+            List<NoteEvent> expected = parseXmlNotes(xml);
+            OpenCvScoreProcessor processor = new OpenCvScoreProcessor();
+
+            BufferedImage expImg = ImageIO.read(experiment);
+            int[] expArgb = expImg.getRGB(0, 0, expImg.getWidth(), expImg.getHeight(), null, 0, expImg.getWidth());
+            OpenCvScoreProcessor.ProcessingResult exp = processor.processArgb(expImg.getWidth(), expImg.getHeight(), expArgb,
+                    "experiment-step9-compare", OpenCvScoreProcessor.ProcessingOptions.defaults().withRequireOpenCv(true));
+            reportStep9VsReference("experiment(step9->notes)", step9Rects, w, h, exp.piece.notes, expected.subList(0, Math.min(13, expected.size())));
+
+            BufferedImage photoImg = ImageIO.read(photo);
+            int[] photoArgb = photoImg.getRGB(0, 0, photoImg.getWidth(), photoImg.getHeight(), null, 0, photoImg.getWidth());
+            OpenCvScoreProcessor.ProcessingResult big = processor.processArgb(photoImg.getWidth(), photoImg.getHeight(), photoArgb,
+                    "big-photo-56", OpenCvScoreProcessor.ProcessingOptions.defaults().withRequireOpenCv(true));
+            reportDirectReference("big-photo(opencv)", big.piece.notes, expected);
+        } catch (Throwable t) {
+            System.out.println("Step9 note comparison failed: " + t.getClass().getSimpleName() + " - " + t.getMessage());
+        }
+    }
+
+    private static void reportStep9VsReference(String label,
+                                               List<Rect> step9Rects,
+                                               int w,
+                                               int h,
+                                               List<NoteEvent> recognized,
+                                               List<NoteEvent> expectedSlice) {
+        List<NoteEvent> byStep9 = new ArrayList<NoteEvent>();
+        boolean[] used = new boolean[recognized.size()];
+        for (Rect r : step9Rects) {
+            float xn = (r.x + r.width * 0.5f) / Math.max(1f, (float) (w - 1));
+            int best = -1;
+            float bestDx = Float.MAX_VALUE;
+            for (int i = 0; i < recognized.size(); i++) {
+                if (used[i]) continue;
+                float dx = Math.abs(recognized.get(i).x - xn);
+                if (dx < bestDx) {
+                    bestDx = dx;
+                    best = i;
+                }
+            }
+            if (best >= 0) {
+                used[best] = true;
+                byStep9.add(recognized.get(best));
+            }
+        }
+        reportDirectReference(label, byStep9, expectedSlice);
+    }
+
+    private static void reportDirectReference(String label, List<NoteEvent> actual, List<NoteEvent> expected) {
+        int n = Math.min(actual.size(), expected.size());
+        int pitchOk = 0;
+        for (int i = 0; i < n; i++) {
+            NoteEvent a = actual.get(i);
+            NoteEvent e = expected.get(i);
+            if (safeEq(a.noteName, e.noteName) && a.octave == e.octave) pitchOk++;
+        }
+        System.out.println(label + ": actual=" + actual.size() + ", expected=" + expected.size()
+                + ", pitchMatchPrefix=" + pitchOk + "/" + n);
+    }
+
+    private static boolean safeEq(String a, String b) {
+        return a == null ? b == null : a.equals(b);
+    }
+
+    private static List<NoteEvent> parseXmlNotes(File xmlFile) throws Exception {
+        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+        dbf.setNamespaceAware(false);
+        dbf.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+        dbf.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        dbf.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        Document doc = dbf.newDocumentBuilder().parse(xmlFile);
+        NodeList noteNodes = doc.getElementsByTagName("note");
+        List<NoteEvent> out = new ArrayList<NoteEvent>();
+        for (int i = 0; i < noteNodes.getLength(); i++) {
+            Element note = (Element) noteNodes.item(i);
+            if (note.getElementsByTagName("rest").getLength() > 0) continue;
+            NodeList pitchNodes = note.getElementsByTagName("pitch");
+            if (pitchNodes.getLength() == 0) continue;
+            Element pitch = (Element) pitchNodes.item(0);
+            String step = textOfFirst(pitch, "step");
+            String alter = textOfFirst(pitch, "alter");
+            String octaveText = textOfFirst(pitch, "octave");
+            String duration = textOfFirst(note, "type");
+            if (step == null || octaveText == null) continue;
+            String name = step;
+            if ("1".equals(alter)) name += "#";
+            if ("-1".equals(alter)) name += "b";
+            if (duration == null || duration.length() == 0) duration = "quarter";
+            out.add(new NoteEvent(name, Integer.parseInt(octaveText.trim()), duration, 1 + out.size() / 4));
+        }
+        return out;
+    }
+
+    private static String textOfFirst(Element parent, String tag) {
+        NodeList list = parent.getElementsByTagName(tag);
+        if (list.getLength() == 0) return null;
+        return list.item(0).getTextContent();
     }
 
     private static class BlobFilterResult {
