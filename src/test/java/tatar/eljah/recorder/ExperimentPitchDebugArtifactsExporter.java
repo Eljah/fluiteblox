@@ -206,6 +206,8 @@ public class ExperimentPitchDebugArtifactsExporter {
             printProxyStats("After merge narrow gaps", afterMerge);
 
             runStep9ReferenceComparisons(recognitionCandidates, image.getWidth(), image.getHeight());
+            analyzeMainGateLosses(recognitionCandidates, staffSpacing);
+            printStep10RecognizedPitches(recognitionCandidates, horizontal, staffSpacing);
         } finally {
             gray.release();
             binary.release();
@@ -888,6 +890,119 @@ public class ExperimentPitchDebugArtifactsExporter {
         NodeList list = parent.getElementsByTagName(tag);
         if (list.getLength() == 0) return null;
         return list.item(0).getTextContent();
+    }
+
+    private static void analyzeMainGateLosses(List<Rect> rects, int staffSpacing) {
+        float spacing = Math.max(1f, (float) staffSpacing);
+        float boundary = 48.0f * (spacing * spacing) / (13.0f * 13.0f);
+        int passShape = 0;
+        int passArea = 0;
+        int passBoth = 0;
+        for (Rect r : rects) {
+            float w = Math.max(1f, r.width);
+            float h = Math.max(1f, r.height);
+            float aspect = w / h;
+            float roundness = 1.0f / (1.0f + Math.abs(aspect - 1.0f));
+            float minDim = Math.min(w, h);
+            boolean shape = !(aspect >= 1.40f && minDim <= spacing * 0.95f) && roundness >= 0.58f;
+            boolean area = Math.max(1.0, r.area()) >= boundary;
+            if (shape) passShape++;
+            if (area) passArea++;
+            if (shape && area) passBoth++;
+        }
+        System.out.println("Step9->main gate check: total=" + rects.size()
+                + ", passShape=" + passShape
+                + ", passArea=" + passArea
+                + ", passBoth=" + passBoth
+                + ", areaBoundary=" + String.format(java.util.Locale.US, "%.2f", boundary));
+    }
+
+    private static void printStep10RecognizedPitches(List<Rect> rects, Mat horizontalMask, int staffSpacing) {
+        List<Float> lines = detectStaffLineCenters(horizontalMask);
+        if (lines.size() < 5) {
+            System.out.println("Step10(note print): unable to detect 5 staff lines.");
+            return;
+        }
+        Collections.sort(rects, new Comparator<Rect>() {
+            @Override
+            public int compare(Rect a, Rect b) { return Integer.compare(a.x, b.x); }
+        });
+        float[] top5 = new float[]{lines.get(0), lines.get(1), lines.get(2), lines.get(3), lines.get(4)};
+        System.out.println("Step10: 13 recognized notes by staff pitch (from step9 centers):");
+        for (int i = 0; i < Math.min(13, rects.size()); i++) {
+            Rect r = rects.get(i);
+            float cy = r.y + r.height * 0.5f;
+            int posIndex = nearestStaffPositionIndex(cy, top5);
+            int stepFromBottom = 8 - posIndex;
+            int midi = midiForTrebleStaffStep(stepFromBottom);
+            String name = noteNameForMidi(midi);
+            int octave = octaveForMidi(midi);
+            System.out.println("  #" + (i + 1) + " x=" + (r.x + r.width / 2) + " y=" + String.format(java.util.Locale.US, "%.2f", cy)
+                    + " -> " + name + octave + " (stepFromBottom=" + stepFromBottom + ")");
+        }
+    }
+
+    private static List<Float> detectStaffLineCenters(Mat horizontalMask) {
+        List<Integer> rows = new ArrayList<Integer>();
+        int h = horizontalMask.rows();
+        int w = horizontalMask.cols();
+        for (int y = 0; y < h; y++) {
+            int dark = 0;
+            for (int x = 0; x < w; x++) {
+                if (horizontalMask.get(y, x)[0] > 0) dark++;
+            }
+            if (dark >= Math.max(8, w / 14)) rows.add(y);
+        }
+        List<Float> centers = new ArrayList<Float>();
+        if (rows.isEmpty()) return centers;
+        int s0 = rows.get(0), p0 = rows.get(0);
+        for (int i = 1; i < rows.size(); i++) {
+            int y = rows.get(i);
+            if (y == p0 + 1) p0 = y;
+            else {
+                centers.add((s0 + p0) * 0.5f);
+                s0 = p0 = y;
+            }
+        }
+        centers.add((s0 + p0) * 0.5f);
+        Collections.sort(centers);
+        if (centers.size() > 5) return new ArrayList<Float>(centers.subList(0, 5));
+        return centers;
+    }
+
+    private static int nearestStaffPositionIndex(float cy, float[] linesY) {
+        int bestIndex = 0;
+        float bestDist = Float.MAX_VALUE;
+        for (int i = 0; i < 5; i++) {
+            float d = Math.abs(cy - linesY[i]);
+            if (d < bestDist) { bestDist = d; bestIndex = i * 2; }
+            if (i < 4) {
+                float gapY = (linesY[i] + linesY[i + 1]) * 0.5f;
+                float gd = Math.abs(cy - gapY);
+                if (gd < bestDist) { bestDist = gd; bestIndex = i * 2 + 1; }
+            }
+        }
+        return bestIndex;
+    }
+
+    private static int midiForTrebleStaffStep(int stepFromBottom) {
+        String[] naturalCycle = new String[]{"C", "D", "E", "F", "G", "A", "B"};
+        int baseIndex = 2;
+        int noteIndex = baseIndex + stepFromBottom;
+        int octaveShift = Math.floorDiv(noteIndex, 7);
+        int idx = ((noteIndex % 7) + 7) % 7;
+        int octave = 4 + octaveShift;
+        return MusicNotation.midiFor(naturalCycle[idx], octave);
+    }
+
+    private static String noteNameForMidi(int midi) {
+        String[] names = new String[]{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+        int semitone = ((midi % 12) + 12) % 12;
+        return names[semitone];
+    }
+
+    private static int octaveForMidi(int midi) {
+        return Math.floorDiv(midi, 12) - 1;
     }
 
     private static class BlobFilterResult {
