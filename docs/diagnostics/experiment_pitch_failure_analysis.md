@@ -31,7 +31,7 @@
 7. `experiment_step7_aspect_ratio_filtered.png.b64` — отдельный шаг: черно-белая маска без выделений; blob-ы с чрезмерным `width/height` стираются в белый, остаются только blob-ы допустимых пропорций
 8. `experiment_step8_noteheads_area_top13.png.b64` — анализируется именно результат step7; кандидаты ранжируются по площади (`area`), берутся top-13
 9. `experiment_step9_blobs_all.png.b64` — кандидаты на распознавание из step8 после hard boundary `area >= 48.0`
-10. `experiment_step10_blobs_filtered_overlap_monophony.png.b64`
+10. `experiment_step10_blobs_filtered_overlap_monophony.png.b64` — надпечатка распознанных высот на результате step9 (используются ровно 13 оранжевых рамок step9, без пере-детекции позиций)
 
 ## Пороги/формулы
 
