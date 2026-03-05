@@ -352,7 +352,8 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 true,
                 BEST_ANALYTICAL_STRENGTH,
                 perStaff,
-                true);
+                true,
+                false);
     }
 
     private void rerunProcessing() {

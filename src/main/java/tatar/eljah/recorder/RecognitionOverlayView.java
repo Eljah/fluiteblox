@@ -501,7 +501,8 @@ public class RecognitionOverlayView extends View {
                 best = i;
             }
         }
-        return bestDist <= 0.08f ? best : -1;
+        float scaledPickRadius = Math.max(0.014f, 0.08f / Math.max(1f, zoom));
+        return bestDist <= scaledPickRadius ? best : -1;
     }
 
     private float[] toNormalized(float viewX, float viewY) {
