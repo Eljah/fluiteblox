@@ -189,7 +189,7 @@ public class ExperimentPitchDebugArtifactsExporter {
             savePngAndBase64(aspectFilteredView, new File(outDir, "experiment_step7_aspect_ratio_filtered"));
             savePngAndBase64(roundLargeView, new File(outDir, "experiment_step8_noteheads_area_top13"));
             savePngAndBase64(allBlobView, new File(outDir, "experiment_step9_blobs_all"));
-            savePngAndBase64(step10LabeledView, new File(outDir, "experiment_step10_blobs_filtered_overlap_monophony"));
+            savePngAndBase64(step10LabeledView, new File(outDir, "experiment_step10_final_recognized_overlay"));
 
             RecognitionProxyStats before = computeProxyStats(image, stage0Mono.kept);
             RecognitionProxyStats afterBlur = computeProxyStats(image, stage1Mono.kept);
@@ -201,14 +201,13 @@ public class ExperimentPitchDebugArtifactsExporter {
             System.out.println("Stage2(merge narrow gaps) blobs: raw=" + stage2.size() + ", overlapKept=" + stage2Overlap.kept.size() + ", monoKept=" + stage2Mono.kept.size());
             System.out.println("Step7(aspect ratio filtered): " + aspectFiltered.size());
             System.out.println("Step9(blobs from step8 over hard area boundary=" + HARD_NOTEHEAD_AREA_BOUNDARY + "): " + recognitionCandidates.size());
-            System.out.println("Step10 uses exact step9 boxes and only overlays recognized pitch labels.");
+            System.out.println("Step10 is final: no extra filtering, only mapping step9 orange boxes to staff pitch and drawing green note circles.");
             printTopRoundLargeDiagnostics(topRoundLarge);
             printProxyStats("Before new steps (noStems)", before);
             printProxyStats("After blur thin artifacts", afterBlur);
             printProxyStats("After merge narrow gaps", afterMerge);
 
             runStep9ReferenceComparisons(recognitionCandidates, image.getWidth(), image.getHeight());
-            analyzeMainGateLosses(recognitionCandidates, staffSpacing);
             printStep10RecognizedPitches(recognitionCandidates, horizontal, staffSpacing);
         } finally {
             gray.release();
@@ -902,14 +901,30 @@ public class ExperimentPitchDebugArtifactsExporter {
         try {
             g.drawImage(step9View, 0, 0, null);
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setFont(new Font("SansSerif", Font.BOLD, 13));
-            for (Step10Note n : computeStep10Notes(rects, horizontalMask)) {
-                int tx = Math.max(0, n.rect.x + n.rect.width / 2 - 10);
-                int ty = Math.max(14, n.rect.y - 4);
+            g.setFont(new Font("SansSerif", Font.BOLD, 14));
+            List<Step10Note> notes = computeStep10Notes(rects, horizontalMask);
+            int labelBaseY = 20;
+            for (int i = 0; i < notes.size(); i++) {
+                Step10Note n = notes.get(i);
+                int cx = n.rect.x + n.rect.width / 2;
+                int cy = Math.round(n.staffY);
+                int radiusX = Math.max(6, n.rect.width / 2);
+                int radiusY = Math.max(5, n.rect.height / 2);
+
+                g.setColor(new Color(20, 180, 20));
+                g.setStroke(new BasicStroke(2f));
+                g.drawOval(cx - radiusX, cy - radiusY, radiusX * 2, radiusY * 2);
+
+                int tx = Math.max(0, cx - 12);
+                int ty = labelBaseY + (i % 2) * 16;
                 g.setColor(Color.WHITE);
                 g.drawString(n.label, tx + 1, ty + 1);
                 g.setColor(new Color(20, 180, 20));
                 g.drawString(n.label, tx, ty);
+
+                g.setColor(new Color(20, 180, 20, 150));
+                g.setStroke(new BasicStroke(1f));
+                g.drawLine(cx, cy - radiusY - 2, cx, ty + 4);
             }
         } finally {
             g.dispose();
@@ -927,41 +942,16 @@ public class ExperimentPitchDebugArtifactsExporter {
             public int compare(Rect a, Rect b) { return Integer.compare(a.x, b.x); }
         });
         float[] top5 = new float[]{lines.get(0), lines.get(1), lines.get(2), lines.get(3), lines.get(4)};
-        for (int i = 0; i < Math.min(13, sorted.size()); i++) {
+        for (int i = 0; i < sorted.size(); i++) {
             Rect r = sorted.get(i);
             float cy = r.y + r.height * 0.5f;
             int posIndex = nearestStaffPositionIndex(cy, top5);
             int stepFromBottom = 8 - posIndex;
             int midi = midiForTrebleStaffStep(stepFromBottom);
             String label = noteNameForMidi(midi) + octaveForMidi(midi);
-            out.add(new Step10Note(r, label, cy, stepFromBottom));
+            out.add(new Step10Note(r, label, cy, stepFromBottom, staffYForPositionIndex(posIndex, top5)));
         }
         return out;
-    }
-
-    private static void analyzeMainGateLosses(List<Rect> rects, int staffSpacing) {
-        float spacing = Math.max(1f, (float) staffSpacing);
-        float boundary = 48.0f * (spacing * spacing) / (13.0f * 13.0f);
-        int passShape = 0;
-        int passArea = 0;
-        int passBoth = 0;
-        for (Rect r : rects) {
-            float w = Math.max(1f, r.width);
-            float h = Math.max(1f, r.height);
-            float aspect = w / h;
-            float roundness = 1.0f / (1.0f + Math.abs(aspect - 1.0f));
-            float minDim = Math.min(w, h);
-            boolean shape = !(aspect >= 1.40f && minDim <= spacing * 0.95f) && roundness >= 0.58f;
-            boolean area = Math.max(1.0, r.area()) >= boundary;
-            if (shape) passShape++;
-            if (area) passArea++;
-            if (shape && area) passBoth++;
-        }
-        System.out.println("Step9->main gate check: total=" + rects.size()
-                + ", passShape=" + passShape
-                + ", passArea=" + passArea
-                + ", passBoth=" + passBoth
-                + ", areaBoundary=" + String.format(java.util.Locale.US, "%.2f", boundary));
     }
 
     private static void printStep10RecognizedPitches(List<Rect> rects, Mat horizontalMask, int staffSpacing) {
@@ -970,7 +960,7 @@ public class ExperimentPitchDebugArtifactsExporter {
             System.out.println("Step10(note print): unable to detect 5 staff lines.");
             return;
         }
-        System.out.println("Step10: 13 recognized notes by staff pitch (from step9 centers):");
+        System.out.println("Step10: recognized notes by staff pitch (from step9 centers), count=" + notes.size() + ":");
         for (int i = 0; i < notes.size(); i++) {
             Step10Note n = notes.get(i);
             System.out.println("  #" + (i + 1) + " x=" + (n.rect.x + n.rect.width / 2) + " y=" + String.format(java.util.Locale.US, "%.2f", n.cy)
@@ -1046,13 +1036,22 @@ public class ExperimentPitchDebugArtifactsExporter {
         final String label;
         final float cy;
         final int stepFromBottom;
+        final float staffY;
 
-        Step10Note(Rect rect, String label, float cy, int stepFromBottom) {
+        Step10Note(Rect rect, String label, float cy, int stepFromBottom, float staffY) {
             this.rect = rect;
             this.label = label;
             this.cy = cy;
             this.stepFromBottom = stepFromBottom;
+            this.staffY = staffY;
         }
+    }
+
+    private static float staffYForPositionIndex(int posIndex, float[] linesY) {
+        int clamped = Math.max(0, Math.min(8, posIndex));
+        if ((clamped & 1) == 0) return linesY[clamped / 2];
+        int upperLine = clamped / 2;
+        return (linesY[upperLine] + linesY[upperLine + 1]) * 0.5f;
     }
 
     private static class BlobFilterResult {
