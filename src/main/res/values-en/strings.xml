@@ -95,4 +95,6 @@
     <string name="capture_edit_mode_down">Mode: move note down by 1 step (tap)</string>
     <string name="capture_panorama_open">Open panorama (fullscreen)</string>
     <string name="capture_panorama_close">Close panorama</string>
+    <string name="capture_blob_continue">Continue recognition</string>
+    <string name="capture_blob_mode_hint">Series 1-7 mode: tap a blob to remove it from subsequent stages.</string>
 </resources>
