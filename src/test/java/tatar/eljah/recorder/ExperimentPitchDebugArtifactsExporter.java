@@ -60,9 +60,54 @@ public class ExperimentPitchDebugArtifactsExporter {
         if (screenshot == null) {
             throw new AssertionError("Unable to decode clear_sreenshot.png");
         }
-        List<Rect> purpleStaves = resolveStaffInteriors(screenshot);
-        BufferedImage image = keepOnlyPurpleStaffInteriors(screenshot, purpleStaves);
-        System.out.println("Staff crops selected: " + purpleStaves.size());
+
+        List<Rect> staffInteriors = resolveStaffInteriors(screenshot);
+        if (staffInteriors.isEmpty()) {
+            throw new AssertionError("No staff interiors found for clear_sreenshot.png");
+        }
+        Collections.sort(staffInteriors, new Comparator<Rect>() {
+            @Override
+            public int compare(Rect a, Rect b) {
+                if (a.y == b.y) return a.x - b.x;
+                return a.y - b.y;
+            }
+        });
+
+        int staffCount = Math.min(3, staffInteriors.size());
+        File outDir = new File("docs/diagnostics");
+        if (!outDir.exists() && !outDir.mkdirs()) {
+            throw new IllegalStateException("Cannot create output directory: " + outDir.getAbsolutePath());
+        }
+
+        System.out.println("Staff crops selected: " + staffInteriors.size() + ", processing first " + staffCount + " staff systems.");
+        for (int i = 0; i < staffCount; i++) {
+            Rect staffRect = staffInteriors.get(i);
+            BufferedImage crop = cropBufferedImage(screenshot, staffRect);
+            processSingleStaffCrop(crop, i + 1, outDir);
+        }
+    }
+
+    private static BufferedImage cropBufferedImage(BufferedImage src, Rect r) {
+        int x0 = Math.max(0, r.x);
+        int y0 = Math.max(0, r.y);
+        int x1 = Math.min(src.getWidth() - 1, r.x + r.width - 1);
+        int y1 = Math.min(src.getHeight() - 1, r.y + r.height - 1);
+        if (x1 <= x0 || y1 <= y0) {
+            return src;
+        }
+        int w = x1 - x0 + 1;
+        int h = y1 - y0 + 1;
+        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                out.setRGB(x, y, src.getRGB(x0 + x, y0 + y));
+            }
+        }
+        return out;
+    }
+
+    private static void processSingleStaffCrop(BufferedImage image, int staffIndex, File outDir) throws Exception {
+        String prefix = "experiment_staff" + staffIndex + "_";
 
         Mat gray = bufferedToGray(image);
         Mat binary = new Mat();
@@ -130,17 +175,11 @@ public class ExperimentPitchDebugArtifactsExporter {
             int thinEraseSize = Math.max(2, lineThickness + 1);
             kThinErase = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(thinEraseSize, thinEraseSize));
             Imgproc.morphologyEx(blurRebinarized, blurRebinarized, Imgproc.MORPH_OPEN, kThinErase);
-            // Step4 must be monotonic relative to step3: do not resurrect black pixels erased on step3.
             Core.max(blurRebinarized, step3PipelineMask, blurRebinarized);
-            // Final hard rebinarization to cut gray/stripe leftovers introduced by blur/open+guard combinations.
             Imgproc.threshold(blurRebinarized, blurRebinarized, 127, 255, Imgproc.THRESH_BINARY);
             blurRebinarized.copyTo(step4PipelineMask);
 
-            // Step5 must consume exact Step4 output.
-            // Step5: vertical-only merge to join note-head halves split by removed staff lines.
             step4PipelineMask.copyTo(mergedNarrowGaps);
-
-            // Vertical close to merge note-head halves only when the gap is about one staff-line thickness.
             int mergeHeight = Math.max(3, lineThickness + 1);
             if (mergeHeight % 2 == 0) mergeHeight += 1;
             kMergeV = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1, mergeHeight));
@@ -165,8 +204,6 @@ public class ExperimentPitchDebugArtifactsExporter {
             BlobFilterResult stage2Overlap = filterOverlappingSmaller(stage2);
             BlobFilterResult stage2Mono = filterMonophonicByX(stage2Overlap.kept, lineThickness, staffSpacing);
 
-            BufferedImage filteredBlobView = drawFilteredBlobs(gray, stage2Mono.kept, mergeRemoved(stage2Overlap.removed, stage2Mono.removed));
-            // Sorted-by-area view must use merged step5 data.
             BufferedImage sortedByAreaView = drawAreaOrderOnMergedMask(mergedView, stage2);
             List<Rect> aspectFiltered = filterByAspectRatio(stage2);
             aspectFilteredMask = filterMaskByAspectRatio(mergedNarrowGaps, MAX_HEAD_ASPECT_RATIO);
@@ -178,39 +215,42 @@ public class ExperimentPitchDebugArtifactsExporter {
             BufferedImage allBlobView = drawBlobsOnGray(gray, recognitionCandidates, new Scalar(0, 120, 255));
             BufferedImage step10LabeledView = drawStep10RecognizedOnStep9(allBlobView, recognitionCandidates, horizontal);
 
-            File outDir = new File("docs/diagnostics");
-            if (!outDir.exists() && !outDir.mkdirs()) {
-                throw new IllegalStateException("Cannot create output directory: " + outDir.getAbsolutePath());
-            }
-
-            savePngAndBase64(linesOverlay, new File(outDir, "experiment_step1_lines_overlay"));
-            savePngAndBase64(subtractedView, new File(outDir, "experiment_step2_lines_subtracted"));
-            savePngAndBase64(stemSubtractedView, new File(outDir, "experiment_step3_stems_subtracted"));
-            savePngAndBase64(blurThinView, new File(outDir, "experiment_step4_thin_artifacts_blurred"));
-            savePngAndBase64(mergedView, new File(outDir, "experiment_step5_blobs_merged_narrow_gaps"));
-            savePngAndBase64(sortedByAreaView, new File(outDir, "experiment_step6_blobs_sorted_area_annotated"));
-            savePngAndBase64(aspectFilteredView, new File(outDir, "experiment_step7_aspect_ratio_filtered"));
-            savePngAndBase64(roundLargeView, new File(outDir, "experiment_step8_noteheads_area_top13"));
-            savePngAndBase64(allBlobView, new File(outDir, "experiment_step9_blobs_all"));
-            savePngAndBase64(step10LabeledView, new File(outDir, "experiment_step10_final_recognized_overlay"));
+            savePngAndBase64(linesOverlay, new File(outDir, prefix + "step1_lines_overlay"));
+            savePngAndBase64(subtractedView, new File(outDir, prefix + "step2_lines_subtracted"));
+            savePngAndBase64(stemSubtractedView, new File(outDir, prefix + "step3_stems_subtracted"));
+            savePngAndBase64(blurThinView, new File(outDir, prefix + "step4_thin_artifacts_blurred"));
+            savePngAndBase64(mergedView, new File(outDir, prefix + "step5_blobs_merged_narrow_gaps"));
+            savePngAndBase64(sortedByAreaView, new File(outDir, prefix + "step6_blobs_sorted_area_annotated"));
+            savePngAndBase64(aspectFilteredView, new File(outDir, prefix + "step7_aspect_ratio_filtered"));
+            savePngAndBase64(roundLargeView, new File(outDir, prefix + "step8_noteheads_area_top13"));
+            savePngAndBase64(allBlobView, new File(outDir, prefix + "step9_blobs_all"));
+            savePngAndBase64(step10LabeledView, new File(outDir, prefix + "step10_final_recognized_overlay"));
 
             RecognitionProxyStats before = computeProxyStats(image, stage0Mono.kept);
             RecognitionProxyStats afterBlur = computeProxyStats(image, stage1Mono.kept);
             RecognitionProxyStats afterMerge = computeProxyStats(image, stage2Mono.kept);
 
-            System.out.println("Artifacts exported to docs/diagnostics");
+            int[] argb = image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
+            OpenCvScoreProcessor.ProcessingResult staffRun = new OpenCvScoreProcessor().processArgb(
+                    image.getWidth(), image.getHeight(), argb,
+                    "clear-screenshot-staff-" + staffIndex,
+                    OpenCvScoreProcessor.ProcessingOptions.defaults().withRequireOpenCv(true));
+
+            System.out.println("=== Staff #" + staffIndex + " stats ===");
             System.out.println("Stage0(noStems) blobs: raw=" + stage0.size() + ", overlapKept=" + stage0Overlap.kept.size() + ", monoKept=" + stage0Mono.kept.size());
             System.out.println("Stage1(blur thin) blobs: raw=" + stage1.size() + ", overlapKept=" + stage1Overlap.kept.size() + ", monoKept=" + stage1Mono.kept.size());
             System.out.println("Stage2(merge narrow gaps) blobs: raw=" + stage2.size() + ", overlapKept=" + stage2Overlap.kept.size() + ", monoKept=" + stage2Mono.kept.size());
             System.out.println("Step7(aspect ratio filtered): " + aspectFiltered.size());
             System.out.println("Step9(blobs from step8 over hard area boundary=" + HARD_NOTEHEAD_AREA_BOUNDARY + "): " + recognitionCandidates.size());
-            System.out.println("Step10 is final: no extra filtering, only mapping step9 orange boxes to staff pitch and drawing green note circles.");
-            printTopRoundLargeDiagnostics(topRoundLarge);
-            printProxyStats("Before new steps (noStems)", before);
-            printProxyStats("After blur thin artifacts", afterBlur);
-            printProxyStats("After merge narrow gaps", afterMerge);
+            printProxyStats("Staff#" + staffIndex + " before new steps (noStems)", before);
+            printProxyStats("Staff#" + staffIndex + " after blur thin artifacts", afterBlur);
+            printProxyStats("Staff#" + staffIndex + " after merge narrow gaps", afterMerge);
 
-            runStep9ReferenceComparisons(recognitionCandidates, image.getWidth(), image.getHeight());
+            List<String> noteTokens = new ArrayList<String>();
+            for (NoteEvent n : staffRun.piece.notes) {
+                noteTokens.add(n.noteName + n.octave + "(" + normalizeDuration(n.duration) + ")");
+            }
+            System.out.println("Staff#" + staffIndex + " OpenCV notes: count=" + staffRun.piece.notes.size() + " -> " + noteTokens);
             printStep10RecognizedPitches(recognitionCandidates, horizontal, staffSpacing);
         } finally {
             gray.release();
@@ -234,6 +274,12 @@ public class ExperimentPitchDebugArtifactsExporter {
             if (kSinglePixelEat != null) kSinglePixelEat.release();
             if (kMergeV != null) kMergeV.release();
         }
+    }
+
+    private static String normalizeDuration(String d) {
+        if (d == null) return "quarter";
+        if ("16th".equals(d)) return "sixteenth";
+        return d;
     }
 
     private static void printProxyStats(String stageName, RecognitionProxyStats s) {
