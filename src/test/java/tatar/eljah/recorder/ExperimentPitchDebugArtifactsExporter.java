@@ -209,9 +209,9 @@ public class ExperimentPitchDebugArtifactsExporter {
             aspectFilteredMask = filterMaskByAspectRatio(mergedNarrowGaps, MAX_HEAD_ASPECT_RATIO);
             BufferedImage aspectFilteredView = binaryMaskToWhiteBg(aspectFilteredMask);
             List<Rect> step7Blobs = detectBlobs(aspectFilteredMask, 4, 6000);
-            List<Rect> topRoundLarge = selectTopByArea(step7Blobs, 13);
-            BufferedImage roundLargeView = drawRoundLargeSelection(aspectFilteredView, step7Blobs, topRoundLarge);
-            List<Rect> recognitionCandidates = filterByHardAreaBoundary(topRoundLarge, HARD_NOTEHEAD_AREA_BOUNDARY);
+            List<Rect> plausibleRanked = selectPlausibleByHeightAndRank(step7Blobs, staffSpacing);
+            BufferedImage roundLargeView = drawRoundLargeSelection(aspectFilteredView, step7Blobs, plausibleRanked);
+            List<Rect> recognitionCandidates = filterByHardAreaBoundary(plausibleRanked, HARD_NOTEHEAD_AREA_BOUNDARY);
             BufferedImage allBlobView = drawBlobsOnGray(gray, recognitionCandidates, new Scalar(0, 120, 255));
             BufferedImage step10LabeledView = drawStep10RecognizedOnStep9(allBlobView, recognitionCandidates, horizontal);
 
@@ -698,18 +698,26 @@ public class ExperimentPitchDebugArtifactsExporter {
         return out.isEmpty() ? new ArrayList<Rect>(rects) : out;
     }
 
-    private static List<Rect> selectTopByArea(List<Rect> rects, int topN) {
-        List<Rect> sorted = new ArrayList<Rect>(rects);
-        Collections.sort(sorted, new Comparator<Rect>() {
+    private static List<Rect> selectPlausibleByHeightAndRank(List<Rect> rects, int staffSpacing) {
+        List<Rect> plausible = new ArrayList<Rect>();
+        float minH = Math.max(1f, staffSpacing * 0.9f);
+        float maxH = Math.max(minH, staffSpacing * 1.5f);
+        for (Rect r : rects) {
+            float h = r.height;
+            if (h > maxH) continue;
+            if (h < minH) continue;
+            plausible.add(r);
+        }
+        if (plausible.isEmpty()) {
+            plausible.addAll(rects);
+        }
+        Collections.sort(plausible, new Comparator<Rect>() {
             @Override
             public int compare(Rect a, Rect b) {
                 return Double.compare(b.area(), a.area());
             }
         });
-        if (sorted.size() > topN) {
-            return new ArrayList<Rect>(sorted.subList(0, topN));
-        }
-        return sorted;
+        return plausible;
     }
 
     private static boolean isRoundLargeShapeCandidate(Rect r) {
