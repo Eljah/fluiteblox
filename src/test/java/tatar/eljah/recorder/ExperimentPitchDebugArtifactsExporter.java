@@ -60,12 +60,9 @@ public class ExperimentPitchDebugArtifactsExporter {
         if (screenshot == null) {
             throw new AssertionError("Unable to decode clear_sreenshot.png");
         }
-        List<Rect> purpleStaves = detectPurpleFrameInteriors(screenshot);
-        if (purpleStaves.isEmpty()) {
-            throw new AssertionError("No purple-framed staff regions detected in clear_sreenshot.png");
-        }
+        List<Rect> purpleStaves = resolveStaffInteriors(screenshot);
         BufferedImage image = keepOnlyPurpleStaffInteriors(screenshot, purpleStaves);
-        System.out.println("Purple-framed staff crops detected: " + purpleStaves.size());
+        System.out.println("Staff crops selected: " + purpleStaves.size());
 
         Mat gray = bufferedToGray(image);
         Mat binary = new Mat();
@@ -759,6 +756,27 @@ public class ExperimentPitchDebugArtifactsExporter {
         return gray;
     }
 
+    private static Mat bufferedToBgr(BufferedImage image) {
+        int w = image.getWidth();
+        int h = image.getHeight();
+        Mat bgr = new Mat(h, w, CvType.CV_8UC3);
+        byte[] row = new byte[w * 3];
+        for (int y = 0; y < h; y++) {
+            int i = 0;
+            for (int x = 0; x < w; x++) {
+                int rgb = image.getRGB(x, y);
+                int r = (rgb >> 16) & 0xFF;
+                int g = (rgb >> 8) & 0xFF;
+                int b = rgb & 0xFF;
+                row[i++] = (byte) b;
+                row[i++] = (byte) g;
+                row[i++] = (byte) r;
+            }
+            bgr.put(y, 0, row);
+        }
+        return bgr;
+    }
+
     private static BufferedImage matBgrToBuffered(Mat bgr) {
         int w = bgr.cols();
         int h = bgr.rows();
@@ -783,84 +801,218 @@ public class ExperimentPitchDebugArtifactsExporter {
     }
 
 
+    private static List<Rect> resolveStaffInteriors(BufferedImage image) {
+        List<Rect> purple = detectPurpleFrameInteriors(image);
+        if (!purple.isEmpty()) {
+            return purple;
+        }
+        List<Rect> fallback = detectStaffInteriorsViaOpenCv(image);
+        if (!fallback.isEmpty()) {
+            System.out.println("Purple frame not found, fallback to OpenCV staff corridors: " + fallback.size());
+            return fallback;
+        }
+        List<Rect> whole = new ArrayList<Rect>();
+        whole.add(new Rect(0, 0, image.getWidth(), image.getHeight()));
+        System.out.println("Purple frame and corridors not found, fallback to full screenshot.");
+        return whole;
+    }
+
+    private static List<Rect> detectStaffInteriorsViaOpenCv(BufferedImage image) {
+        List<Rect> out = new ArrayList<Rect>();
+        try {
+            int w = image.getWidth();
+            int h = image.getHeight();
+            int[] argb = image.getRGB(0, 0, w, h, null, 0, w);
+            OpenCvScoreProcessor.ProcessingResult result = new OpenCvScoreProcessor().processArgb(
+                    w, h, argb, "staff-corridor-fallback", OpenCvScoreProcessor.ProcessingOptions.defaults().withRequireOpenCv(true));
+            if (result.staffCorridors == null || result.staffCorridors.isEmpty()) return out;
+            for (OpenCvScoreProcessor.StaffCorridor c : result.staffCorridors) {
+                int x0 = Math.max(0, Math.round(c.left * (w - 1)));
+                int y0 = Math.max(0, Math.round(c.top * (h - 1)));
+                int x1 = Math.min(w - 1, Math.round(c.right * (w - 1)));
+                int y1 = Math.min(h - 1, Math.round(c.bottom * (h - 1)));
+                if (x1 <= x0 || y1 <= y0) continue;
+                out.add(new Rect(x0, y0, x1 - x0 + 1, y1 - y0 + 1));
+            }
+            return dedupeOverlappingRects(out);
+        } catch (Throwable ignored) {
+            return out;
+        }
+    }
+
     private static List<Rect> detectPurpleFrameInteriors(BufferedImage image) {
+        Mat bgr = bufferedToBgr(image);
+        Mat hsv = new Mat();
+        Mat purple1 = new Mat();
+        Mat purple2 = new Mat();
+        Mat purple = new Mat();
+        Mat kernel = null;
+        Mat contoursInput = null;
+        Mat hierarchy = new Mat();
+        List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
+        List<Rect> out = new ArrayList<Rect>();
+        try {
+            Imgproc.cvtColor(bgr, hsv, Imgproc.COLOR_BGR2HSV);
+
+            // Purple/magenta frame strokes on screenshot overlay (two hue bands around magenta).
+            Core.inRange(hsv, new Scalar(120, 35, 35), new Scalar(179, 255, 255), purple1);
+            Core.inRange(hsv, new Scalar(0, 35, 35), new Scalar(10, 255, 255), purple2);
+            Core.bitwise_or(purple1, purple2, purple);
+
+            int closeW = Math.max(9, image.getWidth() / 70);
+            int closeH = Math.max(3, image.getHeight() / 220);
+            kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(closeW, closeH));
+            Imgproc.morphologyEx(purple, purple, Imgproc.MORPH_CLOSE, kernel);
+
+            contoursInput = purple.clone();
+            Imgproc.findContours(contoursInput, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+            for (MatOfPoint contour : contours) {
+                Rect r = Imgproc.boundingRect(contour);
+                int bw = r.width;
+                int bh = r.height;
+                if (bw < image.getWidth() / 3) continue;
+                if (bh < Math.max(10, image.getHeight() / 30)) continue;
+                float aspect = bw / (float) Math.max(1, bh);
+                if (aspect < 4.5f) continue;
+
+                int inset = Math.max(1, Math.round(Math.max(2f, bh * 0.08f)));
+                int ix = Math.max(0, r.x + inset);
+                int iy = Math.max(0, r.y + inset);
+                int xEnd = Math.min(image.getWidth() - 1, r.x + r.width - 1 - inset);
+                int yEnd = Math.min(image.getHeight() - 1, r.y + r.height - 1 - inset);
+                if (xEnd <= ix || yEnd <= iy) continue;
+                Rect inner = new Rect(ix, iy, xEnd - ix + 1, yEnd - iy + 1);
+                if (inner.width < image.getWidth() / 4 || inner.height < image.getHeight() / 40) continue;
+                out.add(inner);
+            }
+
+            // Deduplicate overlapping/nested boxes and keep top-to-bottom order.
+            out = dedupeOverlappingRects(out);
+            if (out.isEmpty()) {
+                out = detectPurpleFrameInteriorsByHorizontalLines(image);
+            }
+            Collections.sort(out, new Comparator<Rect>() {
+                @Override
+                public int compare(Rect a, Rect b) {
+                    if (a.y == b.y) return a.x - b.x;
+                    return a.y - b.y;
+                }
+            });
+            return out;
+        } finally {
+            bgr.release();
+            hsv.release();
+            purple1.release();
+            purple2.release();
+            purple.release();
+            if (kernel != null) kernel.release();
+            if (contoursInput != null) contoursInput.release();
+            hierarchy.release();
+            for (MatOfPoint c : contours) c.release();
+        }
+    }
+
+    private static List<Rect> detectPurpleFrameInteriorsByHorizontalLines(BufferedImage image) {
         int w = image.getWidth();
         int h = image.getHeight();
-        boolean[] purple = new boolean[w * h];
+        int[] rowHits = new int[h];
+        boolean[][] purple = new boolean[h][w];
         for (int y = 0; y < h; y++) {
+            int hits = 0;
             for (int x = 0; x < w; x++) {
                 int rgb = image.getRGB(x, y);
                 int r = (rgb >> 16) & 0xFF;
                 int g = (rgb >> 8) & 0xFF;
                 int b = rgb & 0xFF;
-                boolean isPurple = r >= 95 && b >= 95 && g <= 135 && Math.abs(r - b) <= 95 && (r + b - (g * 2)) >= 70;
-                purple[y * w + x] = isPurple;
+                boolean isPurple = b >= 55 && r >= 45 && Math.abs(r - b) <= 110 && g <= Math.max(r, b) - 8;
+                purple[y][x] = isPurple;
+                if (isPurple) hits++;
             }
+            rowHits[y] = hits;
         }
 
-        boolean[] visited = new boolean[purple.length];
-        int[] qx = new int[purple.length];
-        int[] qy = new int[purple.length];
+        int rowThreshold = Math.max(18, w / 5);
+        List<Integer> lineCenters = new ArrayList<Integer>();
+        int y = 0;
+        while (y < h) {
+            if (rowHits[y] < rowThreshold) {
+                y++;
+                continue;
+            }
+            int y0 = y;
+            int y1 = y;
+            while (y1 + 1 < h && rowHits[y1 + 1] >= rowThreshold) y1++;
+            lineCenters.add((y0 + y1) / 2);
+            y = y1 + 1;
+        }
+
         List<Rect> out = new ArrayList<Rect>();
-        for (int y = 0; y < h; y++) {
+        for (int i = 0; i + 1 < lineCenters.size(); i++) {
+            int top = lineCenters.get(i);
+            int bottom = lineCenters.get(i + 1);
+            int gap = bottom - top;
+            if (gap < Math.max(18, h / 28) || gap > Math.max(220, h / 4)) continue;
+
+            int minX = w;
+            int maxX = -1;
             for (int x = 0; x < w; x++) {
-                int idx = y * w + x;
-                if (!purple[idx] || visited[idx]) continue;
-                int minX = x;
-                int maxX = x;
-                int minY = y;
-                int maxY = y;
-                int area = 0;
-                int head = 0;
-                int tail = 0;
-                qx[tail] = x;
-                qy[tail] = y;
-                tail++;
-                visited[idx] = true;
-                while (head < tail) {
-                    int cx = qx[head];
-                    int cy = qy[head];
-                    head++;
-                    area++;
-                    if (cx < minX) minX = cx;
-                    if (cx > maxX) maxX = cx;
-                    if (cy < minY) minY = cy;
-                    if (cy > maxY) maxY = cy;
-                    for (int ny = Math.max(0, cy - 1); ny <= Math.min(h - 1, cy + 1); ny++) {
-                        for (int nx = Math.max(0, cx - 1); nx <= Math.min(w - 1, cx + 1); nx++) {
-                            int nidx = ny * w + nx;
-                            if (!purple[nidx] || visited[nidx]) continue;
-                            visited[nidx] = true;
-                            qx[tail] = nx;
-                            qy[tail] = ny;
-                            tail++;
-                        }
-                    }
+                if (purple[top][x] || purple[bottom][x]) {
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
                 }
-
-                int bw = maxX - minX + 1;
-                int bh = maxY - minY + 1;
-                if (area < 120 || bw < w / 6 || bh < h / 25) continue;
-                float aspect = bw / (float) Math.max(1, bh);
-                if (aspect < 3.0f) continue;
-
-                int inset = 2;
-                int ix = Math.max(0, minX + inset);
-                int iy = Math.max(0, minY + inset);
-                int iw = Math.max(1, (maxX - inset) - ix + 1);
-                int ih = Math.max(1, (maxY - inset) - iy + 1);
-                out.add(new Rect(ix, iy, iw, ih));
             }
+            if (maxX <= minX) continue;
+            int width = maxX - minX + 1;
+            if (width < w / 3) continue;
+
+            int insetX = Math.max(2, Math.round(width * 0.006f));
+            int insetY = Math.max(2, Math.round(gap * 0.08f));
+            int ix = Math.max(0, minX + insetX);
+            int iy = Math.max(0, top + insetY);
+            int xEnd = Math.min(w - 1, maxX - insetX);
+            int yEnd = Math.min(h - 1, bottom - insetY);
+            if (xEnd <= ix || yEnd <= iy) continue;
+            out.add(new Rect(ix, iy, xEnd - ix + 1, yEnd - iy + 1));
+
+            i++; // consume pair as one frame
         }
 
-        Collections.sort(out, new Comparator<Rect>() {
+        return dedupeOverlappingRects(out);
+    }
+
+    private static List<Rect> dedupeOverlappingRects(List<Rect> input) {
+        if (input == null || input.isEmpty()) return input;
+        List<Rect> sorted = new ArrayList<Rect>(input);
+        Collections.sort(sorted, new Comparator<Rect>() {
             @Override
             public int compare(Rect a, Rect b) {
-                if (a.y == b.y) return a.x - b.x;
-                return a.y - b.y;
+                int areaA = a.width * a.height;
+                int areaB = b.width * b.height;
+                return areaB - areaA;
             }
         });
-        return out;
+        List<Rect> kept = new ArrayList<Rect>();
+        for (Rect r : sorted) {
+            boolean overlapsStrongly = false;
+            for (Rect k : kept) {
+                int ix0 = Math.max(r.x, k.x);
+                int iy0 = Math.max(r.y, k.y);
+                int ix1 = Math.min(r.x + r.width - 1, k.x + k.width - 1);
+                int iy1 = Math.min(r.y + r.height - 1, k.y + k.height - 1);
+                if (ix1 < ix0 || iy1 < iy0) continue;
+                int inter = (ix1 - ix0 + 1) * (iy1 - iy0 + 1);
+                int rArea = Math.max(1, r.width * r.height);
+                int kArea = Math.max(1, k.width * k.height);
+                float rOverlap = inter / (float) rArea;
+                float kOverlap = inter / (float) kArea;
+                if (rOverlap >= 0.80f || kOverlap >= 0.90f) {
+                    overlapsStrongly = true;
+                    break;
+                }
+            }
+            if (!overlapsStrongly) kept.add(r);
+        }
+        return kept;
     }
 
     private static BufferedImage keepOnlyPurpleStaffInteriors(BufferedImage image, List<Rect> interiors) {
@@ -910,7 +1062,7 @@ public class ExperimentPitchDebugArtifactsExporter {
             OpenCvScoreProcessor processor = new OpenCvScoreProcessor();
 
             BufferedImage screenshotImg = ImageIO.read(screenshot);
-            List<Rect> purpleStaves = detectPurpleFrameInteriors(screenshotImg);
+            List<Rect> purpleStaves = resolveStaffInteriors(screenshotImg);
             BufferedImage croppedStaves = keepOnlyPurpleStaffInteriors(screenshotImg, purpleStaves);
             int[] screenshotArgb = croppedStaves.getRGB(0, 0, croppedStaves.getWidth(), croppedStaves.getHeight(), null, 0, croppedStaves.getWidth());
             OpenCvScoreProcessor.ProcessingResult screenshotResult = processor.processArgb(croppedStaves.getWidth(), croppedStaves.getHeight(), screenshotArgb,
