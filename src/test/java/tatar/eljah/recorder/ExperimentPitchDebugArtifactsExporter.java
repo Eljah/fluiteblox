@@ -52,14 +52,20 @@ public class ExperimentPitchDebugArtifactsExporter {
     }
 
     public static void main(String[] args) throws Exception {
-        File input = new File("experiment.png");
+        File input = new File("clear_sreenshot.png");
         if (!input.exists()) {
-            throw new AssertionError("Missing experiment.png");
+            throw new AssertionError("Missing clear_sreenshot.png");
         }
-        BufferedImage image = ImageIO.read(input);
-        if (image == null) {
-            throw new AssertionError("Unable to decode experiment.png");
+        BufferedImage screenshot = ImageIO.read(input);
+        if (screenshot == null) {
+            throw new AssertionError("Unable to decode clear_sreenshot.png");
         }
+        List<Rect> purpleStaves = detectPurpleFrameInteriors(screenshot);
+        if (purpleStaves.isEmpty()) {
+            throw new AssertionError("No purple-framed staff regions detected in clear_sreenshot.png");
+        }
+        BufferedImage image = keepOnlyPurpleStaffInteriors(screenshot, purpleStaves);
+        System.out.println("Purple-framed staff crops detected: " + purpleStaves.size());
 
         Mat gray = bufferedToGray(image);
         Mat binary = new Mat();
@@ -776,6 +782,112 @@ public class ExperimentPitchDebugArtifactsExporter {
         return v;
     }
 
+
+    private static List<Rect> detectPurpleFrameInteriors(BufferedImage image) {
+        int w = image.getWidth();
+        int h = image.getHeight();
+        boolean[] purple = new boolean[w * h];
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int rgb = image.getRGB(x, y);
+                int r = (rgb >> 16) & 0xFF;
+                int g = (rgb >> 8) & 0xFF;
+                int b = rgb & 0xFF;
+                boolean isPurple = r >= 95 && b >= 95 && g <= 135 && Math.abs(r - b) <= 95 && (r + b - (g * 2)) >= 70;
+                purple[y * w + x] = isPurple;
+            }
+        }
+
+        boolean[] visited = new boolean[purple.length];
+        int[] qx = new int[purple.length];
+        int[] qy = new int[purple.length];
+        List<Rect> out = new ArrayList<Rect>();
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int idx = y * w + x;
+                if (!purple[idx] || visited[idx]) continue;
+                int minX = x;
+                int maxX = x;
+                int minY = y;
+                int maxY = y;
+                int area = 0;
+                int head = 0;
+                int tail = 0;
+                qx[tail] = x;
+                qy[tail] = y;
+                tail++;
+                visited[idx] = true;
+                while (head < tail) {
+                    int cx = qx[head];
+                    int cy = qy[head];
+                    head++;
+                    area++;
+                    if (cx < minX) minX = cx;
+                    if (cx > maxX) maxX = cx;
+                    if (cy < minY) minY = cy;
+                    if (cy > maxY) maxY = cy;
+                    for (int ny = Math.max(0, cy - 1); ny <= Math.min(h - 1, cy + 1); ny++) {
+                        for (int nx = Math.max(0, cx - 1); nx <= Math.min(w - 1, cx + 1); nx++) {
+                            int nidx = ny * w + nx;
+                            if (!purple[nidx] || visited[nidx]) continue;
+                            visited[nidx] = true;
+                            qx[tail] = nx;
+                            qy[tail] = ny;
+                            tail++;
+                        }
+                    }
+                }
+
+                int bw = maxX - minX + 1;
+                int bh = maxY - minY + 1;
+                if (area < 120 || bw < w / 6 || bh < h / 25) continue;
+                float aspect = bw / (float) Math.max(1, bh);
+                if (aspect < 3.0f) continue;
+
+                int inset = 2;
+                int ix = Math.max(0, minX + inset);
+                int iy = Math.max(0, minY + inset);
+                int iw = Math.max(1, (maxX - inset) - ix + 1);
+                int ih = Math.max(1, (maxY - inset) - iy + 1);
+                out.add(new Rect(ix, iy, iw, ih));
+            }
+        }
+
+        Collections.sort(out, new Comparator<Rect>() {
+            @Override
+            public int compare(Rect a, Rect b) {
+                if (a.y == b.y) return a.x - b.x;
+                return a.y - b.y;
+            }
+        });
+        return out;
+    }
+
+    private static BufferedImage keepOnlyPurpleStaffInteriors(BufferedImage image, List<Rect> interiors) {
+        BufferedImage out = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = out.createGraphics();
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, out.getWidth(), out.getHeight());
+        g.dispose();
+
+        if (interiors == null || interiors.isEmpty()) {
+            return out;
+        }
+
+        for (Rect r : interiors) {
+            int x0 = Math.max(0, r.x);
+            int y0 = Math.max(0, r.y);
+            int x1 = Math.min(image.getWidth() - 1, r.x + r.width - 1);
+            int y1 = Math.min(image.getHeight() - 1, r.y + r.height - 1);
+            for (int y = y0; y <= y1; y++) {
+                for (int x = x0; x <= x1; x++) {
+                    out.setRGB(x, y, image.getRGB(x, y));
+                }
+            }
+        }
+        return out;
+    }
+
     private static void savePngAndBase64(BufferedImage img, File basePathNoExt) throws Exception {
         File png = new File(basePathNoExt.getPath() + ".png");
         File b64 = new File(basePathNoExt.getPath() + ".png.b64");
@@ -788,27 +900,24 @@ public class ExperimentPitchDebugArtifactsExporter {
     private static void runStep9ReferenceComparisons(List<Rect> step9Rects, int w, int h) {
         try {
             File xml = new File("Free-trial-photo-2026-02-13-14-27-38.xml");
-            File experiment = new File("experiment.png");
-            File photo = new File("photo_2026-02-13_14-27-38.jpg");
-            if (!xml.exists() || !experiment.exists() || !photo.exists()) {
-                System.out.println("Step9 note comparison skipped: missing xml/experiment/photo files.");
+            File screenshot = new File("clear_sreenshot.png");
+            if (!xml.exists() || !screenshot.exists()) {
+                System.out.println("Step9 note comparison skipped: missing xml/clear_sreenshot.png files.");
                 return;
             }
 
             List<NoteEvent> expected = parseXmlNotes(xml);
             OpenCvScoreProcessor processor = new OpenCvScoreProcessor();
 
-            BufferedImage expImg = ImageIO.read(experiment);
-            int[] expArgb = expImg.getRGB(0, 0, expImg.getWidth(), expImg.getHeight(), null, 0, expImg.getWidth());
-            OpenCvScoreProcessor.ProcessingResult exp = processor.processArgb(expImg.getWidth(), expImg.getHeight(), expArgb,
-                    "experiment-step9-compare", OpenCvScoreProcessor.ProcessingOptions.defaults().withRequireOpenCv(true));
-            reportStep9VsReference("experiment(step9->notes)", step9Rects, w, h, exp.piece.notes, expected.subList(0, Math.min(13, expected.size())));
-
-            BufferedImage photoImg = ImageIO.read(photo);
-            int[] photoArgb = photoImg.getRGB(0, 0, photoImg.getWidth(), photoImg.getHeight(), null, 0, photoImg.getWidth());
-            OpenCvScoreProcessor.ProcessingResult big = processor.processArgb(photoImg.getWidth(), photoImg.getHeight(), photoArgb,
-                    "big-photo-56", OpenCvScoreProcessor.ProcessingOptions.defaults().withRequireOpenCv(true));
-            reportDirectReference("big-photo(opencv)", big.piece.notes, expected);
+            BufferedImage screenshotImg = ImageIO.read(screenshot);
+            List<Rect> purpleStaves = detectPurpleFrameInteriors(screenshotImg);
+            BufferedImage croppedStaves = keepOnlyPurpleStaffInteriors(screenshotImg, purpleStaves);
+            int[] screenshotArgb = croppedStaves.getRGB(0, 0, croppedStaves.getWidth(), croppedStaves.getHeight(), null, 0, croppedStaves.getWidth());
+            OpenCvScoreProcessor.ProcessingResult screenshotResult = processor.processArgb(croppedStaves.getWidth(), croppedStaves.getHeight(), screenshotArgb,
+                    "clear-screenshot-purple-cropped", OpenCvScoreProcessor.ProcessingOptions.defaults().withRequireOpenCv(true));
+            reportStep9VsReference("clear-screenshot(step9->notes)", step9Rects, w, h, screenshotResult.piece.notes,
+                    expected.subList(0, Math.min(step9Rects.size(), expected.size())));
+            reportDirectReference("clear-screenshot(opencv, purple-cropped-staves)", screenshotResult.piece.notes, expected);
         } catch (Throwable t) {
             System.out.println("Step9 note comparison failed: " + t.getClass().getSimpleName() + " - " + t.getMessage());
         }
