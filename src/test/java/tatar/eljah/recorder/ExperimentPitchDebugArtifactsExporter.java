@@ -129,7 +129,6 @@ public class ExperimentPitchDebugArtifactsExporter {
         Mat kStem = null;
         Mat kThinErase = null;
         Mat kSinglePixelEat = null;
-        Mat kMergeV = null;
         try {
             Imgproc.adaptiveThreshold(gray, binary, 255,
                     Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
@@ -180,10 +179,8 @@ public class ExperimentPitchDebugArtifactsExporter {
             blurRebinarized.copyTo(step4PipelineMask);
 
             step4PipelineMask.copyTo(mergedNarrowGaps);
-            int mergeHeight = Math.max(3, lineThickness + 1);
-            if (mergeHeight % 2 == 0) mergeHeight += 1;
-            kMergeV = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1, mergeHeight));
-            Imgproc.morphologyEx(mergedNarrowGaps, mergedNarrowGaps, Imgproc.MORPH_CLOSE, kMergeV);
+            List<Rect> preMergeBlobs = detectBlobs(step4PipelineMask, 4, 6000);
+            int pairwiseMergeApplied = applyPairwiseVerticalMerges(mergedNarrowGaps, preMergeBlobs, horizontal, lineThickness, staffSpacing);
             Imgproc.threshold(mergedNarrowGaps, mergedNarrowGaps, 127, 255, Imgproc.THRESH_BINARY);
 
             BufferedImage linesOverlay = buildLinesOverlay(gray, horizontal, vertical, intersections);
@@ -237,6 +234,7 @@ public class ExperimentPitchDebugArtifactsExporter {
                     OpenCvScoreProcessor.ProcessingOptions.defaults().withRequireOpenCv(true));
 
             System.out.println("=== Staff #" + staffIndex + " stats ===");
+            System.out.println("Step5 pairwise merges applied: " + pairwiseMergeApplied);
             System.out.println("Stage0(noStems) blobs: raw=" + stage0.size() + ", overlapKept=" + stage0Overlap.kept.size() + ", monoKept=" + stage0Mono.kept.size());
             System.out.println("Stage1(blur thin) blobs: raw=" + stage1.size() + ", overlapKept=" + stage1Overlap.kept.size() + ", monoKept=" + stage1Mono.kept.size());
             System.out.println("Stage2(merge narrow gaps) blobs: raw=" + stage2.size() + ", overlapKept=" + stage2Overlap.kept.size() + ", monoKept=" + stage2Mono.kept.size());
@@ -272,8 +270,71 @@ public class ExperimentPitchDebugArtifactsExporter {
             if (kStem != null) kStem.release();
             if (kThinErase != null) kThinErase.release();
             if (kSinglePixelEat != null) kSinglePixelEat.release();
-            if (kMergeV != null) kMergeV.release();
         }
+    }
+
+    private static int applyPairwiseVerticalMerges(Mat mergeTarget,
+                                                   List<Rect> originalBlobs,
+                                                   Mat horizontalMask,
+                                                   int lineThickness,
+                                                   int staffSpacing) {
+        if (originalBlobs == null || originalBlobs.isEmpty()) return 0;
+        int applied = 0;
+        int h = mergeTarget.rows();
+        int w = mergeTarget.cols();
+        int maxGap = Math.max(2, Math.max(lineThickness + 2, Math.round(staffSpacing * 0.75f)));
+
+        for (int i = 0; i < originalBlobs.size(); i++) {
+            Rect a = originalBlobs.get(i);
+            for (int j = i + 1; j < originalBlobs.size(); j++) {
+                Rect b = originalBlobs.get(j);
+                Rect upper = a.y <= b.y ? a : b;
+                Rect lower = a.y <= b.y ? b : a;
+
+                int x0 = Math.max(upper.x, lower.x);
+                int x1 = Math.min(upper.x + upper.width - 1, lower.x + lower.width - 1);
+                int overlapW = x1 - x0 + 1;
+                if (overlapW <= 0) continue;
+
+                float minW = Math.max(1f, Math.min(upper.width, lower.width));
+                if ((overlapW / minW) < 0.35f) continue; // must be vertically aligned enough.
+
+                int upperBottom = upper.y + upper.height - 1;
+                int lowerTop = lower.y;
+                int gap = lowerTop - upperBottom - 1;
+                if (gap < 1 || gap > maxGap) continue;
+
+                int y0 = Math.max(0, upperBottom + 1);
+                int y1 = Math.min(h - 1, lowerTop - 1);
+                if (y1 < y0) continue;
+                int bx0 = Math.max(0, x0);
+                int bx1 = Math.min(w - 1, x1);
+                if (bx1 < bx0) continue;
+
+                int addedPixels = 0;
+                int onFormerLinePixels = 0;
+                for (int y = y0; y <= y1; y++) {
+                    for (int x = bx0; x <= bx1; x++) {
+                        if (mergeTarget.get(y, x)[0] > 0) continue;
+                        addedPixels++;
+                        if (horizontalMask.get(y, x)[0] > 0) {
+                            onFormerLinePixels++;
+                        }
+                    }
+                }
+                if (addedPixels == 0 || onFormerLinePixels == 0) {
+                    continue; // merge zone must overlap removed horizontal staff lines.
+                }
+
+                for (int y = y0; y <= y1; y++) {
+                    for (int x = bx0; x <= bx1; x++) {
+                        mergeTarget.put(y, x, 255);
+                    }
+                }
+                applied++;
+            }
+        }
+        return applied;
     }
 
     private static String normalizeDuration(String d) {
