@@ -52,14 +52,62 @@ public class ExperimentPitchDebugArtifactsExporter {
     }
 
     public static void main(String[] args) throws Exception {
-        File input = new File("experiment.png");
+        File input = new File("clear_sreenshot.png");
         if (!input.exists()) {
-            throw new AssertionError("Missing experiment.png");
+            throw new AssertionError("Missing clear_sreenshot.png");
         }
-        BufferedImage image = ImageIO.read(input);
-        if (image == null) {
-            throw new AssertionError("Unable to decode experiment.png");
+        BufferedImage screenshot = ImageIO.read(input);
+        if (screenshot == null) {
+            throw new AssertionError("Unable to decode clear_sreenshot.png");
         }
+
+        List<Rect> staffInteriors = resolveStaffInteriors(screenshot);
+        if (staffInteriors.isEmpty()) {
+            throw new AssertionError("No staff interiors found for clear_sreenshot.png");
+        }
+        Collections.sort(staffInteriors, new Comparator<Rect>() {
+            @Override
+            public int compare(Rect a, Rect b) {
+                if (a.y == b.y) return a.x - b.x;
+                return a.y - b.y;
+            }
+        });
+
+        int staffCount = Math.min(3, staffInteriors.size());
+        File outDir = new File("docs/diagnostics");
+        if (!outDir.exists() && !outDir.mkdirs()) {
+            throw new IllegalStateException("Cannot create output directory: " + outDir.getAbsolutePath());
+        }
+
+        System.out.println("Staff crops selected: " + staffInteriors.size() + ", processing first " + staffCount + " staff systems.");
+        for (int i = 0; i < staffCount; i++) {
+            Rect staffRect = staffInteriors.get(i);
+            BufferedImage crop = cropBufferedImage(screenshot, staffRect);
+            processSingleStaffCrop(crop, i + 1, outDir);
+        }
+    }
+
+    private static BufferedImage cropBufferedImage(BufferedImage src, Rect r) {
+        int x0 = Math.max(0, r.x);
+        int y0 = Math.max(0, r.y);
+        int x1 = Math.min(src.getWidth() - 1, r.x + r.width - 1);
+        int y1 = Math.min(src.getHeight() - 1, r.y + r.height - 1);
+        if (x1 <= x0 || y1 <= y0) {
+            return src;
+        }
+        int w = x1 - x0 + 1;
+        int h = y1 - y0 + 1;
+        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                out.setRGB(x, y, src.getRGB(x0 + x, y0 + y));
+            }
+        }
+        return out;
+    }
+
+    private static void processSingleStaffCrop(BufferedImage image, int staffIndex, File outDir) throws Exception {
+        String prefix = "experiment_staff" + staffIndex + "_";
 
         Mat gray = bufferedToGray(image);
         Mat binary = new Mat();
@@ -81,7 +129,6 @@ public class ExperimentPitchDebugArtifactsExporter {
         Mat kStem = null;
         Mat kThinErase = null;
         Mat kSinglePixelEat = null;
-        Mat kMergeV = null;
         try {
             Imgproc.adaptiveThreshold(gray, binary, 255,
                     Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
@@ -127,21 +174,14 @@ public class ExperimentPitchDebugArtifactsExporter {
             int thinEraseSize = Math.max(2, lineThickness + 1);
             kThinErase = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(thinEraseSize, thinEraseSize));
             Imgproc.morphologyEx(blurRebinarized, blurRebinarized, Imgproc.MORPH_OPEN, kThinErase);
-            // Step4 must be monotonic relative to step3: do not resurrect black pixels erased on step3.
             Core.max(blurRebinarized, step3PipelineMask, blurRebinarized);
-            // Final hard rebinarization to cut gray/stripe leftovers introduced by blur/open+guard combinations.
             Imgproc.threshold(blurRebinarized, blurRebinarized, 127, 255, Imgproc.THRESH_BINARY);
             blurRebinarized.copyTo(step4PipelineMask);
 
-            // Step5 must consume exact Step4 output.
-            // Step5: vertical-only merge to join note-head halves split by removed staff lines.
             step4PipelineMask.copyTo(mergedNarrowGaps);
-
-            // Vertical close to merge note-head halves only when the gap is about one staff-line thickness.
-            int mergeHeight = Math.max(3, lineThickness + 1);
-            if (mergeHeight % 2 == 0) mergeHeight += 1;
-            kMergeV = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1, mergeHeight));
-            Imgproc.morphologyEx(mergedNarrowGaps, mergedNarrowGaps, Imgproc.MORPH_CLOSE, kMergeV);
+            List<Rect> preMergeBlobs = detectBlobs(step4PipelineMask, 4, 6000);
+            List<Rect> mergeEligibleBlobs = pruneHorizontalThinBlobs(mergedNarrowGaps, preMergeBlobs, lineThickness);
+            int pairwiseMergeApplied = applyPairwiseVerticalMerges(mergedNarrowGaps, mergeEligibleBlobs, horizontal, lineThickness, staffSpacing);
             Imgproc.threshold(mergedNarrowGaps, mergedNarrowGaps, 127, 255, Imgproc.THRESH_BINARY);
 
             BufferedImage linesOverlay = buildLinesOverlay(gray, horizontal, vertical, intersections);
@@ -162,52 +202,54 @@ public class ExperimentPitchDebugArtifactsExporter {
             BlobFilterResult stage2Overlap = filterOverlappingSmaller(stage2);
             BlobFilterResult stage2Mono = filterMonophonicByX(stage2Overlap.kept, lineThickness, staffSpacing);
 
-            BufferedImage filteredBlobView = drawFilteredBlobs(gray, stage2Mono.kept, mergeRemoved(stage2Overlap.removed, stage2Mono.removed));
-            // Sorted-by-area view must use merged step5 data.
             BufferedImage sortedByAreaView = drawAreaOrderOnMergedMask(mergedView, stage2);
             List<Rect> aspectFiltered = filterByAspectRatio(stage2);
             aspectFilteredMask = filterMaskByAspectRatio(mergedNarrowGaps, MAX_HEAD_ASPECT_RATIO);
             BufferedImage aspectFilteredView = binaryMaskToWhiteBg(aspectFilteredMask);
             List<Rect> step7Blobs = detectBlobs(aspectFilteredMask, 4, 6000);
-            List<Rect> topRoundLarge = selectTopByArea(step7Blobs, 13);
-            BufferedImage roundLargeView = drawRoundLargeSelection(aspectFilteredView, step7Blobs, topRoundLarge);
-            List<Rect> recognitionCandidates = filterByHardAreaBoundary(topRoundLarge, HARD_NOTEHEAD_AREA_BOUNDARY);
+            List<Rect> plausibleRanked = selectPlausibleByHeightAndRank(step7Blobs, staffSpacing);
+            BufferedImage roundLargeView = drawRoundLargeSelection(aspectFilteredView, step7Blobs, plausibleRanked);
+            List<Rect> recognitionCandidates = filterByHardAreaBoundary(plausibleRanked, HARD_NOTEHEAD_AREA_BOUNDARY);
             BufferedImage allBlobView = drawBlobsOnGray(gray, recognitionCandidates, new Scalar(0, 120, 255));
             BufferedImage step10LabeledView = drawStep10RecognizedOnStep9(allBlobView, recognitionCandidates, horizontal);
 
-            File outDir = new File("docs/diagnostics");
-            if (!outDir.exists() && !outDir.mkdirs()) {
-                throw new IllegalStateException("Cannot create output directory: " + outDir.getAbsolutePath());
-            }
-
-            savePngAndBase64(linesOverlay, new File(outDir, "experiment_step1_lines_overlay"));
-            savePngAndBase64(subtractedView, new File(outDir, "experiment_step2_lines_subtracted"));
-            savePngAndBase64(stemSubtractedView, new File(outDir, "experiment_step3_stems_subtracted"));
-            savePngAndBase64(blurThinView, new File(outDir, "experiment_step4_thin_artifacts_blurred"));
-            savePngAndBase64(mergedView, new File(outDir, "experiment_step5_blobs_merged_narrow_gaps"));
-            savePngAndBase64(sortedByAreaView, new File(outDir, "experiment_step6_blobs_sorted_area_annotated"));
-            savePngAndBase64(aspectFilteredView, new File(outDir, "experiment_step7_aspect_ratio_filtered"));
-            savePngAndBase64(roundLargeView, new File(outDir, "experiment_step8_noteheads_area_top13"));
-            savePngAndBase64(allBlobView, new File(outDir, "experiment_step9_blobs_all"));
-            savePngAndBase64(step10LabeledView, new File(outDir, "experiment_step10_final_recognized_overlay"));
+            savePngAndBase64(linesOverlay, new File(outDir, prefix + "step1_lines_overlay"));
+            savePngAndBase64(subtractedView, new File(outDir, prefix + "step2_lines_subtracted"));
+            savePngAndBase64(stemSubtractedView, new File(outDir, prefix + "step3_stems_subtracted"));
+            savePngAndBase64(blurThinView, new File(outDir, prefix + "step4_thin_artifacts_blurred"));
+            savePngAndBase64(mergedView, new File(outDir, prefix + "step5_blobs_merged_narrow_gaps"));
+            savePngAndBase64(sortedByAreaView, new File(outDir, prefix + "step6_blobs_sorted_area_annotated"));
+            savePngAndBase64(aspectFilteredView, new File(outDir, prefix + "step7_aspect_ratio_filtered"));
+            savePngAndBase64(roundLargeView, new File(outDir, prefix + "step8_noteheads_area_top13"));
+            savePngAndBase64(allBlobView, new File(outDir, prefix + "step9_blobs_all"));
+            savePngAndBase64(step10LabeledView, new File(outDir, prefix + "step10_final_recognized_overlay"));
 
             RecognitionProxyStats before = computeProxyStats(image, stage0Mono.kept);
             RecognitionProxyStats afterBlur = computeProxyStats(image, stage1Mono.kept);
             RecognitionProxyStats afterMerge = computeProxyStats(image, stage2Mono.kept);
 
-            System.out.println("Artifacts exported to docs/diagnostics");
+            int[] argb = image.getRGB(0, 0, image.getWidth(), image.getHeight(), null, 0, image.getWidth());
+            OpenCvScoreProcessor.ProcessingResult staffRun = new OpenCvScoreProcessor().processArgb(
+                    image.getWidth(), image.getHeight(), argb,
+                    "clear-screenshot-staff-" + staffIndex,
+                    OpenCvScoreProcessor.ProcessingOptions.defaults().withRequireOpenCv(true));
+
+            System.out.println("=== Staff #" + staffIndex + " stats ===");
+            System.out.println("Step5 pairwise merges applied: " + pairwiseMergeApplied);
             System.out.println("Stage0(noStems) blobs: raw=" + stage0.size() + ", overlapKept=" + stage0Overlap.kept.size() + ", monoKept=" + stage0Mono.kept.size());
             System.out.println("Stage1(blur thin) blobs: raw=" + stage1.size() + ", overlapKept=" + stage1Overlap.kept.size() + ", monoKept=" + stage1Mono.kept.size());
             System.out.println("Stage2(merge narrow gaps) blobs: raw=" + stage2.size() + ", overlapKept=" + stage2Overlap.kept.size() + ", monoKept=" + stage2Mono.kept.size());
             System.out.println("Step7(aspect ratio filtered): " + aspectFiltered.size());
             System.out.println("Step9(blobs from step8 over hard area boundary=" + HARD_NOTEHEAD_AREA_BOUNDARY + "): " + recognitionCandidates.size());
-            System.out.println("Step10 is final: no extra filtering, only mapping step9 orange boxes to staff pitch and drawing green note circles.");
-            printTopRoundLargeDiagnostics(topRoundLarge);
-            printProxyStats("Before new steps (noStems)", before);
-            printProxyStats("After blur thin artifacts", afterBlur);
-            printProxyStats("After merge narrow gaps", afterMerge);
+            printProxyStats("Staff#" + staffIndex + " before new steps (noStems)", before);
+            printProxyStats("Staff#" + staffIndex + " after blur thin artifacts", afterBlur);
+            printProxyStats("Staff#" + staffIndex + " after merge narrow gaps", afterMerge);
 
-            runStep9ReferenceComparisons(recognitionCandidates, image.getWidth(), image.getHeight());
+            List<String> noteTokens = new ArrayList<String>();
+            for (NoteEvent n : staffRun.piece.notes) {
+                noteTokens.add(n.noteName + n.octave + "(" + normalizeDuration(n.duration) + ")");
+            }
+            System.out.println("Staff#" + staffIndex + " OpenCV notes: count=" + staffRun.piece.notes.size() + " -> " + noteTokens);
             printStep10RecognizedPitches(recognitionCandidates, horizontal, staffSpacing);
         } finally {
             gray.release();
@@ -229,8 +271,106 @@ public class ExperimentPitchDebugArtifactsExporter {
             if (kStem != null) kStem.release();
             if (kThinErase != null) kThinErase.release();
             if (kSinglePixelEat != null) kSinglePixelEat.release();
-            if (kMergeV != null) kMergeV.release();
         }
+    }
+
+    private static List<Rect> pruneHorizontalThinBlobs(Mat mergeTarget,
+                                                      List<Rect> originalBlobs,
+                                                      int lineThickness) {
+        List<Rect> out = new ArrayList<Rect>();
+        if (originalBlobs == null) return out;
+        for (Rect r : originalBlobs) {
+            int h = Math.max(1, r.height);
+            int w = Math.max(1, r.width);
+            boolean remove = h <= Math.max(1, lineThickness * 2) && w >= (h * 4);
+            if (remove) {
+                int x0 = Math.max(0, r.x);
+                int y0 = Math.max(0, r.y);
+                int x1 = Math.min(mergeTarget.cols() - 1, r.x + r.width - 1);
+                int y1 = Math.min(mergeTarget.rows() - 1, r.y + r.height - 1);
+                for (int y = y0; y <= y1; y++) {
+                    for (int x = x0; x <= x1; x++) {
+                        mergeTarget.put(y, x, 0);
+                    }
+                }
+                continue;
+            }
+            out.add(r);
+        }
+        return out;
+    }
+
+    private static int applyPairwiseVerticalMerges(Mat mergeTarget,
+                                                   List<Rect> originalBlobs,
+                                                   Mat horizontalMask,
+                                                   int lineThickness,
+                                                   int staffSpacing) {
+        if (originalBlobs == null || originalBlobs.isEmpty()) return 0;
+        int applied = 0;
+        int h = mergeTarget.rows();
+        int w = mergeTarget.cols();
+        int targetGap = Math.max(1, lineThickness);
+        int gapTolerance = Math.max(1, Math.round(lineThickness * 0.40f));
+        int minGap = Math.max(1, targetGap - gapTolerance);
+        int maxGap = Math.max(minGap, targetGap + gapTolerance);
+
+        for (int i = 0; i < originalBlobs.size(); i++) {
+            Rect a = originalBlobs.get(i);
+            for (int j = i + 1; j < originalBlobs.size(); j++) {
+                Rect b = originalBlobs.get(j);
+                Rect upper = a.y <= b.y ? a : b;
+                Rect lower = a.y <= b.y ? b : a;
+
+                int x0 = Math.max(upper.x, lower.x);
+                int x1 = Math.min(upper.x + upper.width - 1, lower.x + lower.width - 1);
+                int overlapW = x1 - x0 + 1;
+                if (overlapW <= 0) continue;
+
+                float minW = Math.max(1f, Math.min(upper.width, lower.width));
+                if ((overlapW / minW) < 0.35f) continue; // must be vertically aligned enough.
+
+                int upperBottom = upper.y + upper.height - 1;
+                int lowerTop = lower.y;
+                int gap = lowerTop - upperBottom - 1;
+                if (gap < minGap || gap > maxGap) continue; // gap must be near removed line thickness.
+
+                int y0 = Math.max(0, upperBottom + 1);
+                int y1 = Math.min(h - 1, lowerTop - 1);
+                if (y1 < y0) continue;
+                int bx0 = Math.max(0, x0);
+                int bx1 = Math.min(w - 1, x1);
+                if (bx1 < bx0) continue;
+
+                int addedPixels = 0;
+                int onFormerLinePixels = 0;
+                for (int y = y0; y <= y1; y++) {
+                    for (int x = bx0; x <= bx1; x++) {
+                        if (mergeTarget.get(y, x)[0] > 0) continue;
+                        addedPixels++;
+                        if (horizontalMask.get(y, x)[0] > 0) {
+                            onFormerLinePixels++;
+                        }
+                    }
+                }
+                if (addedPixels == 0 || onFormerLinePixels == 0) {
+                    continue; // merge zone must overlap removed horizontal staff lines.
+                }
+
+                for (int y = y0; y <= y1; y++) {
+                    for (int x = bx0; x <= bx1; x++) {
+                        mergeTarget.put(y, x, 255);
+                    }
+                }
+                applied++;
+            }
+        }
+        return applied;
+    }
+
+    private static String normalizeDuration(String d) {
+        if (d == null) return "quarter";
+        if ("16th".equals(d)) return "sixteenth";
+        return d;
     }
 
     private static void printProxyStats(String stageName, RecognitionProxyStats s) {
@@ -649,18 +789,26 @@ public class ExperimentPitchDebugArtifactsExporter {
         return out.isEmpty() ? new ArrayList<Rect>(rects) : out;
     }
 
-    private static List<Rect> selectTopByArea(List<Rect> rects, int topN) {
-        List<Rect> sorted = new ArrayList<Rect>(rects);
-        Collections.sort(sorted, new Comparator<Rect>() {
+    private static List<Rect> selectPlausibleByHeightAndRank(List<Rect> rects, int staffSpacing) {
+        List<Rect> plausible = new ArrayList<Rect>();
+        float minH = Math.max(1f, staffSpacing * 0.9f);
+        float maxH = Math.max(minH, staffSpacing * 1.5f);
+        for (Rect r : rects) {
+            float h = r.height;
+            if (h > maxH) continue;
+            if (h < minH) continue;
+            plausible.add(r);
+        }
+        if (plausible.isEmpty()) {
+            plausible.addAll(rects);
+        }
+        Collections.sort(plausible, new Comparator<Rect>() {
             @Override
             public int compare(Rect a, Rect b) {
                 return Double.compare(b.area(), a.area());
             }
         });
-        if (sorted.size() > topN) {
-            return new ArrayList<Rect>(sorted.subList(0, topN));
-        }
-        return sorted;
+        return plausible;
     }
 
     private static boolean isRoundLargeShapeCandidate(Rect r) {
@@ -753,6 +901,27 @@ public class ExperimentPitchDebugArtifactsExporter {
         return gray;
     }
 
+    private static Mat bufferedToBgr(BufferedImage image) {
+        int w = image.getWidth();
+        int h = image.getHeight();
+        Mat bgr = new Mat(h, w, CvType.CV_8UC3);
+        byte[] row = new byte[w * 3];
+        for (int y = 0; y < h; y++) {
+            int i = 0;
+            for (int x = 0; x < w; x++) {
+                int rgb = image.getRGB(x, y);
+                int r = (rgb >> 16) & 0xFF;
+                int g = (rgb >> 8) & 0xFF;
+                int b = rgb & 0xFF;
+                row[i++] = (byte) b;
+                row[i++] = (byte) g;
+                row[i++] = (byte) r;
+            }
+            bgr.put(y, 0, row);
+        }
+        return bgr;
+    }
+
     private static BufferedImage matBgrToBuffered(Mat bgr) {
         int w = bgr.cols();
         int h = bgr.rows();
@@ -776,6 +945,246 @@ public class ExperimentPitchDebugArtifactsExporter {
         return v;
     }
 
+
+    private static List<Rect> resolveStaffInteriors(BufferedImage image) {
+        List<Rect> purple = detectPurpleFrameInteriors(image);
+        if (!purple.isEmpty()) {
+            return purple;
+        }
+        List<Rect> fallback = detectStaffInteriorsViaOpenCv(image);
+        if (!fallback.isEmpty()) {
+            System.out.println("Purple frame not found, fallback to OpenCV staff corridors: " + fallback.size());
+            return fallback;
+        }
+        List<Rect> whole = new ArrayList<Rect>();
+        whole.add(new Rect(0, 0, image.getWidth(), image.getHeight()));
+        System.out.println("Purple frame and corridors not found, fallback to full screenshot.");
+        return whole;
+    }
+
+    private static List<Rect> detectStaffInteriorsViaOpenCv(BufferedImage image) {
+        List<Rect> out = new ArrayList<Rect>();
+        try {
+            int w = image.getWidth();
+            int h = image.getHeight();
+            int[] argb = image.getRGB(0, 0, w, h, null, 0, w);
+            OpenCvScoreProcessor.ProcessingResult result = new OpenCvScoreProcessor().processArgb(
+                    w, h, argb, "staff-corridor-fallback", OpenCvScoreProcessor.ProcessingOptions.defaults().withRequireOpenCv(true));
+            if (result.staffCorridors == null || result.staffCorridors.isEmpty()) return out;
+            for (OpenCvScoreProcessor.StaffCorridor c : result.staffCorridors) {
+                int x0 = Math.max(0, Math.round(c.left * (w - 1)));
+                int y0 = Math.max(0, Math.round(c.top * (h - 1)));
+                int x1 = Math.min(w - 1, Math.round(c.right * (w - 1)));
+                int y1 = Math.min(h - 1, Math.round(c.bottom * (h - 1)));
+                if (x1 <= x0 || y1 <= y0) continue;
+                out.add(new Rect(x0, y0, x1 - x0 + 1, y1 - y0 + 1));
+            }
+            return dedupeOverlappingRects(out);
+        } catch (Throwable ignored) {
+            return out;
+        }
+    }
+
+    private static List<Rect> detectPurpleFrameInteriors(BufferedImage image) {
+        Mat bgr = bufferedToBgr(image);
+        Mat hsv = new Mat();
+        Mat purple1 = new Mat();
+        Mat purple2 = new Mat();
+        Mat purple = new Mat();
+        Mat kernel = null;
+        Mat contoursInput = null;
+        Mat hierarchy = new Mat();
+        List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
+        List<Rect> out = new ArrayList<Rect>();
+        try {
+            Imgproc.cvtColor(bgr, hsv, Imgproc.COLOR_BGR2HSV);
+
+            // Purple/magenta frame strokes on screenshot overlay (two hue bands around magenta).
+            Core.inRange(hsv, new Scalar(120, 35, 35), new Scalar(179, 255, 255), purple1);
+            Core.inRange(hsv, new Scalar(0, 35, 35), new Scalar(10, 255, 255), purple2);
+            Core.bitwise_or(purple1, purple2, purple);
+
+            int closeW = Math.max(9, image.getWidth() / 70);
+            int closeH = Math.max(3, image.getHeight() / 220);
+            kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(closeW, closeH));
+            Imgproc.morphologyEx(purple, purple, Imgproc.MORPH_CLOSE, kernel);
+
+            contoursInput = purple.clone();
+            Imgproc.findContours(contoursInput, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+            for (MatOfPoint contour : contours) {
+                Rect r = Imgproc.boundingRect(contour);
+                int bw = r.width;
+                int bh = r.height;
+                if (bw < image.getWidth() / 3) continue;
+                if (bh < Math.max(10, image.getHeight() / 30)) continue;
+                float aspect = bw / (float) Math.max(1, bh);
+                if (aspect < 4.5f) continue;
+
+                int inset = Math.max(1, Math.round(Math.max(2f, bh * 0.08f)));
+                int ix = Math.max(0, r.x + inset);
+                int iy = Math.max(0, r.y + inset);
+                int xEnd = Math.min(image.getWidth() - 1, r.x + r.width - 1 - inset);
+                int yEnd = Math.min(image.getHeight() - 1, r.y + r.height - 1 - inset);
+                if (xEnd <= ix || yEnd <= iy) continue;
+                Rect inner = new Rect(ix, iy, xEnd - ix + 1, yEnd - iy + 1);
+                if (inner.width < image.getWidth() / 4 || inner.height < image.getHeight() / 40) continue;
+                out.add(inner);
+            }
+
+            // Deduplicate overlapping/nested boxes and keep top-to-bottom order.
+            out = dedupeOverlappingRects(out);
+            if (out.isEmpty()) {
+                out = detectPurpleFrameInteriorsByHorizontalLines(image);
+            }
+            Collections.sort(out, new Comparator<Rect>() {
+                @Override
+                public int compare(Rect a, Rect b) {
+                    if (a.y == b.y) return a.x - b.x;
+                    return a.y - b.y;
+                }
+            });
+            return out;
+        } finally {
+            bgr.release();
+            hsv.release();
+            purple1.release();
+            purple2.release();
+            purple.release();
+            if (kernel != null) kernel.release();
+            if (contoursInput != null) contoursInput.release();
+            hierarchy.release();
+            for (MatOfPoint c : contours) c.release();
+        }
+    }
+
+    private static List<Rect> detectPurpleFrameInteriorsByHorizontalLines(BufferedImage image) {
+        int w = image.getWidth();
+        int h = image.getHeight();
+        int[] rowHits = new int[h];
+        boolean[][] purple = new boolean[h][w];
+        for (int y = 0; y < h; y++) {
+            int hits = 0;
+            for (int x = 0; x < w; x++) {
+                int rgb = image.getRGB(x, y);
+                int r = (rgb >> 16) & 0xFF;
+                int g = (rgb >> 8) & 0xFF;
+                int b = rgb & 0xFF;
+                boolean isPurple = b >= 55 && r >= 45 && Math.abs(r - b) <= 110 && g <= Math.max(r, b) - 8;
+                purple[y][x] = isPurple;
+                if (isPurple) hits++;
+            }
+            rowHits[y] = hits;
+        }
+
+        int rowThreshold = Math.max(18, w / 5);
+        List<Integer> lineCenters = new ArrayList<Integer>();
+        int y = 0;
+        while (y < h) {
+            if (rowHits[y] < rowThreshold) {
+                y++;
+                continue;
+            }
+            int y0 = y;
+            int y1 = y;
+            while (y1 + 1 < h && rowHits[y1 + 1] >= rowThreshold) y1++;
+            lineCenters.add((y0 + y1) / 2);
+            y = y1 + 1;
+        }
+
+        List<Rect> out = new ArrayList<Rect>();
+        for (int i = 0; i + 1 < lineCenters.size(); i++) {
+            int top = lineCenters.get(i);
+            int bottom = lineCenters.get(i + 1);
+            int gap = bottom - top;
+            if (gap < Math.max(18, h / 28) || gap > Math.max(220, h / 4)) continue;
+
+            int minX = w;
+            int maxX = -1;
+            for (int x = 0; x < w; x++) {
+                if (purple[top][x] || purple[bottom][x]) {
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                }
+            }
+            if (maxX <= minX) continue;
+            int width = maxX - minX + 1;
+            if (width < w / 3) continue;
+
+            int insetX = Math.max(2, Math.round(width * 0.006f));
+            int insetY = Math.max(2, Math.round(gap * 0.08f));
+            int ix = Math.max(0, minX + insetX);
+            int iy = Math.max(0, top + insetY);
+            int xEnd = Math.min(w - 1, maxX - insetX);
+            int yEnd = Math.min(h - 1, bottom - insetY);
+            if (xEnd <= ix || yEnd <= iy) continue;
+            out.add(new Rect(ix, iy, xEnd - ix + 1, yEnd - iy + 1));
+
+            i++; // consume pair as one frame
+        }
+
+        return dedupeOverlappingRects(out);
+    }
+
+    private static List<Rect> dedupeOverlappingRects(List<Rect> input) {
+        if (input == null || input.isEmpty()) return input;
+        List<Rect> sorted = new ArrayList<Rect>(input);
+        Collections.sort(sorted, new Comparator<Rect>() {
+            @Override
+            public int compare(Rect a, Rect b) {
+                int areaA = a.width * a.height;
+                int areaB = b.width * b.height;
+                return areaB - areaA;
+            }
+        });
+        List<Rect> kept = new ArrayList<Rect>();
+        for (Rect r : sorted) {
+            boolean overlapsStrongly = false;
+            for (Rect k : kept) {
+                int ix0 = Math.max(r.x, k.x);
+                int iy0 = Math.max(r.y, k.y);
+                int ix1 = Math.min(r.x + r.width - 1, k.x + k.width - 1);
+                int iy1 = Math.min(r.y + r.height - 1, k.y + k.height - 1);
+                if (ix1 < ix0 || iy1 < iy0) continue;
+                int inter = (ix1 - ix0 + 1) * (iy1 - iy0 + 1);
+                int rArea = Math.max(1, r.width * r.height);
+                int kArea = Math.max(1, k.width * k.height);
+                float rOverlap = inter / (float) rArea;
+                float kOverlap = inter / (float) kArea;
+                if (rOverlap >= 0.80f || kOverlap >= 0.90f) {
+                    overlapsStrongly = true;
+                    break;
+                }
+            }
+            if (!overlapsStrongly) kept.add(r);
+        }
+        return kept;
+    }
+
+    private static BufferedImage keepOnlyPurpleStaffInteriors(BufferedImage image, List<Rect> interiors) {
+        BufferedImage out = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = out.createGraphics();
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, out.getWidth(), out.getHeight());
+        g.dispose();
+
+        if (interiors == null || interiors.isEmpty()) {
+            return out;
+        }
+
+        for (Rect r : interiors) {
+            int x0 = Math.max(0, r.x);
+            int y0 = Math.max(0, r.y);
+            int x1 = Math.min(image.getWidth() - 1, r.x + r.width - 1);
+            int y1 = Math.min(image.getHeight() - 1, r.y + r.height - 1);
+            for (int y = y0; y <= y1; y++) {
+                for (int x = x0; x <= x1; x++) {
+                    out.setRGB(x, y, image.getRGB(x, y));
+                }
+            }
+        }
+        return out;
+    }
+
     private static void savePngAndBase64(BufferedImage img, File basePathNoExt) throws Exception {
         File png = new File(basePathNoExt.getPath() + ".png");
         File b64 = new File(basePathNoExt.getPath() + ".png.b64");
@@ -788,27 +1197,24 @@ public class ExperimentPitchDebugArtifactsExporter {
     private static void runStep9ReferenceComparisons(List<Rect> step9Rects, int w, int h) {
         try {
             File xml = new File("Free-trial-photo-2026-02-13-14-27-38.xml");
-            File experiment = new File("experiment.png");
-            File photo = new File("photo_2026-02-13_14-27-38.jpg");
-            if (!xml.exists() || !experiment.exists() || !photo.exists()) {
-                System.out.println("Step9 note comparison skipped: missing xml/experiment/photo files.");
+            File screenshot = new File("clear_sreenshot.png");
+            if (!xml.exists() || !screenshot.exists()) {
+                System.out.println("Step9 note comparison skipped: missing xml/clear_sreenshot.png files.");
                 return;
             }
 
             List<NoteEvent> expected = parseXmlNotes(xml);
             OpenCvScoreProcessor processor = new OpenCvScoreProcessor();
 
-            BufferedImage expImg = ImageIO.read(experiment);
-            int[] expArgb = expImg.getRGB(0, 0, expImg.getWidth(), expImg.getHeight(), null, 0, expImg.getWidth());
-            OpenCvScoreProcessor.ProcessingResult exp = processor.processArgb(expImg.getWidth(), expImg.getHeight(), expArgb,
-                    "experiment-step9-compare", OpenCvScoreProcessor.ProcessingOptions.defaults().withRequireOpenCv(true));
-            reportStep9VsReference("experiment(step9->notes)", step9Rects, w, h, exp.piece.notes, expected.subList(0, Math.min(13, expected.size())));
-
-            BufferedImage photoImg = ImageIO.read(photo);
-            int[] photoArgb = photoImg.getRGB(0, 0, photoImg.getWidth(), photoImg.getHeight(), null, 0, photoImg.getWidth());
-            OpenCvScoreProcessor.ProcessingResult big = processor.processArgb(photoImg.getWidth(), photoImg.getHeight(), photoArgb,
-                    "big-photo-56", OpenCvScoreProcessor.ProcessingOptions.defaults().withRequireOpenCv(true));
-            reportDirectReference("big-photo(opencv)", big.piece.notes, expected);
+            BufferedImage screenshotImg = ImageIO.read(screenshot);
+            List<Rect> purpleStaves = resolveStaffInteriors(screenshotImg);
+            BufferedImage croppedStaves = keepOnlyPurpleStaffInteriors(screenshotImg, purpleStaves);
+            int[] screenshotArgb = croppedStaves.getRGB(0, 0, croppedStaves.getWidth(), croppedStaves.getHeight(), null, 0, croppedStaves.getWidth());
+            OpenCvScoreProcessor.ProcessingResult screenshotResult = processor.processArgb(croppedStaves.getWidth(), croppedStaves.getHeight(), screenshotArgb,
+                    "clear-screenshot-purple-cropped", OpenCvScoreProcessor.ProcessingOptions.defaults().withRequireOpenCv(true));
+            reportStep9VsReference("clear-screenshot(step9->notes)", step9Rects, w, h, screenshotResult.piece.notes,
+                    expected.subList(0, Math.min(step9Rects.size(), expected.size())));
+            reportDirectReference("clear-screenshot(opencv, purple-cropped-staves)", screenshotResult.piece.notes, expected);
         } catch (Throwable t) {
             System.out.println("Step9 note comparison failed: " + t.getClass().getSimpleName() + " - " + t.getMessage());
         }
