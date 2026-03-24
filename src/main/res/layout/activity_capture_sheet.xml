@@ -57,51 +57,10 @@
                 android:visibility="gone">
 
                 <LinearLayout
+                    android:id="@+id/layout_blob_stage_buttons"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal">
-
-                    <Button
-                        android:id="@+id/btn_blob_stage_1"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="1" />
-
-                    <Button
-                        android:id="@+id/btn_blob_stage_2"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="2" />
-
-                    <Button
-                        android:id="@+id/btn_blob_stage_3"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="3" />
-
-                    <Button
-                        android:id="@+id/btn_blob_stage_4"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="4" />
-
-                    <Button
-                        android:id="@+id/btn_blob_stage_5"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="5" />
-
-                    <Button
-                        android:id="@+id/btn_blob_stage_6"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="6" />
-
-                    <Button
-                        android:id="@+id/btn_blob_stage_7"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="7" />
 
                     <Button
                         android:id="@+id/btn_blob_continue"

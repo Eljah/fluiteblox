@@ -19,6 +19,24 @@ import java.util.List;
 
 class DebugBlobSeriesEngine {
     static final int STAGE_COUNT = 7;
+    private static volatile boolean openCvLoaded;
+
+    private static void ensureOpenCvLoaded() {
+        if (openCvLoaded) return;
+        UnsatisfiedLinkError last = null;
+        for (String lib : new String[]{"opencv_java460", "opencv_java4", "opencv_java"}) {
+            try {
+                System.loadLibrary(lib);
+                openCvLoaded = true;
+                return;
+            } catch (UnsatisfiedLinkError e) {
+                last = e;
+            }
+        }
+        if (!openCvLoaded) {
+            throw new IllegalStateException("OpenCV native library is not loaded", last);
+        }
+    }
 
     static class BlobSignature {
         final float xNorm;
@@ -75,6 +93,7 @@ class DebugBlobSeriesEngine {
     }
 
     Session rebuildSession(Bitmap source, Session prev) {
+        ensureOpenCvLoaded();
         Session next = new Session(source);
         if (prev != null) next.deletions.addAll(prev.deletions);
 

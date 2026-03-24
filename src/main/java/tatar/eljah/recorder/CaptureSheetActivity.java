@@ -15,6 +15,7 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
@@ -57,6 +58,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private LinearLayout staffSlidersLayout;
     private FrameLayout processingMask;
     private HorizontalScrollView blobSeriesControls;
+    private LinearLayout blobStageButtonsContainer;
     private BlobDebugOverlayView blobOverlay;
     private final DebugBlobSeriesEngine blobSeriesEngine = new DebugBlobSeriesEngine();
     private DebugBlobSeriesEngine.Session blobSession;
@@ -113,6 +115,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         staffSlidersLayout = findViewById(R.id.layout_staff_sliders);
         processingMask = findViewById(R.id.layout_processing_mask);
         blobSeriesControls = findViewById(R.id.layout_blob_series_controls);
+        blobStageButtonsContainer = findViewById(R.id.layout_blob_stage_buttons);
         blobOverlay = findViewById(R.id.image_blob_overlay);
         blobOverlay.setOnBlobTapListener(new BlobDebugOverlayView.OnBlobTapListener() {
             @Override
@@ -123,13 +126,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         SeekBar thresholdSeek = findViewById(R.id.seek_threshold);
         SeekBar noiseSeek = findViewById(R.id.seek_noise);
 
-        bindBlobStageButton(R.id.btn_blob_stage_1, 1);
-        bindBlobStageButton(R.id.btn_blob_stage_2, 2);
-        bindBlobStageButton(R.id.btn_blob_stage_3, 3);
-        bindBlobStageButton(R.id.btn_blob_stage_4, 4);
-        bindBlobStageButton(R.id.btn_blob_stage_5, 5);
-        bindBlobStageButton(R.id.btn_blob_stage_6, 6);
-        bindBlobStageButton(R.id.btn_blob_stage_7, 7);
+        rebuildBlobStageButtons();
         findViewById(R.id.btn_blob_continue).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -693,15 +690,26 @@ public class CaptureSheetActivity extends AppCompatActivity {
         }
     }
 
-    private void bindBlobStageButton(int buttonId, final int stage) {
-        View button = findViewById(buttonId);
-        if (button == null) return;
-        button.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showBlobStage(stage);
-            }
-        });
+    private void rebuildBlobStageButtons() {
+        if (blobStageButtonsContainer == null) return;
+        blobStageButtonsContainer.removeAllViews();
+        for (int stage = 1; stage <= DebugBlobSeriesEngine.STAGE_COUNT; stage++) {
+            final int stageNumber = stage;
+            Button button = new Button(this);
+            button.setText(String.valueOf(stage));
+            button.setAllCaps(false);
+            button.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    showBlobStage(stageNumber);
+                }
+            });
+            blobStageButtonsContainer.addView(button);
+        }
+        View continueButton = findViewById(R.id.btn_blob_continue);
+        if (continueButton != null) {
+            continueButton.bringToFront();
+        }
     }
 
     private void startBlobSeriesMode(Bitmap source) {
