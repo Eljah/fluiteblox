@@ -1,0 +1,87 @@
+Purple frame not found, fallback to OpenCV staff corridors: 3
+Staff crops selected: 3, processing first 3 staff systems.
+=== Staff #1 stats ===
+Step6 pairwise merges applied: 12
+Stage0(noStems) blobs: raw=68, overlapKept=63, monoKept=25
+Stage1(blur thin) blobs: raw=67, overlapKept=62, monoKept=25
+Stage2(merge narrow gaps) blobs: raw=45, overlapKept=39, monoKept=24
+Step8(aspect ratio filtered): 29
+Step10(blobs from step9 over hard area boundary=48.0): 7
+Staff#1 before new steps (noStems) => redExpected=13, blobs=25, matchedExpected=3, misses=10, unmatchedBlobs=22
+Staff#1 after blur thin artifacts => redExpected=13, blobs=25, matchedExpected=4, misses=9, unmatchedBlobs=21
+Staff#1 after merge narrow gaps => redExpected=13, blobs=24, matchedExpected=5, misses=8, unmatchedBlobs=19
+Staff#1 OpenCV notes: count=1 -> [B3(quarter)]
+Step11: recognized notes by staff pitch (from step10 centers), count=7:
+  #1 x=22 y=40.00 -> B4 (stepFromBottom=4)
+  #2 x=46 y=22.50 -> E5 (stepFromBottom=7)
+  #3 x=75 y=23.50 -> E5 (stepFromBottom=7)
+  #4 x=192 y=21.50 -> E5 (stepFromBottom=7)
+  #5 x=380 y=39.50 -> B4 (stepFromBottom=4)
+  #6 x=502 y=29.50 -> D5 (stepFromBottom=6)
+  #7 x=591 y=39.50 -> B4 (stepFromBottom=4)
+Step11 pitch-height vs XML (Staff#1): compared=7, exactPitchMatch=1/7 (14.3%), expectedSlice=13, detected=7
+=== Staff #2 stats ===
+Step6 pairwise merges applied: 11
+Stage0(noStems) blobs: raw=82, overlapKept=80, monoKept=27
+Stage1(blur thin) blobs: raw=74, overlapKept=72, monoKept=27
+Stage2(merge narrow gaps) blobs: raw=47, overlapKept=42, monoKept=27
+Step8(aspect ratio filtered): 34
+Step10(blobs from step9 over hard area boundary=48.0): 23
+Staff#2 before new steps (noStems) => redExpected=13, blobs=27, matchedExpected=0, misses=13, unmatchedBlobs=27
+Staff#2 after blur thin artifacts => redExpected=13, blobs=27, matchedExpected=1, misses=12, unmatchedBlobs=26
+Staff#2 after merge narrow gaps => redExpected=13, blobs=27, matchedExpected=1, misses=12, unmatchedBlobs=26
+Staff#2 OpenCV notes: count=1 -> [G5(quarter)]
+Step11: recognized notes by staff pitch (from step10 centers), count=23:
+  #1 x=34 y=55.00 -> F4 (stepFromBottom=1)
+  #2 x=33 y=44.50 -> A4 (stepFromBottom=3)
+  #3 x=45 y=13.00 -> F5 (stepFromBottom=8)
+  #4 x=45 y=25.50 -> E5 (stepFromBottom=7)
+  #5 x=69 y=40.00 -> B4 (stepFromBottom=4)
+  #6 x=102 y=50.00 -> G4 (stepFromBottom=2)
+  #7 x=141 y=40.00 -> B4 (stepFromBottom=4)
+  #8 x=158 y=14.50 -> F5 (stepFromBottom=8)
+  #9 x=161 y=50.00 -> G4 (stepFromBottom=2)
+  #10 x=222 y=40.00 -> B4 (stepFromBottom=4)
+  #11 x=305 y=30.50 -> D5 (stepFromBottom=6)
+  #12 x=324 y=20.50 -> F5 (stepFromBottom=8)
+  #13 x=344 y=25.50 -> E5 (stepFromBottom=7)
+  #14 x=363 y=30.00 -> D5 (stepFromBottom=6)
+  #15 x=424 y=30.00 -> D5 (stepFromBottom=6)
+  #16 x=444 y=25.50 -> E5 (stepFromBottom=7)
+  #17 x=489 y=20.50 -> F5 (stepFromBottom=8)
+  #18 x=509 y=20.50 -> F5 (stepFromBottom=8)
+  #19 x=528 y=25.50 -> E5 (stepFromBottom=7)
+  #20 x=590 y=30.00 -> D5 (stepFromBottom=6)
+  #21 x=658 y=34.00 -> C5 (stepFromBottom=5)
+  #22 x=677 y=40.00 -> B4 (stepFromBottom=4)
+  #23 x=715 y=50.00 -> G4 (stepFromBottom=2)
+Step11 pitch-height vs XML (Staff#2): compared=13, exactPitchMatch=1/13 (7.7%), expectedSlice=13, detected=23
+=== Staff #3 stats ===
+Step6 pairwise merges applied: 13
+Stage0(noStems) blobs: raw=70, overlapKept=69, monoKept=23
+Stage1(blur thin) blobs: raw=67, overlapKept=66, monoKept=23
+Stage2(merge narrow gaps) blobs: raw=38, overlapKept=36, monoKept=21
+Step8(aspect ratio filtered): 30
+Step10(blobs from step9 over hard area boundary=48.0): 16
+Staff#3 before new steps (noStems) => redExpected=13, blobs=23, matchedExpected=0, misses=13, unmatchedBlobs=23
+Staff#3 after blur thin artifacts => redExpected=13, blobs=23, matchedExpected=0, misses=13, unmatchedBlobs=23
+Staff#3 after merge narrow gaps => redExpected=13, blobs=21, matchedExpected=0, misses=13, unmatchedBlobs=21
+Staff#3 OpenCV notes: count=1 -> [G5(quarter)]
+Step11: recognized notes by staff pitch (from step10 centers), count=16:
+  #1 x=32 y=44.50 -> A4 (stepFromBottom=3)
+  #2 x=34 y=55.00 -> F4 (stepFromBottom=1)
+  #3 x=131 y=59.50 -> E4 (stepFromBottom=0)
+  #4 x=159 y=64.50 -> E4 (stepFromBottom=0)
+  #5 x=220 y=49.50 -> G4 (stepFromBottom=2)
+  #6 x=281 y=40.00 -> B4 (stepFromBottom=4)
+  #7 x=356 y=30.00 -> D5 (stepFromBottom=6)
+  #8 x=416 y=20.00 -> F5 (stepFromBottom=8)
+  #9 x=446 y=14.50 -> F5 (stepFromBottom=8)
+  #10 x=490 y=20.00 -> F5 (stepFromBottom=8)
+  #11 x=550 y=30.00 -> D5 (stepFromBottom=6)
+  #12 x=625 y=20.00 -> F5 (stepFromBottom=8)
+  #13 x=654 y=14.50 -> F5 (stepFromBottom=8)
+  #14 x=673 y=4.50 -> F5 (stepFromBottom=8)
+  #15 x=682 y=20.00 -> F5 (stepFromBottom=8)
+  #16 x=690 y=4.50 -> F5 (stepFromBottom=8)
+Step11 pitch-height vs XML (Staff#3): compared=13, exactPitchMatch=1/13 (7.7%), expectedSlice=13, detected=16

@@ -15,7 +15,9 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
+import android.widget.Button;
 import android.widget.EditText;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
@@ -50,9 +52,18 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private int thresholdOffset = 7;
     private float noiseLevel = 0.5f;
     private Thread processingThread;
+    private Thread blobBuildThread;
     private int processingToken;
+    private int blobBuildToken;
     private LinearLayout staffSlidersLayout;
     private FrameLayout processingMask;
+    private HorizontalScrollView blobSeriesControls;
+    private LinearLayout blobStageButtonsContainer;
+    private BlobDebugOverlayView blobOverlay;
+    private final DebugBlobSeriesEngine blobSeriesEngine = new DebugBlobSeriesEngine();
+    private DebugBlobSeriesEngine.Session blobSession;
+    private int blobStage = 1;
+    private boolean blobSeriesMode;
     private final ArrayList<Float> perStaffFilterStrength = new ArrayList<Float>();
     private final ArrayList<SeekBar> perStaffSeekBars = new ArrayList<SeekBar>();
     private final ArrayList<NoteEvent> panoramaDraftNotes = new ArrayList<NoteEvent>();
@@ -103,8 +114,25 @@ public class CaptureSheetActivity extends AppCompatActivity {
         });
         staffSlidersLayout = findViewById(R.id.layout_staff_sliders);
         processingMask = findViewById(R.id.layout_processing_mask);
+        blobSeriesControls = findViewById(R.id.layout_blob_series_controls);
+        blobStageButtonsContainer = findViewById(R.id.layout_blob_stage_buttons);
+        blobOverlay = findViewById(R.id.image_blob_overlay);
+        blobOverlay.setOnBlobTapListener(new BlobDebugOverlayView.OnBlobTapListener() {
+            @Override
+            public void onBlobTapped(int index) {
+                removeBlobFromCurrentStage(index);
+            }
+        });
         SeekBar thresholdSeek = findViewById(R.id.seek_threshold);
         SeekBar noiseSeek = findViewById(R.id.seek_noise);
+
+        rebuildBlobStageButtons();
+        findViewById(R.id.btn_blob_continue).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                continueRecognitionAfterBlobEditing();
+            }
+        });
 
         thresholdSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -217,10 +245,16 @@ public class CaptureSheetActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         processingToken++;
+        blobBuildToken++;
         Thread running = processingThread;
         if (running != null) {
             running.interrupt();
             processingThread = null;
+        }
+        Thread blobRunning = blobBuildThread;
+        if (blobRunning != null) {
+            blobRunning.interrupt();
+            blobBuildThread = null;
         }
         super.onDestroy();
     }
@@ -274,7 +308,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(bmp);
                 panoramaPreview.setImageBitmap(bmp);
                 latestPreviewBitmap = bmp;
-                rerunProcessing();
+                startBlobSeriesMode(bmp);
             }
         } else if (requestCode == REQ_PICK_IMAGE && resultCode == RESULT_OK && data != null && data.getData() != null) {
             Uri uri = data.getData();
@@ -287,7 +321,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                     ((ImageView) findViewById(R.id.image_preview)).setImageBitmap(bmp);
                     panoramaPreview.setImageBitmap(bmp);
                     latestPreviewBitmap = bmp;
-                    rerunProcessing();
+                    startBlobSeriesMode(bmp);
                 } else {
                     Toast.makeText(this, R.string.capture_gallery_load_failed, Toast.LENGTH_SHORT).show();
                 }
@@ -655,14 +689,178 @@ public class CaptureSheetActivity extends AppCompatActivity {
             perStaffSeekBars.add(seek);
         }
     }
+
+    private void rebuildBlobStageButtons() {
+        if (blobStageButtonsContainer == null) return;
+        blobStageButtonsContainer.removeAllViews();
+        for (int stage = 1; stage <= DebugBlobSeriesEngine.STAGE_COUNT; stage++) {
+            final int stageNumber = stage;
+            Button button = new Button(this);
+            button.setText(String.valueOf(stage));
+            button.setAllCaps(false);
+            button.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    showBlobStage(stageNumber);
+                }
+            });
+            blobStageButtonsContainer.addView(button);
+        }
+        View continueButton = findViewById(R.id.btn_blob_continue);
+        if (continueButton != null) {
+            continueButton.bringToFront();
+        }
+    }
+
+    private void startBlobSeriesMode(Bitmap source) {
+        final Bitmap src = source;
+        final int token = ++blobBuildToken;
+        Thread prev = blobBuildThread;
+        if (prev != null && prev.isAlive()) {
+            prev.interrupt();
+        }
+        setProcessingBusy(true);
+        blobBuildThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    final DebugBlobSeriesEngine.Session session = blobSeriesEngine.rebuildSession(src, null);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (isFinishing() || token != blobBuildToken) return;
+                            blobSeriesMode = true;
+                            blobStage = 1;
+                            blobSession = session;
+                            if (blobSeriesControls != null) blobSeriesControls.setVisibility(View.VISIBLE);
+                            if (blobOverlay != null) blobOverlay.setVisibility(View.VISIBLE);
+                            analysisText.setText(getString(R.string.capture_blob_mode_hint));
+                            showBlobStage(1);
+                            setProcessingBusy(false);
+                        }
+                    });
+                } catch (final Throwable t) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (isFinishing() || token != blobBuildToken) return;
+                            blobSeriesMode = false;
+                            blobSession = null;
+                            setProcessingBusy(false);
+                            Toast.makeText(CaptureSheetActivity.this, R.string.capture_gallery_load_failed, Toast.LENGTH_SHORT).show();
+                            analysisText.setText(t.getClass().getSimpleName() + ": " + t.getMessage());
+                        }
+                    });
+                }
+            }
+        }, "blob-series-build");
+        blobBuildThread.start();
+    }
+
+    private void showBlobStage(int stage) {
+        if (!blobSeriesMode || blobSession == null) return;
+        int idx = Math.max(1, Math.min(DebugBlobSeriesEngine.STAGE_COUNT, stage)) - 1;
+        blobStage = idx + 1;
+        DebugBlobSeriesEngine.StageState state = blobSession.stages[idx];
+        if (state == null) return;
+
+        ImageView preview = findViewById(R.id.image_preview);
+        preview.setImageBitmap(state.preview);
+        panoramaPreview.setImageBitmap(state.preview);
+        latestPreviewBitmap = state.preview;
+        updateOverlayBounds(preview, state.preview);
+        updateOverlayBounds(panoramaPreview, state.preview, panoramaOverlay);
+
+        if (blobOverlay != null) {
+            blobOverlay.setBlobs(toOverlayRects(preview, state.blobs, state.preview.getWidth(), state.preview.getHeight()));
+        }
+    }
+
+    private List<RectF> toOverlayRects(ImageView preview,
+                                       List<DebugBlobSeriesEngine.BlobInfo> blobs,
+                                       int imageW,
+                                       int imageH) {
+        ArrayList<RectF> out = new ArrayList<RectF>();
+        if (blobs == null) return out;
+        RectF imageRectInView = resolveDisplayedImageRect(preview, imageW, imageH);
+        float drawW = Math.max(1f, imageRectInView.width());
+        float drawH = Math.max(1f, imageRectInView.height());
+        float sx = drawW / Math.max(1f, imageW);
+        float sy = drawH / Math.max(1f, imageH);
+        for (DebugBlobSeriesEngine.BlobInfo b : blobs) {
+            out.add(new RectF(
+                    imageRectInView.left + Math.max(0, b.rect.x) * sx,
+                    imageRectInView.top + Math.max(0, b.rect.y) * sy,
+                    imageRectInView.left + Math.min(imageW, b.rect.x + b.rect.width) * sx,
+                    imageRectInView.top + Math.min(imageH, b.rect.y + b.rect.height) * sy));
+        }
+        return out;
+    }
+
+    private RectF resolveDisplayedImageRect(ImageView preview, int imageW, int imageH) {
+        if (preview == null || imageW <= 0 || imageH <= 0) {
+            return new RectF(0f, 0f, imageW, imageH);
+        }
+        int viewW = preview.getWidth();
+        int viewH = preview.getHeight();
+        if (viewW <= 0 || viewH <= 0) {
+            return new RectF(0f, 0f, imageW, imageH);
+        }
+        float scale = Math.min(viewW / (float) imageW, viewH / (float) imageH);
+        float drawW = imageW * scale;
+        float drawH = imageH * scale;
+        float left = (viewW - drawW) * 0.5f;
+        float top = (viewH - drawH) * 0.5f;
+        return new RectF(left, top, left + drawW, top + drawH);
+    }
+
+    private void removeBlobFromCurrentStage(int index) {
+        if (!blobSeriesMode || blobSession == null) return;
+        int idx = blobStage - 1;
+        if (idx < 0 || idx >= blobSession.stages.length) return;
+        DebugBlobSeriesEngine.StageState stage = blobSession.stages[idx];
+        if (stage == null || index < 0 || index >= stage.blobs.size()) return;
+        blobSession.deletions.add(new DebugBlobSeriesEngine.DeletionEntry(blobStage, stage.blobs.get(index).signature));
+        blobSession = blobSeriesEngine.rebuildSession(blobSession.source, blobSession);
+        showBlobStage(blobStage);
+    }
+
+    private void continueRecognitionAfterBlobEditing() {
+        if (!blobSeriesMode || blobSession == null) {
+            rerunProcessing();
+            return;
+        }
+        sourceBitmapForProcessing = blobSeriesEngine.buildEditedBitmap(blobSession);
+        blobSeriesMode = false;
+        if (blobSeriesControls != null) blobSeriesControls.setVisibility(View.GONE);
+        if (blobOverlay != null) blobOverlay.setVisibility(View.GONE);
+        rerunProcessing();
+    }
+
     private void resetPerImageState() {
         latestResult = null;
         panoramaDirty = false;
         panoramaDraftNotes.clear();
+        blobBuildToken++;
+        Thread blobRunning = blobBuildThread;
+        if (blobRunning != null) {
+            blobRunning.interrupt();
+            blobBuildThread = null;
+        }
+        blobSeriesMode = false;
+        blobSession = null;
+        blobStage = 1;
         perStaffFilterStrength.clear();
         perStaffSeekBars.clear();
         if (staffSlidersLayout != null) {
             staffSlidersLayout.removeAllViews();
+        }
+        if (blobSeriesControls != null) {
+            blobSeriesControls.setVisibility(View.GONE);
+        }
+        if (blobOverlay != null) {
+            blobOverlay.setVisibility(View.GONE);
+            blobOverlay.setBlobs(null);
         }
         analysisText.setText(getString(R.string.capture_waiting));
         exitPanoramaMode();
