@@ -721,21 +721,46 @@ public class CaptureSheetActivity extends AppCompatActivity {
         updateOverlayBounds(panoramaPreview, state.preview, panoramaOverlay);
 
         if (blobOverlay != null) {
-            blobOverlay.setBlobs(toOverlayRects(state.blobs, state.preview.getWidth(), state.preview.getHeight()));
+            blobOverlay.setBlobs(toOverlayRects(preview, state.blobs, state.preview.getWidth(), state.preview.getHeight()));
         }
     }
 
-    private List<RectF> toOverlayRects(List<DebugBlobSeriesEngine.BlobInfo> blobs, int w, int h) {
+    private List<RectF> toOverlayRects(ImageView preview,
+                                       List<DebugBlobSeriesEngine.BlobInfo> blobs,
+                                       int imageW,
+                                       int imageH) {
         ArrayList<RectF> out = new ArrayList<RectF>();
         if (blobs == null) return out;
+        RectF imageRectInView = resolveDisplayedImageRect(preview, imageW, imageH);
+        float drawW = Math.max(1f, imageRectInView.width());
+        float drawH = Math.max(1f, imageRectInView.height());
+        float sx = drawW / Math.max(1f, imageW);
+        float sy = drawH / Math.max(1f, imageH);
         for (DebugBlobSeriesEngine.BlobInfo b : blobs) {
             out.add(new RectF(
-                    Math.max(0, b.rect.x),
-                    Math.max(0, b.rect.y),
-                    Math.min(w, b.rect.x + b.rect.width),
-                    Math.min(h, b.rect.y + b.rect.height)));
+                    imageRectInView.left + Math.max(0, b.rect.x) * sx,
+                    imageRectInView.top + Math.max(0, b.rect.y) * sy,
+                    imageRectInView.left + Math.min(imageW, b.rect.x + b.rect.width) * sx,
+                    imageRectInView.top + Math.min(imageH, b.rect.y + b.rect.height) * sy));
         }
         return out;
+    }
+
+    private RectF resolveDisplayedImageRect(ImageView preview, int imageW, int imageH) {
+        if (preview == null || imageW <= 0 || imageH <= 0) {
+            return new RectF(0f, 0f, imageW, imageH);
+        }
+        int viewW = preview.getWidth();
+        int viewH = preview.getHeight();
+        if (viewW <= 0 || viewH <= 0) {
+            return new RectF(0f, 0f, imageW, imageH);
+        }
+        float scale = Math.min(viewW / (float) imageW, viewH / (float) imageH);
+        float drawW = imageW * scale;
+        float drawH = imageH * scale;
+        float left = (viewW - drawW) * 0.5f;
+        float top = (viewH - drawH) * 0.5f;
+        return new RectF(left, top, left + drawW, top + drawH);
     }
 
     private void removeBlobFromCurrentStage(int index) {

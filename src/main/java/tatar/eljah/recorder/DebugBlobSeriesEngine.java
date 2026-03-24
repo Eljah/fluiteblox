@@ -54,10 +54,12 @@ class DebugBlobSeriesEngine {
 
     static class StageState {
         final Bitmap preview;
+        final ArrayList<BlobInfo> sourceBlobs;
         final ArrayList<BlobInfo> blobs;
 
-        StageState(Bitmap preview, ArrayList<BlobInfo> blobs) {
+        StageState(Bitmap preview, ArrayList<BlobInfo> sourceBlobs, ArrayList<BlobInfo> blobs) {
             this.preview = preview;
+            this.sourceBlobs = sourceBlobs;
             this.blobs = blobs;
         }
     }
@@ -79,10 +81,12 @@ class DebugBlobSeriesEngine {
         Mat[] mats = buildStages(source);
         try {
             for (int i = 0; i < STAGE_COUNT; i++) {
+                ArrayList<BlobInfo> sourceBlobs = detectBlobs(mats[i]);
                 applyDeletionsForStage(i + 1, mats[i], next.deletions, mats[i].cols(), mats[i].rows());
-                next.stages[i] = new StageState(toPreview(mats[i]), detectBlobs(mats[i]));
+                ArrayList<BlobInfo> filteredBlobs = detectBlobs(mats[i]);
+                next.stages[i] = new StageState(toPreview(mats[i]), sourceBlobs, filteredBlobs);
                 if (i == 0) {
-                    pruneInvalidBySourceStage(next.deletions, next.stages[i].blobs);
+                    pruneInvalidBySourceStage(next.deletions, next.stages[i].sourceBlobs);
                 }
             }
             return next;
@@ -97,7 +101,9 @@ class DebugBlobSeriesEngine {
         int h = out.getHeight();
         for (DeletionEntry d : session.deletions) {
             int stageIdx = Math.max(0, Math.min(STAGE_COUNT - 1, d.sourceStage - 1));
-            BlobInfo b = findBest(session.stages[stageIdx].blobs, d.signature);
+            StageState stageState = session.stages[stageIdx];
+            if (stageState == null) continue;
+            BlobInfo b = findBest(stageState.sourceBlobs, d.signature);
             if (b == null) continue;
             Rect r = b.rect;
             int x0 = Math.max(0, r.x);
