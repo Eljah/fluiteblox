@@ -51,7 +51,9 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private int thresholdOffset = 7;
     private float noiseLevel = 0.5f;
     private Thread processingThread;
+    private Thread blobBuildThread;
     private int processingToken;
+    private int blobBuildToken;
     private LinearLayout staffSlidersLayout;
     private FrameLayout processingMask;
     private HorizontalScrollView blobSeriesControls;
@@ -246,10 +248,16 @@ public class CaptureSheetActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         processingToken++;
+        blobBuildToken++;
         Thread running = processingThread;
         if (running != null) {
             running.interrupt();
             processingThread = null;
+        }
+        Thread blobRunning = blobBuildThread;
+        if (blobRunning != null) {
+            blobRunning.interrupt();
+            blobBuildThread = null;
         }
         super.onDestroy();
     }
@@ -697,13 +705,48 @@ public class CaptureSheetActivity extends AppCompatActivity {
     }
 
     private void startBlobSeriesMode(Bitmap source) {
-        blobSeriesMode = true;
-        blobStage = 1;
-        blobSession = blobSeriesEngine.rebuildSession(source, null);
-        if (blobSeriesControls != null) blobSeriesControls.setVisibility(View.VISIBLE);
-        if (blobOverlay != null) blobOverlay.setVisibility(View.VISIBLE);
-        analysisText.setText(getString(R.string.capture_blob_mode_hint));
-        showBlobStage(1);
+        final Bitmap src = source;
+        final int token = ++blobBuildToken;
+        Thread prev = blobBuildThread;
+        if (prev != null && prev.isAlive()) {
+            prev.interrupt();
+        }
+        setProcessingBusy(true);
+        blobBuildThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    final DebugBlobSeriesEngine.Session session = blobSeriesEngine.rebuildSession(src, null);
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (isFinishing() || token != blobBuildToken) return;
+                            blobSeriesMode = true;
+                            blobStage = 1;
+                            blobSession = session;
+                            if (blobSeriesControls != null) blobSeriesControls.setVisibility(View.VISIBLE);
+                            if (blobOverlay != null) blobOverlay.setVisibility(View.VISIBLE);
+                            analysisText.setText(getString(R.string.capture_blob_mode_hint));
+                            showBlobStage(1);
+                            setProcessingBusy(false);
+                        }
+                    });
+                } catch (final Throwable t) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (isFinishing() || token != blobBuildToken) return;
+                            blobSeriesMode = false;
+                            blobSession = null;
+                            setProcessingBusy(false);
+                            Toast.makeText(CaptureSheetActivity.this, R.string.capture_gallery_load_failed, Toast.LENGTH_SHORT).show();
+                            analysisText.setText(t.getClass().getSimpleName() + ": " + t.getMessage());
+                        }
+                    });
+                }
+            }
+        }, "blob-series-build");
+        blobBuildThread.start();
     }
 
     private void showBlobStage(int stage) {
@@ -790,6 +833,12 @@ public class CaptureSheetActivity extends AppCompatActivity {
         latestResult = null;
         panoramaDirty = false;
         panoramaDraftNotes.clear();
+        blobBuildToken++;
+        Thread blobRunning = blobBuildThread;
+        if (blobRunning != null) {
+            blobRunning.interrupt();
+            blobBuildThread = null;
+        }
         blobSeriesMode = false;
         blobSession = null;
         blobStage = 1;
