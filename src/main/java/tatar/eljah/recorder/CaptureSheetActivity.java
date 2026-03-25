@@ -141,7 +141,8 @@ public class CaptureSheetActivity extends AppCompatActivity {
             @Override
             public void onLongPress(android.view.MotionEvent e) {
                 if (!blobSeriesMode || panoramaBlobOverlay == null || e == null) return;
-                int hit = panoramaBlobOverlay.findBlobIndexAt(e.getX(), e.getY());
+                float[] local = toPanoramaOverlayLocal(e.getX(), e.getY());
+                int hit = panoramaBlobOverlay.findBlobIndexAt(local[0], local[1]);
                 if (hit >= 0) {
                     removeBlobFromCurrentStage(hit);
                 }
@@ -153,6 +154,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 if (blobSeriesMode && panoramaBlobLongPressDetector != null) {
                     panoramaBlobLongPressDetector.onTouchEvent(event);
                 }
+                syncPanoramaBlobOverlayTransform();
                 return false;
             }
         });
@@ -594,6 +596,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         panoramaOverlay.setVisibility(View.VISIBLE);
         if (panoramaBlobOverlay != null) {
             panoramaBlobOverlay.setVisibility(blobPanorama ? View.VISIBLE : View.GONE);
+            syncPanoramaBlobOverlayTransform();
         }
         panoramaContainer.setVisibility(View.VISIBLE);
         if (blobPanorama) {
@@ -831,6 +834,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         }
         if (panoramaBlobOverlay != null) {
             panoramaBlobOverlay.setBlobs(toOverlayRects(panoramaPreview, state.blobs, state.preview.getWidth(), state.preview.getHeight()));
+            syncPanoramaBlobOverlayTransform();
         }
     }
 
@@ -924,9 +928,34 @@ public class CaptureSheetActivity extends AppCompatActivity {
         if (panoramaBlobOverlay != null) {
             panoramaBlobOverlay.setVisibility(View.GONE);
             panoramaBlobOverlay.setBlobs(null);
+            syncPanoramaBlobOverlayTransform();
         }
         analysisText.setText(getString(R.string.capture_waiting));
         exitPanoramaMode();
+    }
+
+    private void syncPanoramaBlobOverlayTransform() {
+        if (panoramaBlobOverlay == null || panoramaPreview == null) return;
+        panoramaBlobOverlay.setPivotX(panoramaPreview.getPivotX());
+        panoramaBlobOverlay.setPivotY(panoramaPreview.getPivotY());
+        panoramaBlobOverlay.setScaleX(panoramaPreview.getScaleX());
+        panoramaBlobOverlay.setScaleY(panoramaPreview.getScaleY());
+        panoramaBlobOverlay.setTranslationX(panoramaPreview.getTranslationX());
+        panoramaBlobOverlay.setTranslationY(panoramaPreview.getTranslationY());
+        panoramaBlobOverlay.invalidate();
+    }
+
+    private float[] toPanoramaOverlayLocal(float x, float y) {
+        if (panoramaPreview == null) return new float[]{x, y};
+        float cx = panoramaPreview.getPivotX();
+        float cy = panoramaPreview.getPivotY();
+        float sx = Math.max(0.0001f, panoramaPreview.getScaleX());
+        float sy = Math.max(0.0001f, panoramaPreview.getScaleY());
+        float tx = panoramaPreview.getTranslationX();
+        float ty = panoramaPreview.getTranslationY();
+        float localX = (x - cx - tx) / sx + cx;
+        float localY = (y - cy - ty) / sy + cy;
+        return new float[]{localX, localY};
     }
 
     private void setProcessingBusy(boolean busy) {
