@@ -188,6 +188,12 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
+        <tatar.eljah.recorder.BlobDebugOverlayView
+            android:id="@+id/image_blob_overlay_panorama"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

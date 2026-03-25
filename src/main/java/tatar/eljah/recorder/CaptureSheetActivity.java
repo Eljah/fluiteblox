@@ -62,6 +62,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private HorizontalScrollView blobSeriesControls;
     private LinearLayout blobStageButtonsContainer;
     private BlobDebugOverlayView blobOverlay;
+    private BlobDebugOverlayView panoramaBlobOverlay;
     private DebugBlobSeriesEngine blobSeriesEngine;
     private DebugBlobSeriesEngine.Session blobSession;
     private int blobStage = 1;
@@ -119,12 +120,21 @@ public class CaptureSheetActivity extends AppCompatActivity {
         blobSeriesControls = findViewById(R.id.layout_blob_series_controls);
         blobStageButtonsContainer = findViewById(R.id.layout_blob_stage_buttons);
         blobOverlay = findViewById(R.id.image_blob_overlay);
+        panoramaBlobOverlay = findViewById(R.id.image_blob_overlay_panorama);
         blobOverlay.setOnBlobTapListener(new BlobDebugOverlayView.OnBlobTapListener() {
             @Override
             public void onBlobTapped(int index) {
                 removeBlobFromCurrentStage(index);
             }
         });
+        if (panoramaBlobOverlay != null) {
+            panoramaBlobOverlay.setOnBlobTapListener(new BlobDebugOverlayView.OnBlobTapListener() {
+                @Override
+                public void onBlobTapped(int index) {
+                    removeBlobFromCurrentStage(index);
+                }
+            });
+        }
         SeekBar thresholdSeek = findViewById(R.id.seek_threshold);
         SeekBar noiseSeek = findViewById(R.id.seek_noise);
 
@@ -550,14 +560,24 @@ public class CaptureSheetActivity extends AppCompatActivity {
 
     private void enterPanoramaMode() {
         if (panoramaContainer == null) return;
+        boolean blobPanorama = blobSeriesMode && blobSession != null;
         panoramaDraftNotes.clear();
         if (latestResult != null && latestResult.piece != null) {
             panoramaDraftNotes.addAll(latestResult.piece.notes);
             panoramaOverlay.setRecognizedNotes(latestResult.piece.notes);
         }
         panoramaDirty = false;
+        panoramaOverlay.setInteractionMode(blobPanorama
+                ? RecognitionOverlayView.InteractionMode.PAN_ONLY
+                : RecognitionOverlayView.InteractionMode.EDIT);
+        panoramaOverlay.setVisibility(blobPanorama ? View.GONE : View.VISIBLE);
+        if (panoramaBlobOverlay != null) {
+            panoramaBlobOverlay.setVisibility(blobPanorama ? View.VISIBLE : View.GONE);
+        }
         panoramaContainer.setVisibility(View.VISIBLE);
-        if (latestPreviewBitmap != null) {
+        if (blobPanorama) {
+            showBlobStage(blobStage);
+        } else if (latestPreviewBitmap != null) {
             panoramaOverlay.post(new Runnable() {
                 @Override
                 public void run() {
@@ -788,6 +808,9 @@ public class CaptureSheetActivity extends AppCompatActivity {
         if (blobOverlay != null) {
             blobOverlay.setBlobs(toOverlayRects(preview, state.blobs, state.preview.getWidth(), state.preview.getHeight()));
         }
+        if (panoramaBlobOverlay != null) {
+            panoramaBlobOverlay.setBlobs(toOverlayRects(panoramaPreview, state.blobs, state.preview.getWidth(), state.preview.getHeight()));
+        }
     }
 
     private List<RectF> toOverlayRects(ImageView preview,
@@ -848,6 +871,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         blobSeriesMode = false;
         if (blobSeriesControls != null) blobSeriesControls.setVisibility(View.GONE);
         if (blobOverlay != null) blobOverlay.setVisibility(View.GONE);
+        if (panoramaBlobOverlay != null) panoramaBlobOverlay.setVisibility(View.GONE);
         rerunProcessing();
     }
 
@@ -875,6 +899,10 @@ public class CaptureSheetActivity extends AppCompatActivity {
         if (blobOverlay != null) {
             blobOverlay.setVisibility(View.GONE);
             blobOverlay.setBlobs(null);
+        }
+        if (panoramaBlobOverlay != null) {
+            panoramaBlobOverlay.setVisibility(View.GONE);
+            panoramaBlobOverlay.setBlobs(null);
         }
         analysisText.setText(getString(R.string.capture_waiting));
         exitPanoramaMode();

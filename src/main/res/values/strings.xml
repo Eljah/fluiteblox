@@ -139,5 +139,5 @@
     <string name="capture_panorama_save">Сохранить</string>
     <string name="capture_panorama_cancel">Отменить</string>
     <string name="capture_blob_continue">Продолжить распознавание</string>
-    <string name="capture_blob_mode_hint">Режим серий 1-7: нажимайте на блоб для удаления в последующих сериях.</string>
+    <string name="capture_blob_mode_hint">Режим серий 1-7: удаление блоба — долгим нажатием (включая Панораму), удаление применяется к последующим сериям.</string>
 </resources>
