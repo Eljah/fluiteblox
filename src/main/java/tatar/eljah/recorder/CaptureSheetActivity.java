@@ -129,12 +129,6 @@ public class CaptureSheetActivity extends AppCompatActivity {
         SeekBar noiseSeek = findViewById(R.id.seek_noise);
 
         rebuildBlobStageButtons();
-        findViewById(R.id.btn_blob_continue).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                continueRecognitionAfterBlobEditing();
-            }
-        });
 
         thresholdSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -708,10 +702,17 @@ public class CaptureSheetActivity extends AppCompatActivity {
             });
             blobStageButtonsContainer.addView(button);
         }
-        View continueButton = findViewById(R.id.btn_blob_continue);
-        if (continueButton != null) {
-            continueButton.bringToFront();
-        }
+        Button continueButton = new Button(this);
+        continueButton.setId(R.id.btn_blob_continue);
+        continueButton.setText(R.string.capture_blob_continue);
+        continueButton.setAllCaps(false);
+        continueButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                continueRecognitionAfterBlobEditing();
+            }
+        });
+        blobStageButtonsContainer.addView(continueButton);
     }
 
     private void startBlobSeriesMode(Bitmap source) {
