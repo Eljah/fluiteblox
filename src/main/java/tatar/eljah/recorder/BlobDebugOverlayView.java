@@ -20,7 +20,7 @@ public class BlobDebugOverlayView extends View {
 
     private final ArrayList<RectF> blobs = new ArrayList<RectF>();
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final GestureDetector gestureDetector;
+    private GestureDetector gestureDetector;
     private OnBlobTapListener listener;
 
     public BlobDebugOverlayView(Context context) {
