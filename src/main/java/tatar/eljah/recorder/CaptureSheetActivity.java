@@ -14,6 +14,7 @@ import android.provider.MediaStore;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -33,6 +34,7 @@ import java.util.List;
 import tatar.eljah.fluitblox.R;
 
 public class CaptureSheetActivity extends AppCompatActivity {
+    private static final String TAG = "CaptureSheetActivity";
     private static final int REQ_CAMERA = 410;
     private static final int REQ_CAMERA_PERMISSION = 411;
     private static final int REQ_PICK_IMAGE = 412;
@@ -60,7 +62,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private HorizontalScrollView blobSeriesControls;
     private LinearLayout blobStageButtonsContainer;
     private BlobDebugOverlayView blobOverlay;
-    private final DebugBlobSeriesEngine blobSeriesEngine = new DebugBlobSeriesEngine();
+    private DebugBlobSeriesEngine blobSeriesEngine;
     private DebugBlobSeriesEngine.Session blobSession;
     private int blobStage = 1;
     private boolean blobSeriesMode;
@@ -127,12 +129,6 @@ public class CaptureSheetActivity extends AppCompatActivity {
         SeekBar noiseSeek = findViewById(R.id.seek_noise);
 
         rebuildBlobStageButtons();
-        findViewById(R.id.btn_blob_continue).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                continueRecognitionAfterBlobEditing();
-            }
-        });
 
         thresholdSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -706,13 +702,31 @@ public class CaptureSheetActivity extends AppCompatActivity {
             });
             blobStageButtonsContainer.addView(button);
         }
-        View continueButton = findViewById(R.id.btn_blob_continue);
-        if (continueButton != null) {
-            continueButton.bringToFront();
-        }
+        Button continueButton = new Button(this);
+        continueButton.setId(R.id.btn_blob_continue);
+        continueButton.setText(R.string.capture_blob_continue);
+        continueButton.setAllCaps(false);
+        continueButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                continueRecognitionAfterBlobEditing();
+            }
+        });
+        blobStageButtonsContainer.addView(continueButton);
     }
 
     private void startBlobSeriesMode(Bitmap source) {
+        if (blobSeriesEngine == null) {
+            try {
+                blobSeriesEngine = new DebugBlobSeriesEngine();
+            } catch (Throwable t) {
+                Log.e(TAG, "Failed to initialize OpenCV blob engine", t);
+                Toast.makeText(this, R.string.capture_gallery_load_failed, Toast.LENGTH_SHORT).show();
+                analysisText.setText("OpenCV init failed: " + t.getClass().getSimpleName());
+                rerunProcessing();
+                return;
+            }
+        }
         final Bitmap src = source;
         final int token = ++blobBuildToken;
         Thread prev = blobBuildThread;
