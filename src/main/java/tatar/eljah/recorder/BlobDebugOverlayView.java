@@ -22,6 +22,7 @@ public class BlobDebugOverlayView extends View {
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private GestureDetector gestureDetector;
     private OnBlobTapListener listener;
+    private boolean touchEnabled = true;
 
     public BlobDebugOverlayView(Context context) {
         super(context);
@@ -66,6 +67,19 @@ public class BlobDebugOverlayView extends View {
         invalidate();
     }
 
+    public void setTouchEnabled(boolean enabled) {
+        touchEnabled = enabled;
+    }
+
+    public int findBlobIndexAt(float x, float y) {
+        for (int i = blobs.size() - 1; i >= 0; i--) {
+            if (blobs.get(i).contains(x, y)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
@@ -77,6 +91,9 @@ public class BlobDebugOverlayView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (!touchEnabled || event == null || event.getPointerCount() > 1) {
+            return false;
+        }
         return gestureDetector.onTouchEvent(event) || super.onTouchEvent(event);
     }
 

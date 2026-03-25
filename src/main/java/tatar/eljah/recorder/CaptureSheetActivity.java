@@ -15,6 +15,7 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.GestureDetector;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -63,6 +64,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private LinearLayout blobStageButtonsContainer;
     private BlobDebugOverlayView blobOverlay;
     private BlobDebugOverlayView panoramaBlobOverlay;
+    private GestureDetector panoramaBlobLongPressDetector;
     private DebugBlobSeriesEngine blobSeriesEngine;
     private DebugBlobSeriesEngine.Session blobSession;
     private int blobStage = 1;
@@ -128,13 +130,32 @@ public class CaptureSheetActivity extends AppCompatActivity {
             }
         });
         if (panoramaBlobOverlay != null) {
-            panoramaBlobOverlay.setOnBlobTapListener(new BlobDebugOverlayView.OnBlobTapListener() {
-                @Override
-                public void onBlobTapped(int index) {
-                    removeBlobFromCurrentStage(index);
-                }
-            });
+            panoramaBlobOverlay.setTouchEnabled(false);
         }
+        panoramaBlobLongPressDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onDown(android.view.MotionEvent e) {
+                return true;
+            }
+
+            @Override
+            public void onLongPress(android.view.MotionEvent e) {
+                if (!blobSeriesMode || panoramaBlobOverlay == null || e == null) return;
+                int hit = panoramaBlobOverlay.findBlobIndexAt(e.getX(), e.getY());
+                if (hit >= 0) {
+                    removeBlobFromCurrentStage(hit);
+                }
+            }
+        });
+        panoramaOverlay.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, android.view.MotionEvent event) {
+                if (blobSeriesMode && panoramaBlobLongPressDetector != null) {
+                    panoramaBlobLongPressDetector.onTouchEvent(event);
+                }
+                return false;
+            }
+        });
         SeekBar thresholdSeek = findViewById(R.id.seek_threshold);
         SeekBar noiseSeek = findViewById(R.id.seek_noise);
 
@@ -570,7 +591,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         panoramaOverlay.setInteractionMode(blobPanorama
                 ? RecognitionOverlayView.InteractionMode.PAN_ONLY
                 : RecognitionOverlayView.InteractionMode.EDIT);
-        panoramaOverlay.setVisibility(blobPanorama ? View.GONE : View.VISIBLE);
+        panoramaOverlay.setVisibility(View.VISIBLE);
         if (panoramaBlobOverlay != null) {
             panoramaBlobOverlay.setVisibility(blobPanorama ? View.VISIBLE : View.GONE);
         }
