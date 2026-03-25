@@ -15,6 +15,7 @@ import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.GestureDetector;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -62,6 +63,8 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private HorizontalScrollView blobSeriesControls;
     private LinearLayout blobStageButtonsContainer;
     private BlobDebugOverlayView blobOverlay;
+    private BlobDebugOverlayView panoramaBlobOverlay;
+    private GestureDetector panoramaBlobLongPressDetector;
     private DebugBlobSeriesEngine blobSeriesEngine;
     private DebugBlobSeriesEngine.Session blobSession;
     private int blobStage = 1;
@@ -119,10 +122,40 @@ public class CaptureSheetActivity extends AppCompatActivity {
         blobSeriesControls = findViewById(R.id.layout_blob_series_controls);
         blobStageButtonsContainer = findViewById(R.id.layout_blob_stage_buttons);
         blobOverlay = findViewById(R.id.image_blob_overlay);
+        panoramaBlobOverlay = findViewById(R.id.image_blob_overlay_panorama);
         blobOverlay.setOnBlobTapListener(new BlobDebugOverlayView.OnBlobTapListener() {
             @Override
             public void onBlobTapped(int index) {
                 removeBlobFromCurrentStage(index);
+            }
+        });
+        if (panoramaBlobOverlay != null) {
+            panoramaBlobOverlay.setTouchEnabled(false);
+        }
+        panoramaBlobLongPressDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onDown(android.view.MotionEvent e) {
+                return true;
+            }
+
+            @Override
+            public void onLongPress(android.view.MotionEvent e) {
+                if (!blobSeriesMode || panoramaBlobOverlay == null || e == null) return;
+                float[] local = toPanoramaOverlayLocal(e.getX(), e.getY());
+                int hit = panoramaBlobOverlay.findBlobIndexAt(local[0], local[1]);
+                if (hit >= 0) {
+                    removeBlobFromCurrentStage(hit);
+                }
+            }
+        });
+        panoramaOverlay.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, android.view.MotionEvent event) {
+                if (blobSeriesMode && panoramaBlobLongPressDetector != null) {
+                    panoramaBlobLongPressDetector.onTouchEvent(event);
+                }
+                syncPanoramaBlobOverlayTransform();
+                return false;
             }
         });
         SeekBar thresholdSeek = findViewById(R.id.seek_threshold);
@@ -550,14 +583,25 @@ public class CaptureSheetActivity extends AppCompatActivity {
 
     private void enterPanoramaMode() {
         if (panoramaContainer == null) return;
+        boolean blobPanorama = blobSeriesMode && blobSession != null;
         panoramaDraftNotes.clear();
         if (latestResult != null && latestResult.piece != null) {
             panoramaDraftNotes.addAll(latestResult.piece.notes);
             panoramaOverlay.setRecognizedNotes(latestResult.piece.notes);
         }
         panoramaDirty = false;
+        panoramaOverlay.setInteractionMode(blobPanorama
+                ? RecognitionOverlayView.InteractionMode.PAN_ONLY
+                : RecognitionOverlayView.InteractionMode.EDIT);
+        panoramaOverlay.setVisibility(View.VISIBLE);
+        if (panoramaBlobOverlay != null) {
+            panoramaBlobOverlay.setVisibility(blobPanorama ? View.VISIBLE : View.GONE);
+            syncPanoramaBlobOverlayTransform();
+        }
         panoramaContainer.setVisibility(View.VISIBLE);
-        if (latestPreviewBitmap != null) {
+        if (blobPanorama) {
+            showBlobStage(blobStage);
+        } else if (latestPreviewBitmap != null) {
             panoramaOverlay.post(new Runnable() {
                 @Override
                 public void run() {
@@ -788,6 +832,10 @@ public class CaptureSheetActivity extends AppCompatActivity {
         if (blobOverlay != null) {
             blobOverlay.setBlobs(toOverlayRects(preview, state.blobs, state.preview.getWidth(), state.preview.getHeight()));
         }
+        if (panoramaBlobOverlay != null) {
+            panoramaBlobOverlay.setBlobs(toOverlayRects(panoramaPreview, state.blobs, state.preview.getWidth(), state.preview.getHeight()));
+            syncPanoramaBlobOverlayTransform();
+        }
     }
 
     private List<RectF> toOverlayRects(ImageView preview,
@@ -848,6 +896,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         blobSeriesMode = false;
         if (blobSeriesControls != null) blobSeriesControls.setVisibility(View.GONE);
         if (blobOverlay != null) blobOverlay.setVisibility(View.GONE);
+        if (panoramaBlobOverlay != null) panoramaBlobOverlay.setVisibility(View.GONE);
         rerunProcessing();
     }
 
@@ -876,8 +925,37 @@ public class CaptureSheetActivity extends AppCompatActivity {
             blobOverlay.setVisibility(View.GONE);
             blobOverlay.setBlobs(null);
         }
+        if (panoramaBlobOverlay != null) {
+            panoramaBlobOverlay.setVisibility(View.GONE);
+            panoramaBlobOverlay.setBlobs(null);
+            syncPanoramaBlobOverlayTransform();
+        }
         analysisText.setText(getString(R.string.capture_waiting));
         exitPanoramaMode();
+    }
+
+    private void syncPanoramaBlobOverlayTransform() {
+        if (panoramaBlobOverlay == null || panoramaPreview == null) return;
+        panoramaBlobOverlay.setPivotX(panoramaPreview.getPivotX());
+        panoramaBlobOverlay.setPivotY(panoramaPreview.getPivotY());
+        panoramaBlobOverlay.setScaleX(panoramaPreview.getScaleX());
+        panoramaBlobOverlay.setScaleY(panoramaPreview.getScaleY());
+        panoramaBlobOverlay.setTranslationX(panoramaPreview.getTranslationX());
+        panoramaBlobOverlay.setTranslationY(panoramaPreview.getTranslationY());
+        panoramaBlobOverlay.invalidate();
+    }
+
+    private float[] toPanoramaOverlayLocal(float x, float y) {
+        if (panoramaPreview == null) return new float[]{x, y};
+        float cx = panoramaPreview.getPivotX();
+        float cy = panoramaPreview.getPivotY();
+        float sx = Math.max(0.0001f, panoramaPreview.getScaleX());
+        float sy = Math.max(0.0001f, panoramaPreview.getScaleY());
+        float tx = panoramaPreview.getTranslationX();
+        float ty = panoramaPreview.getTranslationY();
+        float localX = (x - cx - tx) / sx + cx;
+        float localY = (y - cy - ty) / sy + cy;
+        return new float[]{localX, localY};
     }
 
     private void setProcessingBusy(boolean busy) {

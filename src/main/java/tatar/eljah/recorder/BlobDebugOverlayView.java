@@ -6,6 +6,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.AttributeSet;
+import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -19,7 +20,9 @@ public class BlobDebugOverlayView extends View {
 
     private final ArrayList<RectF> blobs = new ArrayList<RectF>();
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private GestureDetector gestureDetector;
     private OnBlobTapListener listener;
+    private boolean touchEnabled = true;
 
     public BlobDebugOverlayView(Context context) {
         super(context);
@@ -40,6 +43,18 @@ public class BlobDebugOverlayView extends View {
         stroke.setStyle(Paint.Style.STROKE);
         stroke.setStrokeWidth(3f);
         stroke.setColor(Color.argb(220, 255, 165, 0));
+        gestureDetector = new GestureDetector(getContext(), new GestureDetector.SimpleOnGestureListener() {
+            @Override
+            public boolean onDown(MotionEvent e) {
+                return true;
+            }
+
+            @Override
+            public void onLongPress(MotionEvent e) {
+                notifyHit(e);
+            }
+        });
+        gestureDetector.setIsLongpressEnabled(true);
     }
 
     public void setOnBlobTapListener(OnBlobTapListener listener) {
@@ -50,6 +65,19 @@ public class BlobDebugOverlayView extends View {
         blobs.clear();
         if (items != null) blobs.addAll(items);
         invalidate();
+    }
+
+    public void setTouchEnabled(boolean enabled) {
+        touchEnabled = enabled;
+    }
+
+    public int findBlobIndexAt(float x, float y) {
+        for (int i = blobs.size() - 1; i >= 0; i--) {
+            if (blobs.get(i).contains(x, y)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     @Override
@@ -63,15 +91,23 @@ public class BlobDebugOverlayView extends View {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (event.getAction() != MotionEvent.ACTION_UP) return true;
+        if (!touchEnabled || event == null || event.getPointerCount() > 1) {
+            return false;
+        }
+        return gestureDetector.onTouchEvent(event) || super.onTouchEvent(event);
+    }
+
+    private boolean notifyHit(MotionEvent event) {
+        if (event == null) return false;
         float x = event.getX();
         float y = event.getY();
         for (int i = blobs.size() - 1; i >= 0; i--) {
-            if (blobs.get(i).contains(x, y)) {
-                if (listener != null) listener.onBlobTapped(i);
-                return true;
+            if (!blobs.get(i).contains(x, y)) continue;
+            if (listener != null && event.getActionMasked() != MotionEvent.ACTION_CANCEL) {
+                listener.onBlobTapped(i);
             }
+            return true;
         }
-        return true;
+        return false;
     }
 }

@@ -97,20 +97,27 @@ class DebugBlobSeriesEngine {
         Session next = new Session(source);
         if (prev != null) next.deletions.addAll(prev.deletions);
 
-        Mat[] mats = buildStages(source);
+        StageBuffer[] stages = buildStages(source);
         try {
             for (int i = 0; i < STAGE_COUNT; i++) {
-                ArrayList<BlobInfo> sourceBlobs = detectBlobs(mats[i]);
-                applyDeletionsForStage(i + 1, mats[i], next.deletions, mats[i].cols(), mats[i].rows());
-                ArrayList<BlobInfo> filteredBlobs = detectBlobs(mats[i]);
-                next.stages[i] = new StageState(toPreview(mats[i]), sourceBlobs, filteredBlobs);
+                StageBuffer stage = stages[i];
+                ArrayList<BlobInfo> sourceBlobs = detectBlobs(stage.mask);
+                applyDeletionsForStage(i + 1, stage.mask, next.deletions, stage.mask.cols(), stage.mask.rows());
+                ArrayList<BlobInfo> filteredBlobs = detectBlobs(stage.mask);
+                Bitmap preview = stage.preview != null ? stage.preview : toPreview(stage.mask);
+                if (i == 5) {
+                    preview = drawAreaOrderPreview(stage.mask, filteredBlobs);
+                }
+                next.stages[i] = new StageState(preview, sourceBlobs, filteredBlobs);
                 if (i == 0) {
                     pruneInvalidBySourceStage(next.deletions, next.stages[i].sourceBlobs);
                 }
             }
             return next;
         } finally {
-            for (Mat m : mats) m.release();
+            for (StageBuffer s : stages) {
+                if (s != null && s.mask != null) s.mask.release();
+            }
         }
     }
 
@@ -188,68 +195,89 @@ class DebugBlobSeriesEngine {
         return bestScore <= 0.0035f ? best : null;
     }
 
-    private Mat[] buildStages(Bitmap source) {
+    private StageBuffer[] buildStages(Bitmap source) {
         Mat src = new Mat();
         Utils.bitmapToMat(source, src);
         Mat gray = new Mat();
         Imgproc.cvtColor(src, gray, Imgproc.COLOR_RGBA2GRAY);
         src.release();
 
-        Mat s1 = new Mat();
-        Imgproc.adaptiveThreshold(gray, s1, 255, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY_INV, 31, 7);
+        Mat binary = new Mat();
+        Imgproc.adaptiveThreshold(gray, binary, 255, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY_INV, 31, 7);
         gray.release();
 
-        int w = s1.cols();
-        int h = s1.rows();
+        int w = binary.cols();
+        int h = binary.rows();
         Mat horizontal = new Mat();
         Mat vertical = new Mat();
         Mat kH = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(Math.max(18, w / 12), 1));
         Mat kV = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1, Math.max(10, h / 16)));
-        Imgproc.morphologyEx(s1, horizontal, Imgproc.MORPH_OPEN, kH);
-        Imgproc.morphologyEx(s1, vertical, Imgproc.MORPH_OPEN, kV);
+        Imgproc.morphologyEx(binary, horizontal, Imgproc.MORPH_OPEN, kH);
+        Imgproc.morphologyEx(binary, vertical, Imgproc.MORPH_OPEN, kV);
         kH.release();
         kV.release();
 
-        Mat s2 = new Mat();
-        Core.subtract(s1, horizontal, s2);
-        Core.subtract(s2, vertical, s2);
+        Mat s1 = new Mat();
+        Core.subtract(binary, horizontal, s1);
+        Core.subtract(s1, vertical, s1);
 
-        Mat s3 = new Mat();
+        Mat s2 = new Mat();
         Mat kStem = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1, Math.max(8, h / 14)));
         Mat stem = new Mat();
-        Imgproc.morphologyEx(s2, stem, Imgproc.MORPH_OPEN, kStem);
-        Core.subtract(s2, stem, s3);
+        Imgproc.morphologyEx(s1, stem, Imgproc.MORPH_OPEN, kStem);
+        Core.subtract(s1, stem, s2);
         kStem.release();
         stem.release();
+        Mat kSinglePixelEat = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(2, 2));
+        Imgproc.morphologyEx(s2, s2, Imgproc.MORPH_OPEN, kSinglePixelEat);
+        kSinglePixelEat.release();
 
-        Mat s4 = new Mat();
-        Imgproc.GaussianBlur(s3, s4, new Size(5, 5), 0);
-        Imgproc.threshold(s4, s4, 142, 255, Imgproc.THRESH_BINARY);
+        Mat s3 = new Mat();
+        Imgproc.GaussianBlur(s2, s3, new Size(5, 5), 0);
+        Imgproc.threshold(s3, s3, 142, 255, Imgproc.THRESH_BINARY);
+        Core.max(s3, s2, s3);
+        Imgproc.threshold(s3, s3, 127, 255, Imgproc.THRESH_BINARY);
 
-        Mat s5 = s4.clone();
-        ArrayList<BlobInfo> step5Blobs = detectBlobs(s5);
+        Mat s4 = s3.clone();
+        ArrayList<BlobInfo> step5Blobs = detectBlobs(s4);
         for (BlobInfo b : step5Blobs) {
             int hh = Math.max(1, b.rect.height);
             int ww = Math.max(1, b.rect.width);
             if (hh <= 4 && ww >= hh * 4) {
-                Imgproc.rectangle(s5, b.rect.tl(), b.rect.br(), new Scalar(0), -1);
+                Imgproc.rectangle(s4, b.rect.tl(), b.rect.br(), new Scalar(0), -1);
             }
         }
+        Imgproc.threshold(s4, s4, 127, 255, Imgproc.THRESH_BINARY);
+
+        Mat s5 = new Mat();
+        Mat kMerge = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1, 3));
+        Imgproc.morphologyEx(s4, s5, Imgproc.MORPH_CLOSE, kMerge);
+        kMerge.release();
         Imgproc.threshold(s5, s5, 127, 255, Imgproc.THRESH_BINARY);
 
-        Mat s6 = new Mat();
-        Mat kMerge = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(1, 3));
-        Imgproc.morphologyEx(s5, s6, Imgproc.MORPH_CLOSE, kMerge);
-        kMerge.release();
-        Imgproc.threshold(s6, s6, 127, 255, Imgproc.THRESH_BINARY);
-
-        Mat s7 = new Mat();
-        Imgproc.morphologyEx(s6, s7, Imgproc.MORPH_OPEN, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(2, 2)));
+        Mat s6 = s5.clone();
+        Mat s7 = s5.clone();
+        ArrayList<BlobInfo> aspectBlobs = detectBlobs(s7);
+        for (BlobInfo b : aspectBlobs) {
+            float aspect = b.rect.width / Math.max(1f, (float) b.rect.height);
+            if (aspect > 2.6f) {
+                Imgproc.rectangle(s7, b.rect.tl(), b.rect.br(), new Scalar(0), -1);
+            }
+        }
         Imgproc.threshold(s7, s7, 127, 255, Imgproc.THRESH_BINARY);
 
+        binary.release();
         horizontal.release();
         vertical.release();
-        return new Mat[]{s1, s2, s3, s4, s5, s6, s7};
+        return new StageBuffer[]{
+                new StageBuffer(s1, null),
+                new StageBuffer(s2, null),
+                new StageBuffer(s3, null),
+                new StageBuffer(s4, null),
+                new StageBuffer(s5, null),
+                new StageBuffer(s6, null),
+                new StageBuffer(s7, null)
+        };
     }
 
     private Bitmap toPreview(Mat binary) {
@@ -259,6 +287,40 @@ class DebugBlobSeriesEngine {
         Utils.matToBitmap(bgr, out);
         bgr.release();
         return out;
+    }
+
+    private Bitmap drawAreaOrderPreview(Mat mask, List<BlobInfo> blobs) {
+        Bitmap out = toPreview(mask);
+        Mat rgba = new Mat();
+        Utils.bitmapToMat(out, rgba);
+        try {
+            ArrayList<BlobInfo> ordered = new ArrayList<BlobInfo>(blobs);
+            java.util.Collections.sort(ordered, new java.util.Comparator<BlobInfo>() {
+                @Override
+                public int compare(BlobInfo a, BlobInfo b) {
+                    int aa = Math.max(1, a.rect.width) * Math.max(1, a.rect.height);
+                    int bb = Math.max(1, b.rect.width) * Math.max(1, b.rect.height);
+                    return Integer.compare(bb, aa);
+                }
+            });
+            int rank = 1;
+            for (BlobInfo b : ordered) {
+                Imgproc.rectangle(rgba, b.rect.tl(), b.rect.br(), new Scalar(0, 165, 255, 255), 1);
+                Imgproc.putText(
+                        rgba,
+                        String.valueOf(rank++),
+                        b.rect.tl(),
+                        Imgproc.FONT_HERSHEY_SIMPLEX,
+                        0.35,
+                        new Scalar(255, 80, 80, 255),
+                        1
+                );
+            }
+            Utils.matToBitmap(rgba, out);
+            return out;
+        } finally {
+            rgba.release();
+        }
     }
 
     private ArrayList<BlobInfo> detectBlobs(Mat mask) {
@@ -287,6 +349,15 @@ class DebugBlobSeriesEngine {
         } finally {
             contoursInput.release();
             hierarchy.release();
+        }
+    }
+    private static class StageBuffer {
+        final Mat mask;
+        Bitmap preview;
+
+        StageBuffer(Mat mask, Bitmap preview) {
+            this.mask = mask;
+            this.preview = preview;
         }
     }
 }
