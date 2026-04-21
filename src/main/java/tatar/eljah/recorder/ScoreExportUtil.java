@@ -3,28 +3,10 @@ package tatar.eljah.recorder;
 import android.content.Context;
 import android.os.Environment;
 
-import org.audiveris.proxymusic.Attributes;
-import org.audiveris.proxymusic.Clef;
-import org.audiveris.proxymusic.ClefSign;
-import org.audiveris.proxymusic.Key;
-import org.audiveris.proxymusic.Note;
-import org.audiveris.proxymusic.NoteType;
-import org.audiveris.proxymusic.ObjectFactory;
-import org.audiveris.proxymusic.PartList;
-import org.audiveris.proxymusic.PartName;
-import org.audiveris.proxymusic.Pitch;
-import org.audiveris.proxymusic.ScorePart;
-import org.audiveris.proxymusic.ScorePartwise;
-import org.audiveris.proxymusic.Step;
-import org.audiveris.proxymusic.Time;
-import org.audiveris.proxymusic.util.Marshalling;
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
-import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.util.List;
 
 public final class ScoreExportUtil {
@@ -36,15 +18,9 @@ public final class ScoreExportUtil {
     public static File exportMusicXml(Context context, ScorePiece piece) throws IOException {
         File file = buildTargetFile(context, piece, "xml");
         FileOutputStream output = new FileOutputStream(file);
-        try {
-            Marshalling.marshal(buildScorePartwise(piece.notes), output, true, 2);
-            output.flush();
-        } catch (Exception proxymusicFailure) {
-            output.write(buildMusicXmlLegacy(piece.notes).getBytes(UTF8));
-            output.flush();
-        } finally {
-            output.close();
-        }
+        output.write(buildMusicXml(piece.notes).getBytes(UTF8));
+        output.flush();
+        output.close();
         return file;
     }
 
@@ -69,115 +45,7 @@ public final class ScoreExportUtil {
         return new File(folder, safeTitle + "_" + piece.id + "." + extension);
     }
 
-    private static ScorePartwise buildScorePartwise(List<NoteEvent> notes) {
-        ObjectFactory factory = new ObjectFactory();
-        ScorePartwise score = factory.createScorePartwise();
-        score.setVersion("4.0");
-
-        PartList partList = factory.createPartList();
-        score.setPartList(partList);
-
-        ScorePart scorePart = factory.createScorePart();
-        scorePart.setId("P1");
-        PartName partName = factory.createPartName();
-        partName.setValue("Flute");
-        scorePart.setPartName(partName);
-        partList.getPartGroupOrScorePart().add(scorePart);
-
-        ScorePartwise.Part part = factory.createScorePartwisePart();
-        part.setId(scorePart);
-        score.getPart().add(part);
-
-        int measureNumber = 1;
-        int beatProgress = 0;
-        ScorePartwise.Part.Measure measure = createMeasureSkeleton(factory, measureNumber);
-        part.getMeasure().add(measure);
-
-        for (NoteEvent noteEvent : notes) {
-            int duration = durationUnits(noteEvent.duration);
-            if (beatProgress + duration > 64) {
-                measureNumber++;
-                beatProgress = 0;
-                measure = factory.createScorePartwisePartMeasure();
-                measure.setNumber(String.valueOf(measureNumber));
-                part.getMeasure().add(measure);
-            }
-            Note note = factory.createNote();
-            note.setPitch(buildPitch(factory, noteEvent));
-            note.setDuration(BigDecimal.valueOf(duration));
-            NoteType noteType = factory.createNoteType();
-            noteType.setValue(xmlType(noteEvent.duration));
-            note.setType(noteType);
-            measure.getNoteOrBackupOrForward().add(note);
-            beatProgress += duration;
-        }
-        return score;
-    }
-
-    private static ScorePartwise.Part.Measure createMeasureSkeleton(ObjectFactory factory, int measureNumber) {
-        ScorePartwise.Part.Measure measure = factory.createScorePartwisePartMeasure();
-        measure.setNumber(String.valueOf(measureNumber));
-
-        Attributes attributes = factory.createAttributes();
-        attributes.setDivisions(BigDecimal.valueOf(16));
-
-        Key key = factory.createKey();
-        key.setFifths(BigInteger.ZERO);
-        attributes.getKey().add(key);
-
-        Time time = factory.createTime();
-        time.getTimeSignature().add(factory.createTimeBeats("4"));
-        time.getTimeSignature().add(factory.createTimeBeatType("4"));
-        attributes.getTime().add(time);
-
-        Clef clef = factory.createClef();
-        clef.setSign(ClefSign.G);
-        clef.setLine(BigInteger.valueOf(2));
-        attributes.getClef().add(clef);
-
-        measure.getNoteOrBackupOrForward().add(attributes);
-        return measure;
-    }
-
-    private static Pitch buildPitch(ObjectFactory factory, NoteEvent note) {
-        Pitch pitch = factory.createPitch();
-        pitch.setStep(stepForNoteName(note.noteName));
-        Integer alter = alterForNoteName(note.noteName);
-        if (alter != null) {
-            pitch.setAlter(BigDecimal.valueOf(alter));
-        }
-        pitch.setOctave(note.octave);
-        return pitch;
-    }
-
-    private static Step stepForNoteName(String noteName) {
-        if (noteName == null || noteName.length() == 0) {
-            return Step.C;
-        }
-        String step = noteName.substring(0, 1).toUpperCase();
-        if ("D".equals(step)) return Step.D;
-        if ("E".equals(step)) return Step.E;
-        if ("F".equals(step)) return Step.F;
-        if ("G".equals(step)) return Step.G;
-        if ("A".equals(step)) return Step.A;
-        if ("B".equals(step) || "H".equals(step)) return Step.B;
-        return Step.C;
-    }
-
-    private static Integer alterForNoteName(String noteName) {
-        if (noteName == null || noteName.length() < 2) {
-            return null;
-        }
-        if (noteName.contains("#")) {
-            return 1;
-        }
-        if (noteName.contains("b")) {
-            return -1;
-        }
-        return null;
-    }
-
-    private static String buildMusicXmlLegacy(List<NoteEvent> notes) {
+    private static String buildMusicXml(List<NoteEvent> notes) {
         StringBuilder xml = new StringBuilder();
         xml.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         xml.append("<score-partwise version=\"3.1\">\n");
