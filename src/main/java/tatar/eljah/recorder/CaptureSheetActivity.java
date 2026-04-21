@@ -66,7 +66,8 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private DebugBlobSeriesEngine.Session blobSession;
     private int blobStage = 1;
     private boolean blobSeriesMode;
-    private final ScoreRecognitionEngine recognitionEngine = new OpenCvRecognitionEngine();
+    private final ScoreRecognitionEngine recognitionEngine =
+            new AudiverisCompatRecognitionEngine(new OpenCvRecognitionEngine());
     private final ArrayList<Float> perStaffFilterStrength = new ArrayList<Float>();
     private final ArrayList<SeekBar> perStaffSeekBars = new ArrayList<SeekBar>();
     private final ArrayList<NoteEvent> panoramaDraftNotes = new ArrayList<NoteEvent>();
