@@ -21,3 +21,14 @@ reimplement compatible stages on Android while preserving local/offline executio
 1. Port stem/beam filtering heuristics from Audiveris morphology stages.
 2. Add accidental/rest classifiers.
 3. Add confidence scores and manual correction workflow based on symbol confidence.
+
+## Optional dependency wiring
+
+To test with Audiveris ecosystem dependency on environments that support it:
+
+```bash
+mvn -Daudiveris.dependency=true -DskipTests compile
+```
+
+This enables profile `audiveris-dependency` (adds `org.audiveris:proxymusic:4.0.3`).
+Runtime presence is detected via `AudiverisDependencyBridge` and reflected in processing mode suffix.

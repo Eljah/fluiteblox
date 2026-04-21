@@ -87,7 +87,7 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                 staves.size() * 10,
                 overlay,
                 corridors,
-                "audiveris-compat/android",
+                "audiveris-compat/android" + AudiverisDependencyBridge.runtimeFlavorSuffix(),
                 false,
                 null,
                 null);
