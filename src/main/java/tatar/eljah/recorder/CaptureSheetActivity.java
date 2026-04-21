@@ -66,6 +66,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private DebugBlobSeriesEngine.Session blobSession;
     private int blobStage = 1;
     private boolean blobSeriesMode;
+    private final ScoreRecognitionEngine recognitionEngine = new OpenCvRecognitionEngine();
     private final ArrayList<Float> perStaffFilterStrength = new ArrayList<Float>();
     private final ArrayList<SeekBar> perStaffSeekBars = new ArrayList<SeekBar>();
     private final ArrayList<NoteEvent> panoramaDraftNotes = new ArrayList<NoteEvent>();
@@ -220,7 +221,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 }
                 OpenCvScoreProcessor.ProcessingResult result = latestResult;
                 if (result == null) {
-                    result = new OpenCvScoreProcessor().process(capturedBitmap, title, currentOptions());
+                    result = recognitionEngine.recognize(capturedBitmap, title, currentOptions());
                 }
                 result.piece.title = title;
                 new ScoreLibraryRepository(CaptureSheetActivity.this).savePiece(result.piece);
@@ -402,7 +403,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
             @Override
             public void run() {
                 try {
-                    final OpenCvScoreProcessor.ProcessingResult result = new OpenCvScoreProcessor().process(bmp, "draft", options);
+                    final OpenCvScoreProcessor.ProcessingResult result = recognitionEngine.recognize(bmp, "draft", options);
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
@@ -470,10 +471,10 @@ public class CaptureSheetActivity extends AppCompatActivity {
         if (result == null) {
             return "legacy";
         }
-        if (result.openCvUsed) {
-            return "OpenCV";
+        if (result.processingMode != null && result.processingMode.trim().length() > 0) {
+            return result.processingMode;
         }
-        return "legacy (fallback)";
+        return result.openCvUsed ? "OpenCV" : "legacy (fallback)";
     }
 
     private void updateOverlayBounds(ImageView preview, Bitmap shownBitmap) {
