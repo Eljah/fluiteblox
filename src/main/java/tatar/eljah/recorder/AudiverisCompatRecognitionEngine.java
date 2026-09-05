@@ -530,7 +530,13 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
     private float windowInkScore(boolean[] black, int width, int height, int cx, float cy, float spacing) {
         int rx = Math.max(3, Math.round(spacing * 0.55f));
         int ry = Math.max(3, Math.round(spacing * 0.45f));
-        float score = 0f;
+        int[] rowHits = new int[ry * 2 + 1];
+        int[] colHits = new int[rx * 2 + 1];
+        int ink = 0;
+        int leftInk = 0;
+        int rightInk = 0;
+        int topInk = 0;
+        int bottomInk = 0;
         for (int dy = -ry; dy <= ry; dy++) {
             int y = Math.round(cy) + dy;
             if (y < 0 || y >= height) continue;
@@ -542,11 +548,40 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                 float ny = dy / (float) ry;
                 if (nx * nx + ny * ny > 1.0f) continue;
                 if (black[row + x]) {
-                    score += 1f;
+                    ink++;
+                    rowHits[dy + ry]++;
+                    colHits[dx + rx]++;
+                    if (dx < 0) leftInk++;
+                    if (dx > 0) rightInk++;
+                    if (dy < 0) topInk++;
+                    if (dy > 0) bottomInk++;
                 }
             }
         }
-        return score;
+
+        int rowsWithBody = 0;
+        int colsWithBody = 0;
+        int minRowHits = Math.max(2, Math.round(rx * 0.45f));
+        int minColHits = Math.max(2, Math.round(ry * 0.45f));
+        for (int hits : rowHits) {
+            if (hits >= minRowHits) rowsWithBody++;
+        }
+        for (int hits : colHits) {
+            if (hits >= minColHits) colsWithBody++;
+        }
+        if (rowsWithBody < Math.max(2, Math.round(ry * 0.70f))) {
+            return 0f;
+        }
+        if (colsWithBody < Math.max(2, Math.round(rx * 0.70f))) {
+            return 0f;
+        }
+
+        int horizontalBalance = Math.min(leftInk, rightInk);
+        int verticalBalance = Math.min(topInk, bottomInk);
+        int horizontalImbalance = Math.abs(leftInk - rightInk);
+        int verticalImbalance = Math.abs(topInk - bottomInk);
+        return ink + horizontalBalance * 0.8f + verticalBalance * 0.5f
+                - horizontalImbalance * 0.35f - verticalImbalance * 0.20f;
     }
 
     private StaffModel nearestStaff(List<StaffModel> staves, float y) {

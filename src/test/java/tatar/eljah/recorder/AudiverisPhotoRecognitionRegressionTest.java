@@ -42,6 +42,7 @@ public class AudiverisPhotoRecognitionRegressionTest {
                 + ", expected20=" + firstNames(expected, 20)
                 + ", first20=" + firstNames(recognized, 20));
         System.out.println("  shiftedLcs=" + shiftedLcs(expected, recognized));
+        System.out.println("  diatonicShiftedLcs=" + diatonicShiftedLcs(expected, recognized));
         System.out.println("  firstDetails=" + firstDetails(recognized, 20));
         System.out.println("  peaks=" + direct.linePeaks);
         for (int i = 0; i < direct.staves.size(); i++) {
@@ -49,7 +50,8 @@ public class AudiverisPhotoRecognitionRegressionTest {
             System.out.println("  staff[" + i + "] y=" + Math.round(staff.top) + ".." + Math.round(staff.bottom)
                     + ", spacing=" + staff.spacing
                     + ", x=" + Math.round(staff.left) + ".." + Math.round(staff.right)
-                    + ", notes=" + countNotes(recognized, staff));
+                    + ", notes=" + countNotes(recognized, staff)
+                    + ", names=" + namesForStaff(recognized, staff));
         }
         writeDebugOverlay(image, direct, new File("target/audiveris-debug.png"));
     }
@@ -126,6 +128,46 @@ public class AudiverisPhotoRecognitionRegressionTest {
         return out.toString();
     }
 
+    private static String diatonicShiftedLcs(List<NoteEvent> expected, List<NoteEvent> actual) {
+        List<Integer> expectedMidi = toMidi(expected);
+        StringBuilder out = new StringBuilder();
+        for (int steps = -4; steps <= 4; steps++) {
+            List<Integer> shifted = new ArrayList<Integer>();
+            for (NoteEvent note : actual) {
+                NoteEvent shiftedNote = shiftDiatonic(note.noteName, note.octave, steps);
+                shifted.add(MusicNotation.midiFor(shiftedNote.noteName, shiftedNote.octave));
+            }
+            int lcs = lcsLength(expectedMidi, shifted);
+            if (lcs >= 22) {
+                if (out.length() > 0) out.append(", ");
+                out.append(steps).append(':').append(lcs);
+            }
+        }
+        return out.toString();
+    }
+
+    private static NoteEvent shiftDiatonic(String noteName, int octave, int steps) {
+        String[] names = {"C", "D", "E", "F", "G", "A", "B"};
+        String base = noteName == null || noteName.length() == 0 ? "C" : noteName.substring(0, 1);
+        int idx = 0;
+        for (int i = 0; i < names.length; i++) {
+            if (names[i].equals(base)) {
+                idx = i;
+                break;
+            }
+        }
+        int absolute = idx + steps;
+        while (absolute < 0) {
+            absolute += 7;
+            octave--;
+        }
+        while (absolute >= 7) {
+            absolute -= 7;
+            octave++;
+        }
+        return new NoteEvent(names[absolute], octave, "quarter", 1);
+    }
+
     private static int countNotes(List<NoteEvent> notes, AudiverisCompatRecognitionEngine.StaffModel staff) {
         int count = 0;
         for (NoteEvent note : notes) {
@@ -134,6 +176,17 @@ public class AudiverisPhotoRecognitionRegressionTest {
             }
         }
         return count;
+    }
+
+    private static String namesForStaff(List<NoteEvent> notes, AudiverisCompatRecognitionEngine.StaffModel staff) {
+        StringBuilder out = new StringBuilder();
+        for (NoteEvent note : notes) {
+            if (note.y >= staff.top - staff.spacing * 1.25f && note.y <= staff.bottom + staff.spacing * 1.25f) {
+                if (out.length() > 0) out.append(' ');
+                out.append(note.fullName());
+            }
+        }
+        return out.toString();
     }
 
     private static void writeDebugOverlay(BufferedImage source,
