@@ -29,6 +29,8 @@ public class AudiverisPhotoRecognitionRegressionTest {
         AudiverisCompatRecognitionEngine.DirectRecognition direct = engine.recognizeDirectForTest(width, height, argb);
         List<NoteEvent> recognized = direct.notes;
         List<NoteEvent> expected = ReferenceComposition.expectedReferenceNotes();
+        OpenCvScoreProcessor.ProcessingResult production = engine.recognizeArgbForTest(
+                width, height, argb, "Audiveris regression", OpenCvScoreProcessor.ProcessingOptions.defaults());
 
         List<Integer> expectedMidi = toMidi(expected);
         List<Integer> actualMidi = toMidi(recognized);
@@ -43,6 +45,10 @@ public class AudiverisPhotoRecognitionRegressionTest {
                 + ", first20=" + firstNames(recognized, 20));
         System.out.println("  shiftedLcs=" + shiftedLcs(expected, recognized));
         System.out.println("  diatonicShiftedLcs=" + diatonicShiftedLcs(expected, recognized));
+        System.out.println("  leftCutSweep=" + leftCutSweep(expected, recognized));
+        System.out.println("  productionMode=" + production.processingMode
+                + ", productionNotes=" + production.piece.notes.size()
+                + ", durations=" + durationSummary(production.piece.notes));
         System.out.println("  firstDetails=" + firstDetails(recognized, 20));
         System.out.println("  peaks=" + direct.linePeaks);
         for (int i = 0; i < direct.staves.size(); i++) {
@@ -144,6 +150,44 @@ public class AudiverisPhotoRecognitionRegressionTest {
             }
         }
         return out.toString();
+    }
+
+    private static String leftCutSweep(List<NoteEvent> expected, List<NoteEvent> actual) {
+        List<Integer> expectedMidi = toMidi(expected);
+        StringBuilder out = new StringBuilder();
+        for (int minX = 0; minX <= 180; minX += 20) {
+            List<Integer> filtered = new ArrayList<Integer>();
+            int kept = 0;
+            for (NoteEvent note : actual) {
+                if (note.x >= minX) {
+                    filtered.add(MusicNotation.midiFor(note.noteName, note.octave));
+                    kept++;
+                }
+            }
+            int lcs = lcsLength(expectedMidi, filtered);
+            if (out.length() > 0) out.append(", ");
+            out.append(minX).append('=').append(kept).append('/').append(lcs);
+        }
+        return out.toString();
+    }
+
+    private static String durationSummary(List<NoteEvent> notes) {
+        int eighth = 0;
+        int quarter = 0;
+        int half = 0;
+        int other = 0;
+        for (NoteEvent note : notes) {
+            if ("eighth".equals(note.duration)) {
+                eighth++;
+            } else if ("quarter".equals(note.duration)) {
+                quarter++;
+            } else if ("half".equals(note.duration)) {
+                half++;
+            } else {
+                other++;
+            }
+        }
+        return "eighth=" + eighth + ",quarter=" + quarter + ",half=" + half + ",other=" + other;
     }
 
     private static NoteEvent shiftDiatonic(String noteName, int octave, int steps) {

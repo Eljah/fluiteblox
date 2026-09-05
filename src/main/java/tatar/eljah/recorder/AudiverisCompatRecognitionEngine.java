@@ -84,9 +84,9 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         }
 
         removeStaffLines(black, width, height, staves);
-        List<NoteEvent> notes = detectNoteheads(black, width, height, staves);
-        notes.addAll(detectNoteheadsByWindows(black, width, height, staves));
-        notes = remeasureNotes(dedupeAndOrderNotes(notes, staves));
+        List<CandidateNote> candidates = detectNoteheads(black, width, height, staves);
+        candidates.addAll(detectNoteheadsByWindows(black, width, height, staves));
+        List<NoteEvent> notes = remeasureNotes(dedupeAndOrderNotes(candidates, staves), staves);
         return new DirectRecognition(notes, staves, linePeaks);
     }
 
@@ -112,15 +112,14 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         }
 
         removeStaffLines(black, width, height, staves);
-        List<NoteEvent> notes = detectNoteheads(black, width, height, staves);
-        notes.addAll(detectNoteheadsByWindows(black, width, height, staves));
-        if (notes.isEmpty()) {
+        List<CandidateNote> candidates = detectNoteheads(black, width, height, staves);
+        candidates.addAll(detectNoteheadsByWindows(black, width, height, staves));
+        if (candidates.isEmpty()) {
             OpenCvScoreProcessor.ProcessingResult fb = fallback.recognize(overlaySource, title, options);
             return withMode(fb, "audiveris-compat/fallback-no-notes");
         }
 
-        notes = dedupeAndOrderNotes(notes, staves);
-        notes = remeasureNotes(notes);
+        List<NoteEvent> notes = remeasureNotes(dedupeAndOrderNotes(candidates, staves), staves);
         if (!isPlausible(notes, staves)) {
             OpenCvScoreProcessor.ProcessingResult fb = fallback.recognize(overlaySource, title, options);
             return withMode(fb, "audiveris-compat/fallback-low-confidence");
@@ -395,10 +394,10 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         }
     }
 
-    private List<NoteEvent> detectNoteheads(boolean[] black, int width, int height, List<StaffModel> staves) {
+    private List<CandidateNote> detectNoteheads(boolean[] black, int width, int height, List<StaffModel> staves) {
         boolean[] visited = new boolean[black.length];
         ArrayDeque<Integer> queue = new ArrayDeque<Integer>();
-        List<NoteEvent> notes = new ArrayList<NoteEvent>();
+        List<CandidateNote> notes = new ArrayList<CandidateNote>();
 
         float avgSpacing = 0f;
         for (StaffModel staff : staves) avgSpacing += staff.spacing;
@@ -472,14 +471,15 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
 
                 NoteEvent note = makeNoteFromStaffPosition(cx, cy, staff, notes.size() / 16 + 1);
                 if (!isSupportedPitch(note)) continue;
-                notes.add(note);
+                float fillScore = 1f - Math.abs(fill - 0.50f);
+                notes.add(new CandidateNote(note, area * fillScore));
             }
         }
         return notes;
     }
 
-    private List<NoteEvent> detectNoteheadsByWindows(boolean[] black, int width, int height, List<StaffModel> staves) {
-        List<NoteEvent> out = new ArrayList<NoteEvent>();
+    private List<CandidateNote> detectNoteheadsByWindows(boolean[] black, int width, int height, List<StaffModel> staves) {
+        List<CandidateNote> out = new ArrayList<CandidateNote>();
         for (StaffModel staff : staves) {
             int left = Math.max(0, Math.round(staff.left + staff.spacing));
             int right = Math.min(width - 1, Math.round(staff.right - staff.spacing));
@@ -494,7 +494,7 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                 if (best != null && best.score >= threshold) {
                     if (active == null || (lastHitX >= 0 && x - lastHitX > maxGap)) {
                         if (active != null) {
-                            out.add(makeNoteFromStaffPosition(active.x, active.y, staff, 1));
+                            out.add(candidateFromWindow(active, staff));
                         }
                         active = best;
                     } else if (best.score > active.score) {
@@ -502,16 +502,20 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                     }
                     lastHitX = x;
                 } else if (active != null && lastHitX >= 0 && x - lastHitX > maxGap) {
-                    out.add(makeNoteFromStaffPosition(active.x, active.y, staff, 1));
+                    out.add(candidateFromWindow(active, staff));
                     active = null;
                     lastHitX = -1;
                 }
             }
             if (active != null) {
-                out.add(makeNoteFromStaffPosition(active.x, active.y, staff, 1));
+                out.add(candidateFromWindow(active, staff));
             }
         }
         return out;
+    }
+
+    private CandidateNote candidateFromWindow(WindowCandidate candidate, StaffModel staff) {
+        return new CandidateNote(makeNoteFromStaffPosition(candidate.x, candidate.y, staff, 1), candidate.score);
     }
 
     private WindowCandidate bestWindowCandidate(boolean[] black, int width, int height, StaffModel staff, int x) {
@@ -645,48 +649,82 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         return true;
     }
 
-    private List<NoteEvent> dedupeAndOrderNotes(List<NoteEvent> notes, final List<StaffModel> staves) {
-        Collections.sort(notes, new Comparator<NoteEvent>() {
+    private List<NoteEvent> dedupeAndOrderNotes(List<CandidateNote> notes, final List<StaffModel> staves) {
+        Collections.sort(notes, new Comparator<CandidateNote>() {
             @Override
-            public int compare(NoteEvent left, NoteEvent right) {
-                StaffModel leftStaff = nearestStaff(staves, left.y);
-                StaffModel rightStaff = nearestStaff(staves, right.y);
-                float leftTop = leftStaff == null ? left.y : leftStaff.top;
-                float rightTop = rightStaff == null ? right.y : rightStaff.top;
+            public int compare(CandidateNote left, CandidateNote right) {
+                StaffModel leftStaff = nearestStaff(staves, left.note.y);
+                StaffModel rightStaff = nearestStaff(staves, right.note.y);
+                float leftTop = leftStaff == null ? left.note.y : leftStaff.top;
+                float rightTop = rightStaff == null ? right.note.y : rightStaff.top;
                 int byStaff = Float.compare(leftTop, rightTop);
                 if (byStaff != 0) return byStaff;
-                return Float.compare(left.x, right.x);
+                return Float.compare(left.note.x, right.note.x);
             }
         });
 
-        List<NoteEvent> kept = new ArrayList<NoteEvent>();
-        for (NoteEvent candidate : notes) {
-            StaffModel candidateStaff = nearestStaff(staves, candidate.y);
-            boolean duplicate = false;
-            for (NoteEvent existing : kept) {
-                StaffModel existingStaff = nearestStaff(staves, existing.y);
+        List<CandidateNote> kept = new ArrayList<CandidateNote>();
+        for (CandidateNote candidate : notes) {
+            StaffModel candidateStaff = nearestStaff(staves, candidate.note.y);
+            int duplicateIndex = -1;
+            for (int i = 0; i < kept.size(); i++) {
+                CandidateNote existing = kept.get(i);
+                StaffModel existingStaff = nearestStaff(staves, existing.note.y);
                 if (candidateStaff != existingStaff) continue;
                 float spacing = candidateStaff == null ? 12f : candidateStaff.spacing;
-                if (Math.abs(candidate.x - existing.x) <= spacing * 0.55f
-                        && Math.abs(candidate.y - existing.y) <= spacing * 0.70f) {
-                    duplicate = true;
+                if (Math.abs(candidate.note.x - existing.note.x) <= spacing * 0.55f
+                        && Math.abs(candidate.note.y - existing.note.y) <= spacing * 0.70f) {
+                    duplicateIndex = i;
                     break;
                 }
             }
-            if (!duplicate) {
+            if (duplicateIndex < 0) {
                 kept.add(candidate);
+            } else if (candidate.score > kept.get(duplicateIndex).score) {
+                kept.set(duplicateIndex, candidate);
             }
         }
-        return kept;
+        List<NoteEvent> out = new ArrayList<NoteEvent>();
+        for (CandidateNote candidate : kept) {
+            out.add(candidate.note);
+        }
+        return out;
     }
 
-    private List<NoteEvent> remeasureNotes(List<NoteEvent> notes) {
+    private List<NoteEvent> remeasureNotes(List<NoteEvent> notes, List<StaffModel> staves) {
         List<NoteEvent> out = new ArrayList<NoteEvent>();
         for (int i = 0; i < notes.size(); i++) {
             NoteEvent note = notes.get(i);
-            out.add(new NoteEvent(note.noteName, note.octave, note.duration, 1 + (i / 4), note.x, note.y));
+            String duration = estimateDuration(note, notes, staves);
+            out.add(new NoteEvent(note.noteName, note.octave, duration, 1 + (i / 4), note.x, note.y));
         }
         return out;
+    }
+
+    private String estimateDuration(NoteEvent note, List<NoteEvent> orderedNotes, List<StaffModel> staves) {
+        StaffModel staff = nearestStaff(staves, note.y);
+        if (staff == null) {
+            return note.duration;
+        }
+        float bestGap = Float.MAX_VALUE;
+        for (NoteEvent other : orderedNotes) {
+            if (other == note) continue;
+            if (nearestStaff(staves, other.y) != staff) continue;
+            float gap = Math.abs(other.x - note.x);
+            if (gap > staff.spacing * 0.35f && gap < bestGap) {
+                bestGap = gap;
+            }
+        }
+        if (bestGap == Float.MAX_VALUE) {
+            return note.duration;
+        }
+        if (bestGap < staff.spacing * 2.2f) {
+            return "eighth";
+        }
+        if (bestGap > staff.spacing * 8.0f) {
+            return "half";
+        }
+        return "quarter";
     }
 
     private NoteEvent makeNoteFromStaffPosition(float x, float y, StaffModel staff, int measure) {
@@ -766,6 +804,16 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         WindowCandidate(float x, float y, float score) {
             this.x = x;
             this.y = y;
+            this.score = score;
+        }
+    }
+
+    private static class CandidateNote {
+        final NoteEvent note;
+        final float score;
+
+        CandidateNote(NoteEvent note, float score) {
+            this.note = note;
             this.score = score;
         }
     }
