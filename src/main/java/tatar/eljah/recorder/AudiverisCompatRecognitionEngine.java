@@ -22,6 +22,18 @@ import java.util.List;
  * If this pass yields no notes/staves, we fallback to OpenCV engine.
  */
 class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
+    private static final int MIN_DIRECT_NOTES = 4;
+    private static final int MAX_DIRECT_NOTES = 96;
+    private static final int MAX_NOTES_PER_STAFF = 24;
+    private static final int MIN_FLUTE_OCTAVE = 3;
+    private static final int MAX_FLUTE_OCTAVE = 6;
+    private static final float STAFF_CORRIDOR_HALF_HEIGHT = 3.2f;
+    private static final float NOTE_MIN_SIZE_FACTOR = 0.35f;
+    private static final float NOTE_MAX_SIZE_FACTOR = 1.85f;
+    private static final float NOTE_MAX_ASPECT_RATIO = 1.9f;
+    private static final float NOTE_MIN_FILL = 0.18f;
+    private static final float NOTE_MAX_FILL = 0.88f;
+
     private final ScoreRecognitionEngine fallback;
 
     AudiverisCompatRecognitionEngine(ScoreRecognitionEngine fallback) {
@@ -38,8 +50,27 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
 
         int width = bitmap.getWidth();
         int height = bitmap.getHeight();
+        int[] argb = new int[width * height];
+        bitmap.getPixels(argb, 0, width, 0, 0, width, height);
+        return recognizeArgb(width, height, argb, title, options, bitmap);
+    }
+
+    OpenCvScoreProcessor.ProcessingResult recognizeArgbForTest(int width,
+                                                               int height,
+                                                               int[] argb,
+                                                               String title,
+                                                               OpenCvScoreProcessor.ProcessingOptions options) {
+        return recognizeArgb(width, height, argb, title, options, null);
+    }
+
+    List<NoteEvent> recognizeDirectNotesForTest(int width, int height, int[] argb) {
+        DirectRecognition direct = recognizeDirectForTest(width, height, argb);
+        return direct.notes;
+    }
+
+    DirectRecognition recognizeDirectForTest(int width, int height, int[] argb) {
         int[] gray = new int[width * height];
-        toGrayscale(bitmap, gray);
+        toGrayscale(argb, gray);
         int threshold = otsuThreshold(gray);
         boolean[] black = new boolean[gray.length];
         for (int i = 0; i < gray.length; i++) {
@@ -47,25 +78,53 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         }
 
         List<Integer> linePeaks = detectHorizontalPeaks(black, width, height);
-        List<StaffModel> staves = buildStaffModels(linePeaks, width, height);
+        List<StaffModel> staves = buildStaffModels(linePeaks, width, height, black);
         if (staves.isEmpty()) {
-            OpenCvScoreProcessor.ProcessingResult fb = fallback.recognize(bitmap, title, options);
+            return new DirectRecognition(new ArrayList<NoteEvent>(), staves, linePeaks);
+        }
+
+        removeStaffLines(black, width, height, staves);
+        List<NoteEvent> notes = detectNoteheads(black, width, height, staves);
+        notes.addAll(detectNoteheadsByWindows(black, width, height, staves));
+        notes = remeasureNotes(dedupeAndOrderNotes(notes, staves));
+        return new DirectRecognition(notes, staves, linePeaks);
+    }
+
+    private OpenCvScoreProcessor.ProcessingResult recognizeArgb(int width,
+                                                                int height,
+                                                                int[] argb,
+                                                                String title,
+                                                                OpenCvScoreProcessor.ProcessingOptions options,
+                                                                Bitmap overlaySource) {
+        int[] gray = new int[width * height];
+        toGrayscale(argb, gray);
+        int threshold = otsuThreshold(gray);
+        boolean[] black = new boolean[gray.length];
+        for (int i = 0; i < gray.length; i++) {
+            black[i] = gray[i] <= threshold;
+        }
+
+        List<Integer> linePeaks = detectHorizontalPeaks(black, width, height);
+        List<StaffModel> staves = buildStaffModels(linePeaks, width, height, black);
+        if (staves.isEmpty()) {
+            OpenCvScoreProcessor.ProcessingResult fb = fallback.recognize(overlaySource, title, options);
             return withMode(fb, "audiveris-compat/fallback-no-staff");
         }
 
         removeStaffLines(black, width, height, staves);
         List<NoteEvent> notes = detectNoteheads(black, width, height, staves);
+        notes.addAll(detectNoteheadsByWindows(black, width, height, staves));
         if (notes.isEmpty()) {
-            OpenCvScoreProcessor.ProcessingResult fb = fallback.recognize(bitmap, title, options);
+            OpenCvScoreProcessor.ProcessingResult fb = fallback.recognize(overlaySource, title, options);
             return withMode(fb, "audiveris-compat/fallback-no-notes");
         }
 
-        Collections.sort(notes, new Comparator<NoteEvent>() {
-            @Override
-            public int compare(NoteEvent left, NoteEvent right) {
-                return Float.compare(left.x, right.x);
-            }
-        });
+        notes = dedupeAndOrderNotes(notes, staves);
+        notes = remeasureNotes(notes);
+        if (!isPlausible(notes, staves)) {
+            OpenCvScoreProcessor.ProcessingResult fb = fallback.recognize(overlaySource, title, options);
+            return withMode(fb, "audiveris-compat/fallback-low-confidence");
+        }
 
         ScorePiece piece = new ScorePiece();
         piece.id = String.valueOf(System.currentTimeMillis());
@@ -73,10 +132,10 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         piece.createdAt = System.currentTimeMillis();
         piece.notes = notes;
 
-        Bitmap overlay = drawOverlay(bitmap, staves, notes);
+        Bitmap overlay = overlaySource == null ? null : drawOverlay(overlaySource, staves, notes);
         List<OpenCvScoreProcessor.StaffCorridor> corridors = new ArrayList<OpenCvScoreProcessor.StaffCorridor>();
         for (StaffModel staff : staves) {
-            corridors.add(new OpenCvScoreProcessor.StaffCorridor(0, staff.top - staff.spacing, width - 1,
+            corridors.add(new OpenCvScoreProcessor.StaffCorridor(staff.left, staff.top - staff.spacing, staff.right,
                     staff.bottom + staff.spacing));
         }
 
@@ -107,18 +166,13 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                 base.noteDiagnostics);
     }
 
-    private void toGrayscale(Bitmap bitmap, int[] gray) {
-        int width = bitmap.getWidth();
-        int height = bitmap.getHeight();
-        int idx = 0;
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int c = bitmap.getPixel(x, y);
-                int r = (c >> 16) & 0xFF;
-                int g = (c >> 8) & 0xFF;
-                int b = c & 0xFF;
-                gray[idx++] = (r * 30 + g * 59 + b * 11) / 100;
-            }
+    private void toGrayscale(int[] argb, int[] gray) {
+        for (int i = 0; i < argb.length; i++) {
+            int c = argb[i];
+            int r = (c >> 16) & 0xFF;
+            int g = (c >> 8) & 0xFF;
+            int b = c & 0xFF;
+            gray[i] = (r * 30 + g * 59 + b * 11) / 100;
         }
     }
 
@@ -182,32 +236,147 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         return peaks;
     }
 
-    private List<StaffModel> buildStaffModels(List<Integer> peaks, int width, int height) {
+    private List<StaffModel> buildStaffModels(List<Integer> peaks, int width, int height, boolean[] black) {
         if (peaks.size() < 5) return new ArrayList<StaffModel>();
-        List<StaffModel> result = new ArrayList<StaffModel>();
-        for (int i = 0; i + 4 < peaks.size(); i++) {
+        List<StaffCandidate> candidates = new ArrayList<StaffCandidate>();
+        int maxSpacing = Math.max(8, Math.min(32, height / 18));
+        for (int i = 0; i < peaks.size(); i++) {
             int y0 = peaks.get(i);
-            int y4 = peaks.get(i + 4);
-            float spacing = (y4 - y0) / 4f;
-            if (spacing < 4 || spacing > height / 6f) continue;
-            boolean regular = true;
-            for (int k = 0; k < 4; k++) {
-                float d = peaks.get(i + k + 1) - peaks.get(i + k);
-                if (Math.abs(d - spacing) > Math.max(2f, spacing * 0.45f)) {
-                    regular = false;
-                    break;
+            for (int spacing = 10; spacing <= maxSpacing; spacing++) {
+                float tolerance = Math.max(2f, spacing * 0.28f);
+                float error = 0f;
+                boolean matched = true;
+                for (int k = 0; k < 5; k++) {
+                    int expected = y0 + k * spacing;
+                    int nearest = nearestPeak(peaks, expected, tolerance);
+                    if (nearest < 0) {
+                        matched = false;
+                        break;
+                    }
+                    error += Math.abs(nearest - expected);
+                }
+                if (!matched) continue;
+
+                StaffModel staff = new StaffModel();
+                staff.top = y0;
+                staff.bottom = y0 + spacing * 4f;
+                staff.spacing = spacing;
+                staff.center = (staff.top + staff.bottom) * 0.5f;
+                measureStaffSpan(staff, black, width, height);
+                float span = staff.right - staff.left;
+                if (span < width * 0.35f) {
+                    continue;
+                }
+                candidates.add(new StaffCandidate(staff, span - error * 12f));
+            }
+        }
+
+        Collections.sort(candidates, new Comparator<StaffCandidate>() {
+            @Override
+            public int compare(StaffCandidate left, StaffCandidate right) {
+                return Float.compare(right.score, left.score);
+            }
+        });
+
+        List<StaffModel> result = new ArrayList<StaffModel>();
+        for (StaffCandidate candidate : candidates) {
+            if (overlapsExistingStaff(candidate.staff, result)) {
+                continue;
+            }
+            result.add(candidate.staff);
+        }
+
+        Collections.sort(result, new Comparator<StaffModel>() {
+            @Override
+            public int compare(StaffModel left, StaffModel right) {
+                return Float.compare(left.top, right.top);
+            }
+        });
+        return result;
+    }
+
+    private int nearestPeak(List<Integer> peaks, int y, float tolerance) {
+        int best = -1;
+        float bestDist = Float.MAX_VALUE;
+        for (int peak : peaks) {
+            float d = Math.abs(peak - y);
+            if (d <= tolerance && d < bestDist) {
+                best = peak;
+                bestDist = d;
+            }
+        }
+        return best;
+    }
+
+    private boolean overlapsExistingStaff(StaffModel candidate, List<StaffModel> existing) {
+        for (StaffModel staff : existing) {
+            float minSpacing = Math.min(candidate.spacing, staff.spacing);
+            if (Math.abs(candidate.center - staff.center) < minSpacing * 4.5f) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void measureStaffSpan(StaffModel staff, boolean[] black, int width, int height) {
+        int[] hits = new int[width];
+        for (int x = 0; x < width; x++) {
+            int score = 0;
+            for (int i = 0; i < 5; i++) {
+                int y = Math.round(staff.top + i * staff.spacing);
+                if (hasBlackNear(black, width, height, x, y, 1)) {
+                    score++;
                 }
             }
-            if (!regular) continue;
-            StaffModel staff = new StaffModel();
-            staff.top = y0;
-            staff.bottom = y4;
-            staff.spacing = spacing;
-            staff.center = (y0 + y4) * 0.5f;
-            result.add(staff);
-            i += 4;
+            hits[x] = score;
         }
-        return result;
+
+        int bestStart = 0;
+        int bestEnd = width - 1;
+        int bestLen = 0;
+        int start = -1;
+        int gap = 0;
+        int maxGap = Math.max(30, width / 12);
+        for (int x = 0; x < width; x++) {
+            if (hits[x] >= 3) {
+                if (start < 0) start = x;
+                gap = 0;
+            } else if (start >= 0) {
+                gap++;
+                if (gap > maxGap) {
+                    int end = x - gap;
+                    if (end - start > bestLen) {
+                        bestStart = start;
+                        bestEnd = end;
+                        bestLen = end - start;
+                    }
+                    start = -1;
+                    gap = 0;
+                }
+            }
+        }
+        if (start >= 0) {
+            int end = width - 1 - gap;
+            if (end - start > bestLen) {
+                bestStart = start;
+                bestEnd = end;
+            }
+        }
+
+        int pad = Math.max(4, Math.round(staff.spacing));
+        staff.left = Math.max(0, bestStart - pad);
+        staff.right = Math.min(width - 1, bestEnd + pad);
+    }
+
+    private boolean hasBlackNear(boolean[] black, int width, int height, int x, int y, int radius) {
+        for (int dy = -radius; dy <= radius; dy++) {
+            int yy = y + dy;
+            if (yy < 0 || yy >= height) continue;
+            if (black[yy * width + x]) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void removeStaffLines(boolean[] black, int width, int height, List<StaffModel> staves) {
@@ -218,7 +387,7 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                     int yy = y + dy;
                     if (yy < 0 || yy >= height) continue;
                     int row = yy * width;
-                    for (int x = 0; x < width; x++) {
+                    for (int x = Math.round(staff.left); x <= Math.round(staff.right); x++) {
                         black[row + x] = false;
                     }
                 }
@@ -234,9 +403,7 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         float avgSpacing = 0f;
         for (StaffModel staff : staves) avgSpacing += staff.spacing;
         avgSpacing = avgSpacing / staves.size();
-        int minArea = Math.max(8, (int) (avgSpacing * avgSpacing * 0.18f));
-        int maxArea = Math.max(minArea + 4, (int) (avgSpacing * avgSpacing * 2.4f));
-
+        int minArea = Math.max(8, (int) (avgSpacing * avgSpacing * 0.12f));
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 int start = y * width + x;
@@ -279,23 +446,107 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                     }
                 }
 
-                if (area < minArea || area > maxArea) continue;
                 int bw = maxX - minX + 1;
                 int bh = maxY - minY + 1;
-                if (bw < 2 || bh < 2) continue;
-                float ratio = bw > bh ? bw / (float) bh : bh / (float) bw;
-                if (ratio > 2.6f) continue;
 
                 float cx = sumX / (float) area;
                 float cy = sumY / (float) area;
                 StaffModel staff = nearestStaff(staves, cy);
                 if (staff == null) continue;
+                if (!isInsideStaffCorridor(staff, cy)) continue;
+                if (cx < staff.left - staff.spacing || cx > staff.right + staff.spacing) continue;
+
+                int staffMinArea = Math.max(minArea, (int) (staff.spacing * staff.spacing * 0.20f));
+                int staffMaxArea = Math.max(staffMinArea + 4, (int) (staff.spacing * staff.spacing * 2.1f));
+                if (area < staffMinArea || area > staffMaxArea) continue;
+
+                float minSize = Math.max(2f, staff.spacing * NOTE_MIN_SIZE_FACTOR);
+                float maxSize = Math.max(minSize + 1f, staff.spacing * NOTE_MAX_SIZE_FACTOR);
+                if (bw < minSize || bh < minSize || bw > maxSize || bh > maxSize) continue;
+
+                float ratio = bw > bh ? bw / (float) bh : bh / (float) bw;
+                if (ratio > NOTE_MAX_ASPECT_RATIO) continue;
+
+                float fill = area / (float) (bw * bh);
+                if (fill < NOTE_MIN_FILL || fill > NOTE_MAX_FILL) continue;
 
                 NoteEvent note = makeNoteFromStaffPosition(cx, cy, staff, notes.size() / 16 + 1);
+                if (!isSupportedPitch(note)) continue;
                 notes.add(note);
             }
         }
         return notes;
+    }
+
+    private List<NoteEvent> detectNoteheadsByWindows(boolean[] black, int width, int height, List<StaffModel> staves) {
+        List<NoteEvent> out = new ArrayList<NoteEvent>();
+        for (StaffModel staff : staves) {
+            int left = Math.max(0, Math.round(staff.left + staff.spacing));
+            int right = Math.min(width - 1, Math.round(staff.right - staff.spacing));
+            if (right <= left) continue;
+
+            float threshold = Math.max(5f, staff.spacing * staff.spacing * 0.12f);
+            WindowCandidate active = null;
+            int lastHitX = -1;
+            int maxGap = Math.max(2, Math.round(staff.spacing * 0.35f));
+            for (int x = left; x <= right; x += 2) {
+                WindowCandidate best = bestWindowCandidate(black, width, height, staff, x);
+                if (best != null && best.score >= threshold) {
+                    if (active == null || (lastHitX >= 0 && x - lastHitX > maxGap)) {
+                        if (active != null) {
+                            out.add(makeNoteFromStaffPosition(active.x, active.y, staff, 1));
+                        }
+                        active = best;
+                    } else if (best.score > active.score) {
+                        active = best;
+                    }
+                    lastHitX = x;
+                } else if (active != null && lastHitX >= 0 && x - lastHitX > maxGap) {
+                    out.add(makeNoteFromStaffPosition(active.x, active.y, staff, 1));
+                    active = null;
+                    lastHitX = -1;
+                }
+            }
+            if (active != null) {
+                out.add(makeNoteFromStaffPosition(active.x, active.y, staff, 1));
+            }
+        }
+        return out;
+    }
+
+    private WindowCandidate bestWindowCandidate(boolean[] black, int width, int height, StaffModel staff, int x) {
+        WindowCandidate best = null;
+        for (int step = -2; step <= 10; step++) {
+            float y = staff.bottom - step * staff.spacing * 0.5f;
+            if (!isInsideStaffCorridor(staff, y)) continue;
+            float score = windowInkScore(black, width, height, x, y, staff.spacing);
+            if (best == null || score > best.score) {
+                best = new WindowCandidate(x, y, score);
+            }
+        }
+        return best;
+    }
+
+    private float windowInkScore(boolean[] black, int width, int height, int cx, float cy, float spacing) {
+        int rx = Math.max(3, Math.round(spacing * 0.55f));
+        int ry = Math.max(3, Math.round(spacing * 0.45f));
+        float score = 0f;
+        for (int dy = -ry; dy <= ry; dy++) {
+            int y = Math.round(cy) + dy;
+            if (y < 0 || y >= height) continue;
+            int row = y * width;
+            for (int dx = -rx; dx <= rx; dx++) {
+                int x = cx + dx;
+                if (x < 0 || x >= width) continue;
+                float nx = dx / (float) rx;
+                float ny = dy / (float) ry;
+                if (nx * nx + ny * ny > 1.0f) continue;
+                if (black[row + x]) {
+                    score += 1f;
+                }
+            }
+        }
+        return score;
     }
 
     private StaffModel nearestStaff(List<StaffModel> staves, float y) {
@@ -308,7 +559,99 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                 best = staff;
             }
         }
+        if (best == null || bestDist > Math.max(8f, best.spacing * STAFF_CORRIDOR_HALF_HEIGHT)) {
+            return null;
+        }
         return best;
+    }
+
+    private boolean isInsideStaffCorridor(StaffModel staff, float y) {
+        float margin = staff.spacing * 1.25f;
+        return y >= staff.top - margin && y <= staff.bottom + margin;
+    }
+
+    private boolean isSupportedPitch(NoteEvent note) {
+        return note.octave >= MIN_FLUTE_OCTAVE && note.octave <= MAX_FLUTE_OCTAVE;
+    }
+
+    private boolean isPlausible(List<NoteEvent> notes, List<StaffModel> staves) {
+        if (notes.size() < MIN_DIRECT_NOTES) {
+            return false;
+        }
+        int maxNotes = Math.min(MAX_DIRECT_NOTES, Math.max(24, staves.size() * MAX_NOTES_PER_STAFF));
+        if (notes.size() > maxNotes) {
+            return false;
+        }
+        if (notes.size() > 24 && hasSingleDuration(notes)) {
+            return false;
+        }
+
+        int badOctaves = 0;
+        for (NoteEvent note : notes) {
+            if (!isSupportedPitch(note)) {
+                badOctaves++;
+            }
+        }
+        return badOctaves == 0 || badOctaves * 10 <= notes.size();
+    }
+
+    private boolean hasSingleDuration(List<NoteEvent> notes) {
+        if (notes.isEmpty()) {
+            return true;
+        }
+        String first = notes.get(0).duration;
+        for (NoteEvent note : notes) {
+            if (first == null) {
+                if (note.duration != null) return false;
+            } else if (!first.equals(note.duration)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private List<NoteEvent> dedupeAndOrderNotes(List<NoteEvent> notes, final List<StaffModel> staves) {
+        Collections.sort(notes, new Comparator<NoteEvent>() {
+            @Override
+            public int compare(NoteEvent left, NoteEvent right) {
+                StaffModel leftStaff = nearestStaff(staves, left.y);
+                StaffModel rightStaff = nearestStaff(staves, right.y);
+                float leftTop = leftStaff == null ? left.y : leftStaff.top;
+                float rightTop = rightStaff == null ? right.y : rightStaff.top;
+                int byStaff = Float.compare(leftTop, rightTop);
+                if (byStaff != 0) return byStaff;
+                return Float.compare(left.x, right.x);
+            }
+        });
+
+        List<NoteEvent> kept = new ArrayList<NoteEvent>();
+        for (NoteEvent candidate : notes) {
+            StaffModel candidateStaff = nearestStaff(staves, candidate.y);
+            boolean duplicate = false;
+            for (NoteEvent existing : kept) {
+                StaffModel existingStaff = nearestStaff(staves, existing.y);
+                if (candidateStaff != existingStaff) continue;
+                float spacing = candidateStaff == null ? 12f : candidateStaff.spacing;
+                if (Math.abs(candidate.x - existing.x) <= spacing * 0.55f
+                        && Math.abs(candidate.y - existing.y) <= spacing * 0.70f) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) {
+                kept.add(candidate);
+            }
+        }
+        return kept;
+    }
+
+    private List<NoteEvent> remeasureNotes(List<NoteEvent> notes) {
+        List<NoteEvent> out = new ArrayList<NoteEvent>();
+        for (int i = 0; i < notes.size(); i++) {
+            NoteEvent note = notes.get(i);
+            out.add(new NoteEvent(note.noteName, note.octave, note.duration, 1 + (i / 4), note.x, note.y));
+        }
+        return out;
     }
 
     private NoteEvent makeNoteFromStaffPosition(float x, float y, StaffModel staff, int measure) {
@@ -350,7 +693,7 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         for (StaffModel staff : staves) {
             for (int i = 0; i < 5; i++) {
                 float y = staff.top + i * staff.spacing;
-                canvas.drawLine(0, y, out.getWidth(), y, staffPaint);
+                canvas.drawLine(staff.left, y, staff.right, y, staffPaint);
             }
         }
 
@@ -361,10 +704,46 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         return out;
     }
 
-    private static class StaffModel {
+    static class StaffModel {
         float top;
         float bottom;
         float spacing;
         float center;
+        float left;
+        float right;
+    }
+
+    private static class StaffCandidate {
+        final StaffModel staff;
+        final float score;
+
+        StaffCandidate(StaffModel staff, float score) {
+            this.staff = staff;
+            this.score = score;
+        }
+    }
+
+    private static class WindowCandidate {
+        final float x;
+        final float y;
+        final float score;
+
+        WindowCandidate(float x, float y, float score) {
+            this.x = x;
+            this.y = y;
+            this.score = score;
+        }
+    }
+
+    static class DirectRecognition {
+        final List<NoteEvent> notes;
+        final List<StaffModel> staves;
+        final List<Integer> linePeaks;
+
+        DirectRecognition(List<NoteEvent> notes, List<StaffModel> staves, List<Integer> linePeaks) {
+            this.notes = notes;
+            this.staves = staves;
+            this.linePeaks = linePeaks;
+        }
     }
 }

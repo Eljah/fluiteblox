@@ -1,0 +1,161 @@
+package tatar.eljah.recorder;
+
+import javax.imageio.ImageIO;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+
+public class AudiverisPhotoRecognitionRegressionTest {
+    public static void main(String[] args) throws Exception {
+        File photo = new File("photo_2026-02-13_14-27-38.jpg");
+        if (!photo.exists()) {
+            throw new AssertionError("Missing " + photo.getAbsolutePath());
+        }
+
+        BufferedImage image = ImageIO.read(photo);
+        if (image == null) {
+            throw new AssertionError("Unable to decode " + photo.getAbsolutePath());
+        }
+
+        int width = image.getWidth();
+        int height = image.getHeight();
+        int[] argb = image.getRGB(0, 0, width, height, null, 0, width);
+
+        AudiverisCompatRecognitionEngine engine = new AudiverisCompatRecognitionEngine(null);
+        AudiverisCompatRecognitionEngine.DirectRecognition direct = engine.recognizeDirectForTest(width, height, argb);
+        List<NoteEvent> recognized = direct.notes;
+        List<NoteEvent> expected = ReferenceComposition.expectedReferenceNotes();
+
+        List<Integer> expectedMidi = toMidi(expected);
+        List<Integer> actualMidi = toMidi(recognized);
+        int lcs = lcsLength(expectedMidi, actualMidi);
+
+        System.out.println("AudiverisCompat regression: expected=" + expected.size()
+                + ", recognized=" + recognized.size()
+                + ", lcs=" + lcs
+                + ", coverage=" + percent(lcs, expected.size()) + "%"
+                + ", precision=" + percent(lcs, recognized.size()) + "%"
+                + ", expected20=" + firstNames(expected, 20)
+                + ", first20=" + firstNames(recognized, 20));
+        System.out.println("  shiftedLcs=" + shiftedLcs(expected, recognized));
+        System.out.println("  firstDetails=" + firstDetails(recognized, 20));
+        System.out.println("  peaks=" + direct.linePeaks);
+        for (int i = 0; i < direct.staves.size(); i++) {
+            AudiverisCompatRecognitionEngine.StaffModel staff = direct.staves.get(i);
+            System.out.println("  staff[" + i + "] y=" + Math.round(staff.top) + ".." + Math.round(staff.bottom)
+                    + ", spacing=" + staff.spacing
+                    + ", x=" + Math.round(staff.left) + ".." + Math.round(staff.right)
+                    + ", notes=" + countNotes(recognized, staff));
+        }
+        writeDebugOverlay(image, direct, new File("target/audiveris-debug.png"));
+    }
+
+    private static List<Integer> toMidi(List<NoteEvent> notes) {
+        List<Integer> midi = new ArrayList<Integer>();
+        for (NoteEvent note : notes) {
+            midi.add(MusicNotation.midiFor(note.noteName, note.octave));
+        }
+        return midi;
+    }
+
+    private static String firstNames(List<NoteEvent> notes, int limit) {
+        StringBuilder out = new StringBuilder();
+        int n = Math.min(limit, notes.size());
+        for (int i = 0; i < n; i++) {
+            if (i > 0) out.append(' ');
+            out.append(notes.get(i).fullName());
+        }
+        return out.toString();
+    }
+
+    private static String firstDetails(List<NoteEvent> notes, int limit) {
+        StringBuilder out = new StringBuilder();
+        int n = Math.min(limit, notes.size());
+        for (int i = 0; i < n; i++) {
+            NoteEvent note = notes.get(i);
+            if (i > 0) out.append(" | ");
+            out.append(note.fullName())
+                    .append('@')
+                    .append(Math.round(note.x))
+                    .append(',')
+                    .append(Math.round(note.y));
+        }
+        return out.toString();
+    }
+
+    private static int percent(int num, int den) {
+        if (den <= 0) return 0;
+        return Math.round((100f * num) / (float) den);
+    }
+
+    private static int lcsLength(List<Integer> a, List<Integer> b) {
+        int[] dp = new int[b.size() + 1];
+        for (Integer x : a) {
+            int prev = 0;
+            for (int j = 1; j <= b.size(); j++) {
+                int old = dp[j];
+                if (x.equals(b.get(j - 1))) {
+                    dp[j] = prev + 1;
+                } else if (dp[j - 1] > dp[j]) {
+                    dp[j] = dp[j - 1];
+                }
+                prev = old;
+            }
+        }
+        return dp[b.size()];
+    }
+
+    private static String shiftedLcs(List<NoteEvent> expected, List<NoteEvent> actual) {
+        List<Integer> expectedMidi = toMidi(expected);
+        StringBuilder out = new StringBuilder();
+        for (int semitones = -12; semitones <= 12; semitones++) {
+            List<Integer> shifted = new ArrayList<Integer>();
+            for (NoteEvent note : actual) {
+                shifted.add(MusicNotation.midiFor(note.noteName, note.octave) + semitones);
+            }
+            int lcs = lcsLength(expectedMidi, shifted);
+            if (lcs >= 22) {
+                if (out.length() > 0) out.append(", ");
+                out.append(semitones).append(':').append(lcs);
+            }
+        }
+        return out.toString();
+    }
+
+    private static int countNotes(List<NoteEvent> notes, AudiverisCompatRecognitionEngine.StaffModel staff) {
+        int count = 0;
+        for (NoteEvent note : notes) {
+            if (note.y >= staff.top - staff.spacing * 1.25f && note.y <= staff.bottom + staff.spacing * 1.25f) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static void writeDebugOverlay(BufferedImage source,
+                                          AudiverisCompatRecognitionEngine.DirectRecognition direct,
+                                          File out) throws Exception {
+        BufferedImage copy = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = copy.createGraphics();
+        g.drawImage(source, 0, 0, null);
+        g.setStroke(new BasicStroke(2f));
+        g.setColor(new Color(0, 220, 0, 180));
+        for (AudiverisCompatRecognitionEngine.StaffModel staff : direct.staves) {
+            for (int i = 0; i < 5; i++) {
+                int y = Math.round(staff.top + i * staff.spacing);
+                g.drawLine(Math.round(staff.left), y, Math.round(staff.right), y);
+            }
+        }
+        g.setColor(new Color(255, 0, 0, 220));
+        for (NoteEvent note : direct.notes) {
+            int r = 7;
+            g.drawOval(Math.round(note.x) - r, Math.round(note.y) - r, r * 2, r * 2);
+        }
+        g.dispose();
+        ImageIO.write(copy, "png", out);
+    }
+}
