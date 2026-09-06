@@ -448,8 +448,8 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                 int bw = maxX - minX + 1;
                 int bh = maxY - minY + 1;
 
-                float cx = sumX / (float) area;
-                float cy = sumY / (float) area;
+                float cx = (minX + maxX) * 0.5f;
+                float cy = (minY + maxY) * 0.5f;
                 StaffModel staff = nearestStaff(staves, cy);
                 if (staff == null) continue;
                 if (!isInsideStaffCorridor(staff, cy)) continue;
@@ -469,9 +469,9 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                 float fill = area / (float) (bw * bh);
                 if (fill < NOTE_MIN_FILL || fill > NOTE_MAX_FILL) continue;
 
+                float fillScore = 1f - Math.abs(fill - 0.50f);
                 NoteEvent note = makeNoteFromStaffPosition(cx, cy, staff, notes.size() / 16 + 1);
                 if (!isSupportedPitch(note)) continue;
-                float fillScore = 1f - Math.abs(fill - 0.50f);
                 notes.add(new CandidateNote(note, area * fillScore));
             }
         }
@@ -515,7 +515,8 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
     }
 
     private CandidateNote candidateFromWindow(WindowCandidate candidate, StaffModel staff) {
-        return new CandidateNote(makeNoteFromStaffPosition(candidate.x, candidate.y, staff, 1), candidate.score);
+        NoteEvent note = makeNoteFromStaffPosition(candidate.x, candidate.y, staff, 1);
+        return new CandidateNote(note, candidate.score);
     }
 
     private WindowCandidate bestWindowCandidate(boolean[] black, int width, int height, StaffModel staff, int x) {
