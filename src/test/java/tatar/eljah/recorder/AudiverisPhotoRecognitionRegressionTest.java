@@ -278,9 +278,14 @@ public class AudiverisPhotoRecognitionRegressionTest {
             }
         }
         g.setColor(new Color(255, 0, 0, 220));
+        int index = 1;
         for (NoteEvent note : direct.notes) {
             int r = 7;
-            g.drawOval(Math.round(note.x) - r, Math.round(note.y) - r, r * 2, r * 2);
+            int x = Math.round(note.x);
+            int y = Math.round(note.y);
+            g.drawOval(x - r, y - r, r * 2, r * 2);
+            g.drawString(index + ":" + note.fullName(), x + r + 2, y - r - 2);
+            index++;
         }
         g.dispose();
         ImageIO.write(copy, "png", out);
