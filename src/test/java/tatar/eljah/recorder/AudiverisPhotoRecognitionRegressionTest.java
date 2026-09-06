@@ -35,7 +35,6 @@ public class AudiverisPhotoRecognitionRegressionTest {
         List<NoteEvent> expected = ReferenceComposition.expectedReferenceNotes();
         OpenCvScoreProcessor.ProcessingResult production = engine.recognizeArgbForTest(
                 width, height, argb, "Audiveris regression", OpenCvScoreProcessor.ProcessingOptions.defaults());
-        assertReferenceSnapped(production, expected);
 
         List<Integer> expectedMidi = toMidi(expected);
         List<Integer> actualMidi = toMidi(recognized);
@@ -60,9 +59,19 @@ public class AudiverisPhotoRecognitionRegressionTest {
                 + ", durations=" + durationSummary(production.piece.notes));
         System.out.println("  suppressedOverlays=" + direct.suppressedOverlays
                 + ", rawCandidates=" + direct.rawCandidateCount);
-        System.out.println("  alignment=" + alignmentSummary(expected, recognized));
-        System.out.println("  firstDetails=" + firstDetails(recognized, 20));
+        System.out.println("  alignment=" + alignmentSummary(expected, recognized, 20));
+        System.out.println("  fullAlignment=" + alignmentSummary(expected, recognized, expected.size()));
+        System.out.println("  alignmentDiff=" + alignmentDiff(expected, recognized));
+        System.out.println("  allDetails=" + firstDetails(direct, recognized.size()));
+        System.out.println("  sourceSummary=" + sourceSummary(direct));
+        System.out.println("  accidentalSummary=" + accidentalSummary(expected, recognized));
+        System.out.println("  edgeFilteredAlignment=" + filteredAlignment(expected, direct, FilterMode.EDGE_TOUCHING_COMPONENTS));
+        System.out.println("  coordinateTruth=" + coordinateTruthSummary(expected, direct));
+        System.out.println("  edgeFilteredCoordinateTruth="
+                + coordinateTruthSummary(expected, filteredDirectRecognition(direct, FilterMode.EDGE_TOUCHING_COMPONENTS)));
+        System.out.println("  locationTruth=" + locationTruthSummary(expected, direct));
         System.out.println("  peaks=" + direct.linePeaks);
+        System.out.println("  perStaffAlignment=" + perStaffAlignment(expected, recognized, direct.staves));
         for (int i = 0; i < direct.staves.size(); i++) {
             AudiverisCompatRecognitionEngine.StaffModel staff = direct.staves.get(i);
             System.out.println("  staff[" + i + "] y=" + Math.round(staff.top) + ".." + Math.round(staff.bottom)
@@ -72,6 +81,8 @@ public class AudiverisPhotoRecognitionRegressionTest {
                     + ", names=" + namesForStaff(recognized, staff));
         }
         writeDebugOverlay(image, direct, new File("target/audiveris-debug.png"));
+        writeCoordinateTruthOverlay(image, direct, expected, new File("target/audiveris-coordinate-truth.png"));
+        assertReferenceSnapped(production, expected);
     }
 
     private static List<Integer> toMidi(List<NoteEvent> notes) {
@@ -114,19 +125,33 @@ public class AudiverisPhotoRecognitionRegressionTest {
         return out.toString();
     }
 
-    private static String firstDetails(List<NoteEvent> notes, int limit) {
+    private static String firstDetails(AudiverisCompatRecognitionEngine.DirectRecognition direct, int limit) {
         StringBuilder out = new StringBuilder();
+        List<NoteEvent> notes = direct.notes;
         int n = Math.min(limit, notes.size());
         for (int i = 0; i < n; i++) {
             NoteEvent note = notes.get(i);
+            AudiverisCompatRecognitionEngine.CandidateDiagnostic diagnostic =
+                    i < direct.candidateDiagnostics.size() ? direct.candidateDiagnostics.get(i) : null;
             if (i > 0) out.append(" | ");
             out.append(note.fullName())
                     .append('@')
                     .append(Math.round(note.x))
                     .append(',')
                     .append(Math.round(note.y));
+            if (diagnostic != null) {
+                out.append('[').append(diagnostic.source)
+                        .append(",score=").append(format1(diagnostic.score))
+                        .append(",bbox=").append(diagnostic.minX).append(',').append(diagnostic.minY)
+                        .append("..").append(diagnostic.maxX).append(',').append(diagnostic.maxY)
+                        .append(']');
+            }
         }
         return out.toString();
+    }
+
+    private static String format1(float value) {
+        return String.format(java.util.Locale.US, "%.1f", value);
     }
 
     private static int percent(int num, int den) {
@@ -151,7 +176,7 @@ public class AudiverisPhotoRecognitionRegressionTest {
         return dp[b.size()];
     }
 
-    private static String alignmentSummary(List<NoteEvent> expected, List<NoteEvent> actual) {
+    private static String alignmentSummary(List<NoteEvent> expected, List<NoteEvent> actual, int limit) {
         List<Integer> a = toMidi(expected);
         List<Integer> b = toMidi(actual);
         int[][] dp = new int[a.size() + 1][b.size() + 1];
@@ -168,7 +193,7 @@ public class AudiverisPhotoRecognitionRegressionTest {
         int i = 0;
         int j = 0;
         int shown = 0;
-        while (i < a.size() && j < b.size() && shown < 20) {
+        while (i < a.size() && j < b.size() && shown < limit) {
             if (a.get(i).equals(b.get(j))) {
                 if (out.length() > 0) out.append(" | ");
                 out.append(i + 1).append(':').append(expected.get(i).fullName())
@@ -184,6 +209,376 @@ public class AudiverisPhotoRecognitionRegressionTest {
             }
         }
         return out.toString();
+    }
+
+    private static String alignmentDiff(List<NoteEvent> expected, List<NoteEvent> actual) {
+        List<Integer> a = toMidi(expected);
+        List<Integer> b = toMidi(actual);
+        int[][] dp = new int[a.size() + 1][b.size() + 1];
+        for (int i = a.size() - 1; i >= 0; i--) {
+            for (int j = b.size() - 1; j >= 0; j--) {
+                if (a.get(i).equals(b.get(j))) {
+                    dp[i][j] = dp[i + 1][j + 1] + 1;
+                } else {
+                    dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+                }
+            }
+        }
+
+        StringBuilder out = new StringBuilder();
+        int i = 0;
+        int j = 0;
+        while (i < a.size() || j < b.size()) {
+            if (i < a.size() && j < b.size() && a.get(i).equals(b.get(j))) {
+                appendDiff(out, "=", i + 1, expected.get(i).fullName(), j + 1, actual.get(j));
+                i++;
+                j++;
+            } else if (j < b.size() && (i == a.size() || dp[i][j + 1] > dp[i + 1][j])) {
+                appendDiff(out, "+", -1, null, j + 1, actual.get(j));
+                j++;
+            } else {
+                appendDiff(out, "-", i + 1, expected.get(i).fullName(), -1, null);
+                i++;
+            }
+        }
+        return out.toString();
+    }
+
+    private static void appendDiff(StringBuilder out,
+                                   String kind,
+                                   int expectedIndex,
+                                   String expectedName,
+                                   int actualIndex,
+                                   NoteEvent actual) {
+        if (out.length() > 0) out.append(" | ");
+        out.append(kind);
+        if (expectedIndex > 0) {
+            out.append("e").append(expectedIndex).append(':').append(expectedName);
+        }
+        if (actualIndex > 0) {
+            if (expectedIndex > 0) out.append('/');
+            out.append("a").append(actualIndex).append(':').append(actual.fullName())
+                    .append('@').append(Math.round(actual.x))
+                    .append(',').append(Math.round(actual.y));
+        }
+    }
+
+    private static String perStaffAlignment(List<NoteEvent> expected,
+                                            List<NoteEvent> actual,
+                                            List<AudiverisCompatRecognitionEngine.StaffModel> staves) {
+        int[] expectedCounts = new int[]{13, 25, 18};
+        StringBuilder out = new StringBuilder();
+        int expectedStart = 0;
+        for (int i = 0; i < staves.size() && i < expectedCounts.length; i++) {
+            int expectedEnd = Math.min(expected.size(), expectedStart + expectedCounts[i]);
+            List<NoteEvent> expectedStaff = new ArrayList<NoteEvent>(expected.subList(expectedStart, expectedEnd));
+            List<NoteEvent> actualStaff = notesForStaff(actual, staves.get(i));
+            int lcs = lcsLength(toMidi(expectedStaff), toMidi(actualStaff));
+            if (out.length() > 0) out.append(" | ");
+            out.append(i + 1)
+                    .append(": expected=").append(expectedStaff.size())
+                    .append(", recognized=").append(actualStaff.size())
+                    .append(", lcs=").append(lcs)
+                    .append(", missed=").append(expectedStaff.size() - lcs)
+                    .append(", extra=").append(actualStaff.size() - lcs);
+            expectedStart = expectedEnd;
+        }
+        return out.toString();
+    }
+
+    private static List<NoteEvent> notesForStaff(List<NoteEvent> notes,
+                                                 AudiverisCompatRecognitionEngine.StaffModel staff) {
+        List<NoteEvent> out = new ArrayList<NoteEvent>();
+        for (NoteEvent note : notes) {
+            if (note.y >= staff.top - staff.spacing * 1.25f && note.y <= staff.bottom + staff.spacing * 1.25f) {
+                out.add(note);
+            }
+        }
+        return out;
+    }
+
+    private enum FilterMode {
+        EDGE_TOUCHING_COMPONENTS
+    }
+
+    private static String filteredAlignment(List<NoteEvent> expected,
+                                            AudiverisCompatRecognitionEngine.DirectRecognition direct,
+                                            FilterMode mode) {
+        List<NoteEvent> filtered = new ArrayList<NoteEvent>();
+        int removed = 0;
+        for (int i = 0; i < direct.notes.size(); i++) {
+            NoteEvent note = direct.notes.get(i);
+            AudiverisCompatRecognitionEngine.CandidateDiagnostic d =
+                    i < direct.candidateDiagnostics.size() ? direct.candidateDiagnostics.get(i) : null;
+            if (shouldRemove(d, mode)) {
+                removed++;
+            } else {
+                filtered.add(note);
+            }
+        }
+        int lcs = lcsLength(toMidi(expected), toMidi(filtered));
+        return mode + ": notes=" + filtered.size()
+                + ", removed=" + removed
+                + ", lcs=" + lcs
+                + ", coverage=" + percent(lcs, expected.size()) + "%"
+                + ", precision=" + percent(lcs, filtered.size()) + "%";
+    }
+
+    private static boolean shouldRemove(AudiverisCompatRecognitionEngine.CandidateDiagnostic d, FilterMode mode) {
+        if (d == null) return false;
+        if (mode == FilterMode.EDGE_TOUCHING_COMPONENTS) {
+            return "component".equals(d.source) && d.minX <= 0;
+        }
+        return false;
+    }
+
+    private static AudiverisCompatRecognitionEngine.DirectRecognition filteredDirectRecognition(
+            AudiverisCompatRecognitionEngine.DirectRecognition direct,
+            FilterMode mode) {
+        List<NoteEvent> notes = new ArrayList<NoteEvent>();
+        List<AudiverisCompatRecognitionEngine.CandidateDiagnostic> diagnostics =
+                new ArrayList<AudiverisCompatRecognitionEngine.CandidateDiagnostic>();
+        for (int i = 0; i < direct.notes.size(); i++) {
+            AudiverisCompatRecognitionEngine.CandidateDiagnostic d =
+                    i < direct.candidateDiagnostics.size() ? direct.candidateDiagnostics.get(i) : null;
+            if (shouldRemove(d, mode)) continue;
+            notes.add(direct.notes.get(i));
+            if (d != null) diagnostics.add(d);
+        }
+        return new AudiverisCompatRecognitionEngine.DirectRecognition(notes, diagnostics, direct.staves,
+                direct.linePeaks, direct.suppressedOverlays, direct.rawCandidateCount);
+    }
+
+    private static String sourceSummary(AudiverisCompatRecognitionEngine.DirectRecognition direct) {
+        int components = 0;
+        int windows = 0;
+        int pitchWindows = 0;
+        int edgeComponents = 0;
+        for (AudiverisCompatRecognitionEngine.CandidateDiagnostic d : direct.candidateDiagnostics) {
+            if ("component".equals(d.source)) {
+                components++;
+                if (d.minX <= 0) edgeComponents++;
+            } else if ("window".equals(d.source)) {
+                windows++;
+            } else if ("pitch-window".equals(d.source)) {
+                pitchWindows++;
+            }
+        }
+        return "component=" + components + ", window=" + windows
+                + ", pitchWindow=" + pitchWindows + ", edgeComponents=" + edgeComponents;
+    }
+
+    private static String accidentalSummary(List<NoteEvent> expected, List<NoteEvent> actual) {
+        int expectedFlats = 0;
+        int actualFlats = 0;
+        int actualB = 0;
+        for (NoteEvent note : expected) {
+            if (note.noteName != null && note.noteName.indexOf('b') >= 0) expectedFlats++;
+        }
+        for (NoteEvent note : actual) {
+            if (note.noteName != null && note.noteName.indexOf('b') >= 0) actualFlats++;
+            if ("B".equals(note.noteName)) actualB++;
+        }
+        return "expectedFlats=" + expectedFlats + ", actualFlats=" + actualFlats + ", actualNaturalB=" + actualB;
+    }
+
+    private static String coordinateTruthSummary(List<NoteEvent> expected,
+                                                 AudiverisCompatRecognitionEngine.DirectRecognition direct) {
+        List<ExpectedPoint> points = expectedReferencePoints();
+        if (points.size() != expected.size() || direct.staves.size() < 3) {
+            return "unavailable";
+        }
+
+        boolean[] matchedActual = new boolean[direct.notes.size()];
+        int matched = 0;
+        StringBuilder misses = new StringBuilder();
+        StringBuilder extras = new StringBuilder();
+        for (int i = 0; i < expected.size(); i++) {
+            ExpectedPoint point = points.get(i);
+            NoteEvent exp = expected.get(i);
+            AudiverisCompatRecognitionEngine.StaffModel staff = direct.staves.get(point.staffIndex);
+            float expectedY = expectedY(exp, staff);
+            float xTolerance = Math.max(18f, staff.spacing * 2.2f);
+            float yTolerance = Math.max(8f, staff.spacing * 0.85f);
+            int bestIndex = -1;
+            float bestDistance = Float.MAX_VALUE;
+            for (int j = 0; j < direct.notes.size(); j++) {
+                if (matchedActual[j]) continue;
+                NoteEvent actual = direct.notes.get(j);
+                if (nearestStaff(direct.staves, actual.y) != staff) continue;
+                if (!samePitch(exp, actual)) continue;
+                float dx = Math.abs(actual.x - point.x);
+                float dy = Math.abs(actual.y - expectedY);
+                if (dx > xTolerance || dy > yTolerance) continue;
+                float distance = dx + dy;
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestIndex = j;
+                }
+            }
+            if (bestIndex >= 0) {
+                matchedActual[bestIndex] = true;
+                matched++;
+            } else {
+                appendShort(misses, i + 1, exp.fullName(), Math.round(point.x), Math.round(expectedY));
+            }
+        }
+
+        int extra = 0;
+        for (int i = 0; i < direct.notes.size(); i++) {
+            if (!matchedActual[i]) {
+                extra++;
+                NoteEvent note = direct.notes.get(i);
+                appendShort(extras, i + 1, note.fullName(), Math.round(note.x), Math.round(note.y));
+            }
+        }
+
+        return "matched=" + matched
+                + ", missed=" + (expected.size() - matched)
+                + ", extra=" + extra
+                + ", coverage=" + percent(matched, expected.size()) + "%"
+                + ", precision=" + percent(matched, direct.notes.size()) + "%"
+                + ", missedFirst=" + limitText(misses.toString(), 220)
+                + ", extraFirst=" + limitText(extras.toString(), 220);
+    }
+
+    private static String locationTruthSummary(List<NoteEvent> expected,
+                                               AudiverisCompatRecognitionEngine.DirectRecognition direct) {
+        List<ExpectedPoint> points = expectedReferencePoints();
+        if (points.size() != expected.size() || direct.staves.size() < 3) {
+            return "unavailable";
+        }
+
+        boolean[] matchedActual = new boolean[direct.notes.size()];
+        int localized = 0;
+        int pitchCorrect = 0;
+        StringBuilder pitchErrors = new StringBuilder();
+        for (int i = 0; i < expected.size(); i++) {
+            ExpectedPoint point = points.get(i);
+            NoteEvent exp = expected.get(i);
+            AudiverisCompatRecognitionEngine.StaffModel staff = direct.staves.get(point.staffIndex);
+            float expectedY = expectedY(exp, staff);
+            float xTolerance = Math.max(18f, staff.spacing * 2.2f);
+            float yTolerance = Math.max(8f, staff.spacing * 1.15f);
+            int bestIndex = -1;
+            float bestDistance = Float.MAX_VALUE;
+            for (int j = 0; j < direct.notes.size(); j++) {
+                if (matchedActual[j]) continue;
+                NoteEvent actual = direct.notes.get(j);
+                if (nearestStaff(direct.staves, actual.y) != staff) continue;
+                float dx = Math.abs(actual.x - point.x);
+                float dy = Math.abs(actual.y - expectedY);
+                if (dx > xTolerance || dy > yTolerance) continue;
+                float distance = dx + dy;
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestIndex = j;
+                }
+            }
+            if (bestIndex >= 0) {
+                matchedActual[bestIndex] = true;
+                localized++;
+                NoteEvent actual = direct.notes.get(bestIndex);
+                if (samePitch(exp, actual)) {
+                    pitchCorrect++;
+                } else {
+                    appendPitchError(pitchErrors, i + 1, exp.fullName(), actual.fullName(),
+                            Math.round(point.x), Math.round(expectedY), Math.round(actual.x), Math.round(actual.y));
+                }
+            }
+        }
+        return "localized=" + localized
+                + ", pitchCorrect=" + pitchCorrect
+                + ", pitchErrors=" + (localized - pitchCorrect)
+                + ", missedLocations=" + (expected.size() - localized)
+                + ", localizationCoverage=" + percent(localized, expected.size()) + "%"
+                + ", exactCoverage=" + percent(pitchCorrect, expected.size()) + "%"
+                + ", pitchErrorFirst=" + limitText(pitchErrors.toString(), 260);
+    }
+
+    private static void appendPitchError(StringBuilder out,
+                                         int expectedIndex,
+                                         String expected,
+                                         String actual,
+                                         int expectedX,
+                                         int expectedY,
+                                         int actualX,
+                                         int actualY) {
+        if (out.length() > 0) out.append(" | ");
+        out.append(expectedIndex).append(':').append(expected)
+                .append("->").append(actual)
+                .append("@e").append(expectedX).append(',').append(expectedY)
+                .append("/a").append(actualX).append(',').append(actualY);
+    }
+
+    private static List<ExpectedPoint> expectedReferencePoints() {
+        float[][] xs = new float[][]{
+                {642, 670, 704, 739, 810, 852, 932, 965, 1000, 1032, 1108, 1140, 1175},
+                {176, 205, 235, 265, 326, 356, 386, 420, 486, 518, 552, 584, 646,
+                        676, 704, 784, 812, 842, 874, 950, 1000, 1070, 1104, 1140, 1170},
+                {176, 224, 262, 354, 402, 450, 494, 564, 610, 660, 706, 784, 830, 878, 924, 1006, 1052, 1102}
+        };
+        List<ExpectedPoint> out = new ArrayList<ExpectedPoint>();
+        for (int staff = 0; staff < xs.length; staff++) {
+            for (float x : xs[staff]) {
+                out.add(new ExpectedPoint(staff, x));
+            }
+        }
+        return out;
+    }
+
+    private static boolean samePitch(NoteEvent expected, NoteEvent actual) {
+        return expected.noteName.equals(actual.noteName) && expected.octave == actual.octave;
+    }
+
+    private static float expectedY(NoteEvent note, AudiverisCompatRecognitionEngine.StaffModel staff) {
+        String base = note.noteName == null || note.noteName.length() == 0 ? "C" : note.noteName.substring(0, 1);
+        String[] steps = {"C", "D", "E", "F", "G", "A", "B"};
+        int idx = 0;
+        for (int i = 0; i < steps.length; i++) {
+            if (steps[i].equals(base)) {
+                idx = i;
+                break;
+            }
+        }
+        int absolute = idx + (note.octave - 4) * 7;
+        int bottomE4 = 2;
+        return staff.bottom - (absolute - bottomE4) * staff.spacing * 0.5f;
+    }
+
+    private static AudiverisCompatRecognitionEngine.StaffModel nearestStaff(
+            List<AudiverisCompatRecognitionEngine.StaffModel> staves,
+            float y) {
+        AudiverisCompatRecognitionEngine.StaffModel best = null;
+        float bestDist = Float.MAX_VALUE;
+        for (AudiverisCompatRecognitionEngine.StaffModel staff : staves) {
+            float d = Math.abs(y - staff.center);
+            if (d < bestDist) {
+                bestDist = d;
+                best = staff;
+            }
+        }
+        return best;
+    }
+
+    private static void appendShort(StringBuilder out, int index, String name, int x, int y) {
+        if (out.length() > 0) out.append(" | ");
+        out.append(index).append(':').append(name).append('@').append(x).append(',').append(y);
+    }
+
+    private static String limitText(String value, int maxLength) {
+        if (value.length() <= maxLength) return value;
+        return value.substring(0, maxLength) + "...";
+    }
+
+    private static class ExpectedPoint {
+        final int staffIndex;
+        final float x;
+
+        ExpectedPoint(int staffIndex, float x) {
+            this.staffIndex = staffIndex;
+            this.x = x;
+        }
     }
 
     private static String shiftedLcs(List<NoteEvent> expected, List<NoteEvent> actual) {
@@ -469,6 +864,41 @@ public class AudiverisPhotoRecognitionRegressionTest {
             g.drawString(index + ":" + note.fullName(), x + r + 2, y - r - 2);
             index++;
         }
+        g.dispose();
+        ImageIO.write(copy, "png", out);
+    }
+
+    private static void writeCoordinateTruthOverlay(BufferedImage source,
+                                                    AudiverisCompatRecognitionEngine.DirectRecognition direct,
+                                                    List<NoteEvent> expected,
+                                                    File out) throws Exception {
+        BufferedImage copy = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = copy.createGraphics();
+        g.drawImage(source, 0, 0, null);
+        g.setStroke(new BasicStroke(2f));
+
+        g.setColor(new Color(0, 120, 255, 220));
+        List<ExpectedPoint> points = expectedReferencePoints();
+        for (int i = 0; i < points.size() && i < expected.size() && direct.staves.size() > points.get(i).staffIndex; i++) {
+            ExpectedPoint point = points.get(i);
+            AudiverisCompatRecognitionEngine.StaffModel staff = direct.staves.get(point.staffIndex);
+            int x = Math.round(point.x);
+            int y = Math.round(expectedY(expected.get(i), staff));
+            int r = 6;
+            g.drawOval(x - r, y - r, r * 2, r * 2);
+            g.drawString((i + 1) + ":" + expected.get(i).fullName(), x + r + 2, y - r - 2);
+        }
+
+        g.setColor(new Color(255, 0, 0, 180));
+        for (int i = 0; i < direct.notes.size(); i++) {
+            NoteEvent note = direct.notes.get(i);
+            int x = Math.round(note.x);
+            int y = Math.round(note.y);
+            int r = 4;
+            g.drawOval(x - r, y - r, r * 2, r * 2);
+            g.drawString("a" + (i + 1), x + r + 1, y + r + 10);
+        }
+
         g.dispose();
         ImageIO.write(copy, "png", out);
     }
