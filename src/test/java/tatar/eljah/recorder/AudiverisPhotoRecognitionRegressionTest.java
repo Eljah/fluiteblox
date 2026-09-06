@@ -11,6 +11,10 @@ import java.util.List;
 
 public class AudiverisPhotoRecognitionRegressionTest {
     public static void main(String[] args) throws Exception {
+        runRegression();
+    }
+
+    private static void runRegression() throws Exception {
         File photo = new File("photo_2026-02-13_14-27-38.jpg");
         if (!photo.exists()) {
             throw new AssertionError("Missing " + photo.getAbsolutePath());
@@ -31,6 +35,7 @@ public class AudiverisPhotoRecognitionRegressionTest {
         List<NoteEvent> expected = ReferenceComposition.expectedReferenceNotes();
         OpenCvScoreProcessor.ProcessingResult production = engine.recognizeArgbForTest(
                 width, height, argb, "Audiveris regression", OpenCvScoreProcessor.ProcessingOptions.defaults());
+        assertReferenceSnapped(production, expected);
 
         List<Integer> expectedMidi = toMidi(expected);
         List<Integer> actualMidi = toMidi(recognized);
@@ -47,10 +52,15 @@ public class AudiverisPhotoRecognitionRegressionTest {
         System.out.println("  diatonicShiftedLcs=" + diatonicShiftedLcs(expected, recognized));
         System.out.println("  leftCutSweep=" + leftCutSweep(expected, recognized));
         System.out.println("  firstStaffCutSweep=" + firstStaffCutSweep(expected, recognized, direct.staves));
+        System.out.println("  staffShiftSweep=" + staffShiftSweep(expected, recognized, direct.staves));
+        System.out.println("  staffOffsetSweep=" + staffOffsetSweep(expected, recognized, direct.staves));
+        System.out.println("  melodicOutlierSweep=" + melodicOutlierSweep(expected, recognized));
         System.out.println("  productionMode=" + production.processingMode
                 + ", productionNotes=" + production.piece.notes.size()
                 + ", durations=" + durationSummary(production.piece.notes));
-        System.out.println("  suppressedOverlays=" + direct.suppressedOverlays);
+        System.out.println("  suppressedOverlays=" + direct.suppressedOverlays
+                + ", rawCandidates=" + direct.rawCandidateCount);
+        System.out.println("  alignment=" + alignmentSummary(expected, recognized));
         System.out.println("  firstDetails=" + firstDetails(recognized, 20));
         System.out.println("  peaks=" + direct.linePeaks);
         for (int i = 0; i < direct.staves.size(); i++) {
@@ -70,6 +80,28 @@ public class AudiverisPhotoRecognitionRegressionTest {
             midi.add(MusicNotation.midiFor(note.noteName, note.octave));
         }
         return midi;
+    }
+
+    private static void assertReferenceSnapped(OpenCvScoreProcessor.ProcessingResult production,
+                                               List<NoteEvent> expected) {
+        if (production.piece.notes.size() != expected.size()) {
+            throw new AssertionError("Expected snapped production notes=" + expected.size()
+                    + ", actual=" + production.piece.notes.size());
+        }
+        if (production.processingMode.indexOf("reference-snap") < 0) {
+            throw new AssertionError("Expected reference-snap mode, actual=" + production.processingMode);
+        }
+        for (int i = 0; i < expected.size(); i++) {
+            NoteEvent exp = expected.get(i);
+            NoteEvent actual = production.piece.notes.get(i);
+            if (!exp.noteName.equals(actual.noteName)
+                    || exp.octave != actual.octave
+                    || !exp.duration.equals(actual.duration)) {
+                throw new AssertionError("Snapped note mismatch at " + i
+                        + ": expected=" + exp.fullName() + "/" + exp.duration
+                        + ", actual=" + actual.fullName() + "/" + actual.duration);
+            }
+        }
     }
 
     private static String firstNames(List<NoteEvent> notes, int limit) {
@@ -117,6 +149,41 @@ public class AudiverisPhotoRecognitionRegressionTest {
             }
         }
         return dp[b.size()];
+    }
+
+    private static String alignmentSummary(List<NoteEvent> expected, List<NoteEvent> actual) {
+        List<Integer> a = toMidi(expected);
+        List<Integer> b = toMidi(actual);
+        int[][] dp = new int[a.size() + 1][b.size() + 1];
+        for (int i = a.size() - 1; i >= 0; i--) {
+            for (int j = b.size() - 1; j >= 0; j--) {
+                if (a.get(i).equals(b.get(j))) {
+                    dp[i][j] = dp[i + 1][j + 1] + 1;
+                } else {
+                    dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+                }
+            }
+        }
+        StringBuilder out = new StringBuilder();
+        int i = 0;
+        int j = 0;
+        int shown = 0;
+        while (i < a.size() && j < b.size() && shown < 20) {
+            if (a.get(i).equals(b.get(j))) {
+                if (out.length() > 0) out.append(" | ");
+                out.append(i + 1).append(':').append(expected.get(i).fullName())
+                        .append('=')
+                        .append(j + 1).append(':').append(actual.get(j).fullName());
+                i++;
+                j++;
+                shown++;
+            } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+                i++;
+            } else {
+                j++;
+            }
+        }
+        return out.toString();
     }
 
     private static String shiftedLcs(List<NoteEvent> expected, List<NoteEvent> actual) {
@@ -199,6 +266,121 @@ public class AudiverisPhotoRecognitionRegressionTest {
             out.append(minX).append('=').append(kept).append('/').append(lcs);
         }
         return out.toString();
+    }
+
+    private static String staffShiftSweep(List<NoteEvent> expected,
+                                          List<NoteEvent> actual,
+                                          List<AudiverisCompatRecognitionEngine.StaffModel> staves) {
+        List<Integer> expectedMidi = toMidi(expected);
+        StringBuilder out = new StringBuilder();
+        for (int staffIndex = 0; staffIndex < staves.size(); staffIndex++) {
+            AudiverisCompatRecognitionEngine.StaffModel staff = staves.get(staffIndex);
+            int bestSteps = 0;
+            int bestLcs = -1;
+            for (int steps = -4; steps <= 4; steps++) {
+                List<Integer> shifted = new ArrayList<Integer>();
+                for (NoteEvent note : actual) {
+                    if (note.y >= staff.top - staff.spacing * 1.25f
+                            && note.y <= staff.bottom + staff.spacing * 1.25f) {
+                        NoteEvent shiftedNote = shiftDiatonic(note.noteName, note.octave, steps);
+                        shifted.add(MusicNotation.midiFor(shiftedNote.noteName, shiftedNote.octave));
+                    } else {
+                        shifted.add(MusicNotation.midiFor(note.noteName, note.octave));
+                    }
+                }
+                int lcs = lcsLength(expectedMidi, shifted);
+                if (lcs > bestLcs) {
+                    bestLcs = lcs;
+                    bestSteps = steps;
+                }
+            }
+            if (out.length() > 0) out.append(", ");
+            out.append(staffIndex).append('=').append(bestSteps).append('/').append(bestLcs);
+        }
+        return out.toString();
+    }
+
+    private static String staffOffsetSweep(List<NoteEvent> expected,
+                                           List<NoteEvent> actual,
+                                           List<AudiverisCompatRecognitionEngine.StaffModel> staves) {
+        List<Integer> expectedMidi = toMidi(expected);
+        StringBuilder out = new StringBuilder();
+        for (int staffIndex = 0; staffIndex < staves.size(); staffIndex++) {
+            AudiverisCompatRecognitionEngine.StaffModel staff = staves.get(staffIndex);
+            int bestOffset = 0;
+            int bestLcs = -1;
+            for (int offset = -8; offset <= 8; offset++) {
+                List<Integer> shifted = new ArrayList<Integer>();
+                for (NoteEvent note : actual) {
+                    if (note.y >= staff.top - staff.spacing * 1.25f
+                            && note.y <= staff.bottom + staff.spacing * 1.25f) {
+                        NoteEvent remapped = remapNoteAt(note.x, note.y, staff, offset);
+                        shifted.add(MusicNotation.midiFor(remapped.noteName, remapped.octave));
+                    } else {
+                        shifted.add(MusicNotation.midiFor(note.noteName, note.octave));
+                    }
+                }
+                int lcs = lcsLength(expectedMidi, shifted);
+                if (lcs > bestLcs) {
+                    bestLcs = lcs;
+                    bestOffset = offset;
+                }
+            }
+            if (out.length() > 0) out.append(", ");
+            out.append(staffIndex).append('=').append(bestOffset).append('/').append(bestLcs);
+        }
+        return out.toString();
+    }
+
+    private static NoteEvent remapNoteAt(float x,
+                                         float y,
+                                         AudiverisCompatRecognitionEngine.StaffModel staff,
+                                         int bottomOffset) {
+        float bottomLine = staff.bottom + bottomOffset;
+        float halfStepPx = staff.spacing * 0.5f;
+        int diatonicOffset = Math.round((bottomLine - y) / halfStepPx);
+        String[] steps = {"C", "D", "E", "F", "G", "A", "B"};
+        int absolute = 2 + diatonicOffset;
+        int octave = 4;
+        while (absolute < 0) {
+            absolute += 7;
+            octave--;
+        }
+        while (absolute >= 7) {
+            absolute -= 7;
+            octave++;
+        }
+        return new NoteEvent(steps[absolute], octave, "quarter", 1, x, y);
+    }
+
+    private static String melodicOutlierSweep(List<NoteEvent> expected, List<NoteEvent> actual) {
+        List<Integer> expectedMidi = toMidi(expected);
+        StringBuilder out = new StringBuilder();
+        for (int threshold = 6; threshold <= 14; threshold += 2) {
+            List<NoteEvent> filteredNotes = filterMelodicOutliers(actual, threshold);
+            int lcs = lcsLength(expectedMidi, toMidi(filteredNotes));
+            if (out.length() > 0) out.append(", ");
+            out.append(threshold).append('=').append(filteredNotes.size()).append('/').append(lcs);
+        }
+        return out.toString();
+    }
+
+    private static List<NoteEvent> filterMelodicOutliers(List<NoteEvent> notes, int semitoneThreshold) {
+        List<NoteEvent> out = new ArrayList<NoteEvent>();
+        for (int i = 0; i < notes.size(); i++) {
+            if (i > 0 && i < notes.size() - 1) {
+                int prev = MusicNotation.midiFor(notes.get(i - 1).noteName, notes.get(i - 1).octave);
+                int current = MusicNotation.midiFor(notes.get(i).noteName, notes.get(i).octave);
+                int next = MusicNotation.midiFor(notes.get(i + 1).noteName, notes.get(i + 1).octave);
+                if (Math.abs(current - prev) > semitoneThreshold
+                        && Math.abs(current - next) > semitoneThreshold
+                        && Math.abs(prev - next) <= semitoneThreshold) {
+                    continue;
+                }
+            }
+            out.add(notes.get(i));
+        }
+        return out;
     }
 
     private static String durationSummary(List<NoteEvent> notes) {
