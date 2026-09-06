@@ -49,6 +49,14 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
             omrOption("templateBottomPitchBias", false);
     private static final boolean ENABLE_ADAPTIVE_MIDDLE_PITCH_WINDOW_BIAS =
             omrOption("adaptiveMiddlePitchWindowBias", false);
+    private static final boolean ENABLE_SLOT_RESCUE =
+            omrOption("slotRescue", true);
+    private static final boolean ENABLE_CONTRAST_DETECTOR =
+            omrOption("contrastDetector", false);
+    private static final boolean ENABLE_MONOPHONIC_X_SUPPRESSION =
+            omrOption("monophonicXSuppression", false);
+    private static final int SEQUENCE_CAP_TARGET =
+            omrIntOption("sequenceCapTarget", 70);
 
     private final ScoreRecognitionEngine fallback;
 
@@ -121,6 +129,12 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                 candidates.addAll(selectPitchWindowRescueCandidates(candidates,
                         detectNoteheadsByTemplateWindows(localWithStaffLines, width, height, staves), staves));
             }
+            if (ENABLE_SLOT_RESCUE) {
+                candidates.addAll(detectNoteheadsBySlotRescue(localWithStaffLines, width, height, staves, candidates));
+            }
+            if (ENABLE_CONTRAST_DETECTOR) {
+                candidates.addAll(detectNoteheadsByContrastWindows(gray, width, height, staves));
+            }
         }
         int rawCandidateCount = candidates.size();
         List<CandidateNote> orderedCandidates = dedupeAndOrderCandidates(candidates, staves);
@@ -146,8 +160,11 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         List<Integer> linePeaks = detectHorizontalPeaks(black, width, height);
         List<StaffModel> staves = buildStaffModels(linePeaks, width, height, black);
         if (staves.isEmpty()) {
-            OpenCvScoreProcessor.ProcessingResult fb = fallback.recognize(overlaySource, title, options);
-            return withMode(fb, "audiveris-compat/fallback-no-staff");
+            if (fallback != null) {
+                OpenCvScoreProcessor.ProcessingResult fb = fallback.recognize(overlaySource, title, options);
+                return withMode(fb, "audiveris-compat/fallback-no-staff");
+            }
+            return emptyResult(title, "audiveris-compat/no-staff");
         }
 
         boolean[] blackWithStaffLines = black.clone();
@@ -171,16 +188,27 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                 candidates.addAll(selectPitchWindowRescueCandidates(candidates,
                         detectNoteheadsByTemplateWindows(localWithStaffLines, width, height, staves), staves));
             }
+            if (ENABLE_SLOT_RESCUE) {
+                candidates.addAll(detectNoteheadsBySlotRescue(localWithStaffLines, width, height, staves, candidates));
+            }
+            if (ENABLE_CONTRAST_DETECTOR) {
+                candidates.addAll(detectNoteheadsByContrastWindows(gray, width, height, staves));
+            }
         }
         if (candidates.isEmpty()) {
-            OpenCvScoreProcessor.ProcessingResult fb = fallback.recognize(overlaySource, title, options);
-            return withMode(fb, "audiveris-compat/fallback-no-notes");
+            if (fallback != null) {
+                OpenCvScoreProcessor.ProcessingResult fb = fallback.recognize(overlaySource, title, options);
+                return withMode(fb, "audiveris-compat/fallback-no-notes");
+            }
+            return emptyResult(title, "audiveris-compat/no-notes");
         }
 
         List<NoteEvent> notes = remeasureNotes(dedupeAndOrderNotes(candidates, staves), staves);
         if (!isPlausible(notes, staves)) {
-            OpenCvScoreProcessor.ProcessingResult fb = fallback.recognize(overlaySource, title, options);
-            return withMode(fb, "audiveris-compat/fallback-low-confidence");
+            if (fallback != null) {
+                OpenCvScoreProcessor.ProcessingResult fb = fallback.recognize(overlaySource, title, options);
+                return withMode(fb, "audiveris-compat/fallback-low-confidence");
+            }
         }
         List<NoteEvent> pieceNotes = maybeSnapToReference(notes, staves);
         boolean referenceSnapped = pieceNotes != notes;
@@ -214,6 +242,16 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                 null);
     }
 
+    private OpenCvScoreProcessor.ProcessingResult emptyResult(String title, String mode) {
+        ScorePiece piece = new ScorePiece();
+        piece.id = String.valueOf(System.currentTimeMillis());
+        piece.title = title;
+        piece.createdAt = System.currentTimeMillis();
+        piece.notes = new ArrayList<NoteEvent>();
+        return new OpenCvScoreProcessor.ProcessingResult(piece, 0, 0, 0, null,
+                new ArrayList<OpenCvScoreProcessor.StaffCorridor>(), mode, false, null, null);
+    }
+
     private String overlayMaskSuffix(int suppressedOverlays) {
         return suppressedOverlays <= 0 ? "" : "+overlay-mask" + suppressedOverlays;
     }
@@ -226,14 +264,27 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         StringBuilder out = new StringBuilder();
         if (ENABLE_LOCAL_ADAPTIVE) out.append("+local-adaptive");
         if (ENABLE_TEMPLATE_DETECTOR) out.append("+template");
+        if (ENABLE_SLOT_RESCUE) out.append("+slot-rescue");
+        if (ENABLE_CONTRAST_DETECTOR) out.append("+contrast");
+        if (ENABLE_MONOPHONIC_X_SUPPRESSION) out.append("+mono-x");
         if (ENABLE_TUNED_MELODY_RANGE) out.append("+range");
-        if (ENABLE_SEQUENCE_CAP) out.append("+sequence-cap");
+        if (ENABLE_SEQUENCE_CAP) out.append("+sequence-cap").append(SEQUENCE_CAP_TARGET);
         return out.toString();
     }
 
     private static boolean omrOption(String name, boolean defaultValue) {
         String value = System.getProperty("fluitblox.omr." + name);
         return value == null ? defaultValue : Boolean.parseBoolean(value);
+    }
+
+    private static int omrIntOption(String name, int defaultValue) {
+        String value = System.getProperty("fluitblox.omr." + name);
+        if (value == null) return defaultValue;
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return defaultValue;
+        }
     }
 
     private List<NoteEvent> maybeSnapToReference(List<NoteEvent> notes, List<StaffModel> staves) {
@@ -970,6 +1021,252 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         candidates.addAll(kept);
     }
 
+    private List<CandidateNote> detectNoteheadsBySlotRescue(boolean[] black,
+                                                            int width,
+                                                            int height,
+                                                            List<StaffModel> staves,
+                                                            List<CandidateNote> base) {
+        List<CandidateNote> out = new ArrayList<CandidateNote>();
+        List<CandidateNote> occupancyBase = removeObviousOccupancyNoise(base);
+        for (StaffModel staff : staves) {
+            List<Float> occupied = sortedOccupiedXs(occupancyBase, staff, staves);
+            if (occupied.size() < 4) continue;
+
+            float slot = inferredSlotSpacing(occupied, staff);
+            int staffMaxNotes = maxNotesForStaff(staff);
+            int baseCount = countCandidatesForStaff(occupancyBase, staff, staves);
+            int limit = Math.max(0, Math.min(6, staffMaxNotes - baseCount));
+            if (limit <= 0 && hasLargeInternalGap(staff)) limit = 1;
+
+            List<Gap> gaps = slotRescueGaps(occupied, staff, slot);
+            Collections.sort(gaps, new Comparator<Gap>() {
+                @Override
+                public int compare(Gap left, Gap right) {
+                    return Float.compare(right.width, left.width);
+                }
+            });
+
+            int addedForStaff = 0;
+            for (Gap gap : gaps) {
+                int probes = Math.max(1, Math.min(4, Math.round(gap.width / Math.max(1f, slot))));
+                for (int i = 1; i <= probes; i++) {
+                    int x = Math.round(gap.left + gap.width * i / (probes + 1f));
+                    CandidateNote best = bestSlotRescueCandidate(black, width, height, staff, x, slot);
+                    if (best == null) continue;
+                    if (isNearExistingCandidate(best, occupancyBase, staves)) continue;
+                    if (isNearExistingCandidate(best, out, staves)) continue;
+                    out.add(best);
+                    addedForStaff++;
+                    if (addedForStaff >= limit) break;
+                }
+                if (addedForStaff >= limit) break;
+            }
+        }
+        return out;
+    }
+
+    private List<Float> sortedOccupiedXs(List<CandidateNote> candidates, StaffModel staff, List<StaffModel> staves) {
+        List<Float> xs = new ArrayList<Float>();
+        for (CandidateNote candidate : candidates) {
+            if (nearestStaff(staves, candidate.note.y) == staff) xs.add(candidate.note.x);
+        }
+        Collections.sort(xs);
+        return xs;
+    }
+
+    private float inferredSlotSpacing(List<Float> occupied, StaffModel staff) {
+        List<Float> gaps = new ArrayList<Float>();
+        float minGap = Math.max(8f, staff.spacing * 1.4f);
+        float maxGap = Math.max(minGap + 1f, staff.spacing * 5.5f);
+        for (int i = 1; i < occupied.size(); i++) {
+            float gap = occupied.get(i) - occupied.get(i - 1);
+            if (gap >= minGap && gap <= maxGap) gaps.add(gap);
+        }
+        if (gaps.isEmpty()) return staff.spacing * 3.0f;
+        Collections.sort(gaps);
+        return gaps.get(gaps.size() / 2);
+    }
+
+    private List<Gap> slotRescueGaps(List<Float> occupied, StaffModel staff, float slot) {
+        List<Gap> gaps = new ArrayList<Gap>();
+        float left = staff.left + staff.spacing * 1.5f;
+        for (Float x : occupied) {
+            addSlotRescueGap(gaps, left, x, staff, slot);
+            left = x;
+        }
+        addSlotRescueGap(gaps, left, staff.right - staff.spacing * 1.5f, staff, slot);
+        return gaps;
+    }
+
+    private void addSlotRescueGap(List<Gap> gaps, float left, float right, StaffModel staff, float slot) {
+        float margin = Math.max(staff.spacing * 1.1f, slot * 0.35f);
+        float gapLeft = left + margin;
+        float gapRight = right - margin;
+        if (gapRight <= gapLeft) return;
+        float width = gapRight - gapLeft;
+        if (width < Math.max(staff.spacing * 2.2f, slot * 0.9f)) return;
+        gaps.add(new Gap(gapLeft, gapRight, width));
+    }
+
+    private CandidateNote bestSlotRescueCandidate(boolean[] black,
+                                                  int width,
+                                                  int height,
+                                                  StaffModel staff,
+                                                  int centerX,
+                                                  float slot) {
+        CandidateNote best = null;
+        float bestScore = -Float.MAX_VALUE;
+        int radius = Math.max(3, Math.round(Math.min(staff.spacing * 1.2f, slot * 0.28f)));
+        for (int x = centerX - radius; x <= centerX + radius; x += 2) {
+            if (x < 0 || x >= width) continue;
+            for (int step = -2; step <= 10; step++) {
+                float y = staff.bottom - step * staff.spacing * 0.5f;
+                if (!isInsideStaffCorridor(staff, y)) continue;
+                float pitchScore = pitchWindowInkScore(black, width, height, x, y, staff);
+                float templateScore = templateHeadScore(black, width, height, x, y, staff);
+                float score = Math.max(pitchScore, templateScore * 0.92f);
+                if (score <= 0f) continue;
+                float adjusted = score - Math.abs(x - centerX) * 0.20f;
+                if (adjusted > bestScore) {
+                    bestScore = adjusted;
+                    best = candidateFromSlotRescue(black, width, height, new WindowCandidate(x, y, score), staff);
+                }
+            }
+        }
+        float threshold = Math.max(128f, staff.spacing * staff.spacing * 0.45f);
+        return bestScore >= threshold ? best : null;
+    }
+
+    private CandidateNote candidateFromSlotRescue(boolean[] black,
+                                                  int width,
+                                                  int height,
+                                                  WindowCandidate candidate,
+                                                  StaffModel staff) {
+        float refinedY = refinedPitchWindowY(black, width, height, candidate.x, candidate.y, staff);
+        NoteEvent note = makeNoteFromStaffPosition(candidate.x, refinedY, staff, 1);
+        int rx = Math.max(3, Math.round(staff.spacing * 0.58f));
+        int ry = Math.max(3, Math.round(staff.spacing * 0.48f));
+        return new CandidateNote(note, candidate.score, "slot-rescue",
+                Math.round(candidate.x) - rx, Math.round(refinedY) - ry,
+                Math.round(candidate.x) + rx, Math.round(refinedY) + ry);
+    }
+
+    private List<CandidateNote> detectNoteheadsByContrastWindows(int[] gray,
+                                                                 int width,
+                                                                 int height,
+                                                                 List<StaffModel> staves) {
+        List<CandidateNote> out = new ArrayList<CandidateNote>();
+        for (StaffModel staff : staves) {
+            int left = Math.max(0, Math.round(staff.left + staff.spacing));
+            int right = Math.min(width - 1, Math.round(staff.right - staff.spacing));
+            if (right <= left) continue;
+
+            float threshold = Math.max(18f, staff.spacing * 1.2f);
+            int maxGap = Math.max(2, Math.round(staff.spacing * 0.45f));
+            for (int step = -2; step <= 10; step++) {
+                float y = staff.bottom - step * staff.spacing * 0.5f;
+                if (!isInsideStaffCorridor(staff, y)) continue;
+                WindowCandidate active = null;
+                int lastHitX = -1;
+                for (int x = left; x <= right; x += 2) {
+                    float score = contrastHeadScore(gray, width, height, x, y, staff);
+                    if (score >= threshold) {
+                        WindowCandidate current = new WindowCandidate(x, y, score);
+                        if (active == null || (lastHitX >= 0 && x - lastHitX > maxGap)) {
+                            if (active != null) out.add(candidateFromContrastWindow(active, staff));
+                            active = current;
+                        } else if (score > active.score) {
+                            active = current;
+                        }
+                        lastHitX = x;
+                    } else if (active != null && lastHitX >= 0 && x - lastHitX > maxGap) {
+                        out.add(candidateFromContrastWindow(active, staff));
+                        active = null;
+                        lastHitX = -1;
+                    }
+                }
+                if (active != null) out.add(candidateFromContrastWindow(active, staff));
+            }
+            collapseSourceClusters(out, staff, staves, "contrast");
+        }
+        return out;
+    }
+
+    private CandidateNote candidateFromContrastWindow(WindowCandidate candidate, StaffModel staff) {
+        NoteEvent note = makeNoteFromStaffPosition(candidate.x, candidate.y, staff, 1);
+        int rx = Math.max(3, Math.round(staff.spacing * 0.58f));
+        int ry = Math.max(3, Math.round(staff.spacing * 0.48f));
+        return new CandidateNote(note, candidate.score, "contrast",
+                Math.round(candidate.x) - rx, Math.round(candidate.y) - ry,
+                Math.round(candidate.x) + rx, Math.round(candidate.y) + ry);
+    }
+
+    private float contrastHeadScore(int[] gray, int width, int height, int cx, float cy, StaffModel staff) {
+        int rx = Math.max(4, Math.round(staff.spacing * 0.62f));
+        int ry = Math.max(3, Math.round(staff.spacing * 0.46f));
+        int innerCount = 0;
+        int outerCount = 0;
+        int innerDark = 0;
+        int outerDark = 0;
+        int centerDark = 0;
+        int leftDark = 0;
+        int rightDark = 0;
+        int topDark = 0;
+        int bottomDark = 0;
+        int[] rowHits = new int[ry * 2 + 1];
+        int[] colHits = new int[rx * 2 + 1];
+        for (int dy = -ry - 2; dy <= ry + 2; dy++) {
+            int y = Math.round(cy) + dy;
+            if (y < 0 || y >= height) continue;
+            int row = y * width;
+            for (int dx = -rx - 2; dx <= rx + 2; dx++) {
+                int x = cx + dx;
+                if (x < 0 || x >= width) continue;
+                int dark = 255 - gray[row + x];
+                float nx = dx / (float) rx;
+                float ny = dy / (float) ry;
+                float d = nx * nx + ny * ny;
+                if (d <= 1.0f && !isStaffLineY(staff, y)) {
+                    innerCount++;
+                    innerDark += dark;
+                    if (dark >= 70) {
+                        if (Math.abs(dy) <= ry) rowHits[dy + ry]++;
+                        if (Math.abs(dx) <= rx) colHits[dx + rx]++;
+                    }
+                    if (Math.abs(dx) <= Math.max(1, rx / 3)) centerDark += dark;
+                    if (dx < 0) leftDark += dark;
+                    if (dx > 0) rightDark += dark;
+                    if (dy < 0) topDark += dark;
+                    if (dy > 0) bottomDark += dark;
+                } else if (d > 1.0f && d <= 1.85f) {
+                    outerCount++;
+                    outerDark += dark;
+                }
+            }
+        }
+        if (innerCount == 0 || outerCount == 0) return 0f;
+
+        int rows = 0;
+        int cols = 0;
+        for (int hit : rowHits) {
+            if (hit >= Math.max(2, rx * 0.28f)) rows++;
+        }
+        for (int hit : colHits) {
+            if (hit >= Math.max(2, ry * 0.30f)) cols++;
+        }
+        if (rows < Math.max(2, Math.round(ry * 0.45f))) return 0f;
+        if (cols < Math.max(2, Math.round(rx * 0.45f))) return 0f;
+
+        float inner = innerDark / (float) innerCount;
+        float outer = outerDark / (float) outerCount;
+        float localContrast = inner - outer * 0.72f;
+        float center = centerDark / (float) Math.max(1, innerDark);
+        float hBalance = Math.min(leftDark, rightDark) / (float) Math.max(1, Math.max(leftDark, rightDark));
+        float vBalance = Math.min(topDark, bottomDark) / (float) Math.max(1, Math.max(topDark, bottomDark));
+        if (center < 0.22f || hBalance < 0.32f || vBalance < 0.22f) return 0f;
+        return localContrast + rows * 2.2f + cols * 1.7f + hBalance * 10f + vBalance * 6f;
+    }
+
     private List<CandidateNote> selectPitchWindowRescueCandidates(List<CandidateNote> base,
                                                                   List<CandidateNote> candidates,
                                                                   List<StaffModel> staves) {
@@ -1428,14 +1725,55 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                 kept.set(duplicateIndex, candidate);
             }
         }
+        if (ENABLE_MONOPHONIC_X_SUPPRESSION) {
+            kept = suppressSameSlotPitchStacks(kept, staves);
+        }
         kept = correctStaffSourcePitchBias(kept, staves);
         if (ENABLE_TUNED_MELODY_RANGE) {
             kept = keepTunedMelodyRange(kept);
         }
         if (ENABLE_SEQUENCE_CAP) {
-            kept = capSequenceCandidates(kept, staves, 70);
+            kept = capSequenceCandidates(kept, staves, SEQUENCE_CAP_TARGET);
         }
         return kept;
+    }
+
+    private List<CandidateNote> suppressSameSlotPitchStacks(List<CandidateNote> candidates, List<StaffModel> staves) {
+        List<CandidateNote> sorted = new ArrayList<CandidateNote>(candidates);
+        Collections.sort(sorted, new Comparator<CandidateNote>() {
+            @Override
+            public int compare(CandidateNote left, CandidateNote right) {
+                StaffModel leftStaff = nearestStaff(staves, left.note.y);
+                StaffModel rightStaff = nearestStaff(staves, right.note.y);
+                float leftTop = leftStaff == null ? left.note.y : leftStaff.top;
+                float rightTop = rightStaff == null ? right.note.y : rightStaff.top;
+                int byStaff = Float.compare(leftTop, rightTop);
+                if (byStaff != 0) return byStaff;
+                return Float.compare(left.note.x, right.note.x);
+            }
+        });
+
+        List<CandidateNote> collapsed = new ArrayList<CandidateNote>();
+        CandidateNote best = null;
+        StaffModel bestStaff = null;
+        float clusterRight = -Float.MAX_VALUE;
+        for (CandidateNote candidate : sorted) {
+            StaffModel staff = nearestStaff(staves, candidate.note.y);
+            float maxGap = staff == null ? 8f : Math.max(6f, staff.spacing * 0.75f);
+            if (best == null || staff != bestStaff || candidate.note.x - clusterRight > maxGap) {
+                if (best != null) collapsed.add(best);
+                best = candidate;
+                bestStaff = staff;
+                clusterRight = candidate.note.x;
+            } else {
+                if (candidateKeepScore(candidate, staves) > candidateKeepScore(best, staves)) {
+                    best = candidate;
+                }
+                if (candidate.note.x > clusterRight) clusterRight = candidate.note.x;
+            }
+        }
+        if (best != null) collapsed.add(best);
+        return collapsed;
     }
 
     private List<CandidateNote> correctStaffSourcePitchBias(List<CandidateNote> candidates,
@@ -1529,8 +1867,12 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         float score = candidate.score;
         if ("pitch-window".equals(candidate.source)) {
             score += 90f;
+        } else if ("slot-rescue".equals(candidate.source)) {
+            score += 82f;
         } else if ("template".equals(candidate.source)) {
             score += 75f;
+        } else if ("contrast".equals(candidate.source)) {
+            score += 55f;
         } else if ("window".equals(candidate.source)) {
             score += 40f;
         }

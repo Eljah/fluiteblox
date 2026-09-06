@@ -87,6 +87,9 @@ public class AudiverisPhotoRecognitionRegressionTest {
         System.out.println("  bestSourcePitchCorrection=" + bestSourcePitchCorrection(expected, direct));
         System.out.println("  flatKeyBiasTruth=" + flatKeyBiasTruth(expected, direct));
         System.out.println("  bFlatKeyTruth=" + bFlatKeyTruth(expected, direct));
+        if (Boolean.parseBoolean(System.getProperty("fluitblox.omr.truthDetails", "false"))) {
+            System.out.println("  expectedTruthDetails=" + expectedTruthDetails(expected, direct));
+        }
         System.out.println("  peaks=" + direct.linePeaks);
         System.out.println("  perStaffAlignment=" + perStaffAlignment(expected, recognized, direct.staves));
         for (int i = 0; i < direct.staves.size(); i++) {
@@ -377,26 +380,21 @@ public class AudiverisPhotoRecognitionRegressionTest {
     }
 
     private static String sourceSummary(AudiverisCompatRecognitionEngine.DirectRecognition direct) {
-        int components = 0;
-        int windows = 0;
-        int pitchWindows = 0;
-        int templates = 0;
+        java.util.Map<String, Integer> counts = new java.util.TreeMap<String, Integer>();
         int edgeComponents = 0;
         for (AudiverisCompatRecognitionEngine.CandidateDiagnostic d : direct.candidateDiagnostics) {
+            Integer count = counts.get(d.source);
+            counts.put(d.source, count == null ? 1 : count + 1);
             if ("component".equals(d.source)) {
-                components++;
                 if (d.minX <= 0) edgeComponents++;
-            } else if ("window".equals(d.source)) {
-                windows++;
-            } else if ("pitch-window".equals(d.source)) {
-                pitchWindows++;
-            } else if ("template".equals(d.source)) {
-                templates++;
             }
         }
-        return "component=" + components + ", window=" + windows
-                + ", pitchWindow=" + pitchWindows + ", template=" + templates
-                + ", edgeComponents=" + edgeComponents;
+        StringBuilder out = new StringBuilder();
+        for (java.util.Map.Entry<String, Integer> entry : counts.entrySet()) {
+            if (out.length() > 0) out.append(", ");
+            out.append(entry.getKey()).append('=').append(entry.getValue());
+        }
+        return out + ", edgeComponents=" + edgeComponents;
     }
 
     private static String accidentalSummary(List<NoteEvent> expected, List<NoteEvent> actual) {
@@ -531,7 +529,10 @@ public class AudiverisPhotoRecognitionRegressionTest {
                                                  AudiverisCompatRecognitionEngine.DirectRecognition direct) {
         List<ExpectedPoint> points = expectedReferencePoints();
         StringBuilder out = new StringBuilder();
-        String[] sources = {"component", "window", "pitch-window", "template"};
+        java.util.Set<String> sources = new java.util.TreeSet<String>();
+        for (AudiverisCompatRecognitionEngine.CandidateDiagnostic diagnostic : direct.candidateDiagnostics) {
+            sources.add(diagnostic.source);
+        }
         for (String source : sources) {
             int total = 0;
             int hits = 0;
@@ -754,6 +755,97 @@ public class AudiverisPhotoRecognitionRegressionTest {
                 + ", lcs=" + lcs
                 + ", exact=" + exact
                 + ", localized=" + localized;
+    }
+
+    private static String expectedTruthDetails(List<NoteEvent> expected,
+                                               AudiverisCompatRecognitionEngine.DirectRecognition direct) {
+        List<ExpectedPoint> points = expectedReferencePoints();
+        boolean[] used = new boolean[direct.notes.size()];
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < expected.size() && i < points.size(); i++) {
+            ExpectedPoint point = points.get(i);
+            if (point.staffIndex >= direct.staves.size()) continue;
+            NoteEvent exp = expected.get(i);
+            AudiverisCompatRecognitionEngine.StaffModel staff = direct.staves.get(point.staffIndex);
+            float expectedY = expectedY(exp, staff);
+            float xTolerance = Math.max(18f, staff.spacing * 2.2f);
+            float yTolerance = Math.max(8f, staff.spacing * 1.15f);
+            int bestAny = -1;
+            int bestPitch = -1;
+            float bestAnyDistance = Float.MAX_VALUE;
+            float bestPitchDistance = Float.MAX_VALUE;
+            for (int j = 0; j < direct.notes.size(); j++) {
+                if (used[j]) continue;
+                NoteEvent actual = direct.notes.get(j);
+                if (nearestStaff(direct.staves, actual.y) != staff) continue;
+                float dx = Math.abs(actual.x - point.x);
+                float dy = Math.abs(actual.y - expectedY);
+                if (dx > xTolerance || dy > yTolerance) continue;
+                float distance = dx + dy;
+                if (distance < bestAnyDistance) {
+                    bestAnyDistance = distance;
+                    bestAny = j;
+                }
+                if (samePitch(exp, actual) && distance < bestPitchDistance) {
+                    bestPitchDistance = distance;
+                    bestPitch = j;
+                }
+            }
+            if (bestPitch >= 0) {
+                used[bestPitch] = true;
+                continue;
+            }
+            if (out.length() > 0) out.append(" | ");
+            out.append(i + 1).append(':').append(exp.fullName())
+                    .append("@s").append(point.staffIndex + 1)
+                    .append(",x").append(Math.round(point.x))
+                    .append(",y").append(Math.round(expectedY));
+            if (bestAny >= 0) {
+                used[bestAny] = true;
+                NoteEvent actual = direct.notes.get(bestAny);
+                AudiverisCompatRecognitionEngine.CandidateDiagnostic d =
+                        bestAny < direct.candidateDiagnostics.size() ? direct.candidateDiagnostics.get(bestAny) : null;
+                out.append(" PITCH_ERROR->").append(actual.fullName())
+                        .append("@").append(Math.round(actual.x)).append(',').append(Math.round(actual.y));
+                if (d != null) out.append('[').append(d.source).append(",score=").append(format1(d.score)).append(']');
+            } else {
+                out.append(" MISSING near=").append(nearestCandidates(point, expectedY, staff, direct, 3));
+            }
+        }
+        return out.toString();
+    }
+
+    private static String nearestCandidates(ExpectedPoint point,
+                                            float expectedY,
+                                            AudiverisCompatRecognitionEngine.StaffModel staff,
+                                            AudiverisCompatRecognitionEngine.DirectRecognition direct,
+                                            int limit) {
+        StringBuilder out = new StringBuilder();
+        boolean[] selected = new boolean[direct.notes.size()];
+        for (int k = 0; k < limit; k++) {
+            int best = -1;
+            float bestDistance = Float.MAX_VALUE;
+            for (int i = 0; i < direct.notes.size(); i++) {
+                if (selected[i]) continue;
+                NoteEvent note = direct.notes.get(i);
+                if (nearestStaff(direct.staves, note.y) != staff) continue;
+                float distance = Math.abs(note.x - point.x) + Math.abs(note.y - expectedY);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    best = i;
+                }
+            }
+            if (best < 0) break;
+            selected[best] = true;
+            NoteEvent note = direct.notes.get(best);
+            AudiverisCompatRecognitionEngine.CandidateDiagnostic d =
+                    best < direct.candidateDiagnostics.size() ? direct.candidateDiagnostics.get(best) : null;
+            if (out.length() > 0) out.append(',');
+            out.append(note.fullName()).append('@').append(Math.round(note.x)).append(',').append(Math.round(note.y))
+                    .append("/d").append(Math.round(bestDistance));
+            if (d != null) out.append('/').append(d.source);
+        }
+        return out.toString();
     }
 
     private static NoteEvent maybeFlatKeyBias(NoteEvent note,
