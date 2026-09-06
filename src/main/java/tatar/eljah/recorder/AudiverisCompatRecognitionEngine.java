@@ -693,62 +693,6 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         return best;
     }
 
-    private List<CandidateNote> detectNoteheadsByXClusters(boolean[] black,
-                                                           int width,
-                                                           int height,
-                                                           List<StaffModel> staves) {
-        List<CandidateNote> out = new ArrayList<CandidateNote>();
-        for (StaffModel staff : staves) {
-            int left = Math.max(0, Math.round(staff.left + staff.spacing));
-            int right = Math.min(width - 1, Math.round(staff.right - staff.spacing));
-            if (right <= left) continue;
-
-            float threshold = Math.max(10f, staff.spacing * staff.spacing * 0.16f);
-            WindowCandidate active = null;
-            int lastHitX = -1;
-            int maxGap = Math.max(2, Math.round(staff.spacing * 0.50f));
-            for (int x = left; x <= right; x += 2) {
-                WindowCandidate best = bestPitchWindowCandidate(black, width, height, staff, x);
-                if (best != null && best.score >= threshold) {
-                    if (active == null || (lastHitX >= 0 && x - lastHitX > maxGap)) {
-                        if (active != null) {
-                            out.add(candidateFromPitchWindow(black, width, height, active, staff));
-                        }
-                        active = best;
-                    } else if (best.score > active.score) {
-                        active = best;
-                    }
-                    lastHitX = x;
-                } else if (active != null && lastHitX >= 0 && x - lastHitX > maxGap) {
-                    out.add(candidateFromPitchWindow(black, width, height, active, staff));
-                    active = null;
-                    lastHitX = -1;
-                }
-            }
-            if (active != null) {
-                out.add(candidateFromPitchWindow(black, width, height, active, staff));
-            }
-        }
-        return out;
-    }
-
-    private WindowCandidate bestPitchWindowCandidate(boolean[] black,
-                                                     int width,
-                                                     int height,
-                                                     StaffModel staff,
-                                                     int x) {
-        WindowCandidate best = null;
-        for (int step = -2; step <= 10; step++) {
-            float y = staff.bottom - step * staff.spacing * 0.5f;
-            if (!isInsideStaffCorridor(staff, y)) continue;
-            float score = pitchWindowInkScore(black, width, height, x, y, staff);
-            if (best == null || score > best.score) {
-                best = new WindowCandidate(x, y, score);
-            }
-        }
-        return best;
-    }
-
     private List<CandidateNote> detectNoteheadsByPitchWindows(boolean[] black,
                                                               int width,
                                                               int height,

@@ -66,9 +66,15 @@ public class AudiverisPhotoRecognitionRegressionTest {
         System.out.println("  sourceSummary=" + sourceSummary(direct));
         System.out.println("  accidentalSummary=" + accidentalSummary(expected, recognized));
         System.out.println("  edgeFilteredAlignment=" + filteredAlignment(expected, direct, FilterMode.EDGE_TOUCHING_COMPONENTS));
+        System.out.println("  narrowComponentFilteredAlignment="
+                + filteredAlignment(expected, direct, FilterMode.NARROW_COMPONENTS));
+        System.out.println("  cleanupFilteredAlignment="
+                + filteredAlignment(expected, direct, FilterMode.EDGE_OR_NARROW_COMPONENTS));
         System.out.println("  coordinateTruth=" + coordinateTruthSummary(expected, direct));
         System.out.println("  edgeFilteredCoordinateTruth="
                 + coordinateTruthSummary(expected, filteredDirectRecognition(direct, FilterMode.EDGE_TOUCHING_COMPONENTS)));
+        System.out.println("  cleanupFilteredCoordinateTruth="
+                + coordinateTruthSummary(expected, filteredDirectRecognition(direct, FilterMode.EDGE_OR_NARROW_COMPONENTS)));
         System.out.println("  locationTruth=" + locationTruthSummary(expected, direct));
         System.out.println("  peaks=" + direct.linePeaks);
         System.out.println("  perStaffAlignment=" + perStaffAlignment(expected, recognized, direct.staves));
@@ -298,7 +304,9 @@ public class AudiverisPhotoRecognitionRegressionTest {
     }
 
     private enum FilterMode {
-        EDGE_TOUCHING_COMPONENTS
+        EDGE_TOUCHING_COMPONENTS,
+        NARROW_COMPONENTS,
+        EDGE_OR_NARROW_COMPONENTS
     }
 
     private static String filteredAlignment(List<NoteEvent> expected,
@@ -328,6 +336,12 @@ public class AudiverisPhotoRecognitionRegressionTest {
         if (d == null) return false;
         if (mode == FilterMode.EDGE_TOUCHING_COMPONENTS) {
             return "component".equals(d.source) && d.minX <= 0;
+        }
+        if (mode == FilterMode.NARROW_COMPONENTS) {
+            return "component".equals(d.source) && d.maxX - d.minX + 1 <= 5;
+        }
+        if (mode == FilterMode.EDGE_OR_NARROW_COMPONENTS) {
+            return "component".equals(d.source) && (d.minX <= 0 || d.maxX - d.minX + 1 <= 5);
         }
         return false;
     }
