@@ -80,14 +80,15 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         List<Integer> linePeaks = detectHorizontalPeaks(black, width, height);
         List<StaffModel> staves = buildStaffModels(linePeaks, width, height, black);
         if (staves.isEmpty()) {
-            return new DirectRecognition(new ArrayList<NoteEvent>(), staves, linePeaks);
+            return new DirectRecognition(new ArrayList<NoteEvent>(), staves, linePeaks, 0);
         }
 
         removeStaffLines(black, width, height, staves);
+        int suppressedOverlays = suppressDarkOverlays(black, width, height, staves);
         List<CandidateNote> candidates = detectNoteheads(black, width, height, staves);
         candidates.addAll(detectNoteheadsByWindows(black, width, height, staves));
         List<NoteEvent> notes = remeasureNotes(dedupeAndOrderNotes(candidates, staves), staves);
-        return new DirectRecognition(notes, staves, linePeaks);
+        return new DirectRecognition(notes, staves, linePeaks, suppressedOverlays);
     }
 
     private OpenCvScoreProcessor.ProcessingResult recognizeArgb(int width,
@@ -112,6 +113,7 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         }
 
         removeStaffLines(black, width, height, staves);
+        int suppressedOverlays = suppressDarkOverlays(black, width, height, staves);
         List<CandidateNote> candidates = detectNoteheads(black, width, height, staves);
         candidates.addAll(detectNoteheadsByWindows(black, width, height, staves));
         if (candidates.isEmpty()) {
@@ -145,10 +147,15 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                 staves.size() * 10,
                 overlay,
                 corridors,
-                "audiveris-compat/android" + AudiverisDependencyBridge.runtimeFlavorSuffix(),
+                "audiveris-compat/android" + AudiverisDependencyBridge.runtimeFlavorSuffix()
+                        + overlayMaskSuffix(suppressedOverlays),
                 false,
                 null,
                 null);
+    }
+
+    private String overlayMaskSuffix(int suppressedOverlays) {
+        return suppressedOverlays <= 0 ? "" : "+overlay-mask" + suppressedOverlays;
     }
 
     private OpenCvScoreProcessor.ProcessingResult withMode(OpenCvScoreProcessor.ProcessingResult base, String mode) {
@@ -390,6 +397,87 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                         black[row + x] = false;
                     }
                 }
+            }
+        }
+    }
+
+    private int suppressDarkOverlays(boolean[] black, int width, int height, List<StaffModel> staves) {
+        boolean[] visited = new boolean[black.length];
+        ArrayDeque<Integer> queue = new ArrayDeque<Integer>();
+        int suppressed = 0;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int start = y * width + x;
+                if (!black[start] || visited[start]) continue;
+
+                int minX = x;
+                int maxX = x;
+                int minY = y;
+                int maxY = y;
+                int area = 0;
+
+                visited[start] = true;
+                queue.clear();
+                queue.add(start);
+                while (!queue.isEmpty()) {
+                    int p = queue.removeFirst();
+                    int px = p % width;
+                    int py = p / width;
+                    area++;
+                    if (px < minX) minX = px;
+                    if (px > maxX) maxX = px;
+                    if (py < minY) minY = py;
+                    if (py > maxY) maxY = py;
+
+                    for (int ny = py - 1; ny <= py + 1; ny++) {
+                        if (ny < 0 || ny >= height) continue;
+                        int row = ny * width;
+                        for (int nx = px - 1; nx <= px + 1; nx++) {
+                            if (nx < 0 || nx >= width) continue;
+                            int np = row + nx;
+                            if (black[np] && !visited[np]) {
+                                visited[np] = true;
+                                queue.add(np);
+                            }
+                        }
+                    }
+                }
+
+                StaffModel staff = overlappingStaff(staves, minY, maxY);
+                if (staff == null) continue;
+                int bw = maxX - minX + 1;
+                int bh = maxY - minY + 1;
+                float fill = area / (float) (bw * bh);
+                if (bw < staff.spacing * 5.0f) continue;
+                if (bh < staff.spacing * 1.4f || bh > staff.spacing * 5.0f) continue;
+                if (fill < 0.38f) continue;
+                clearRect(black, width, height, minX, minY, maxX, maxY);
+                suppressed++;
+            }
+        }
+        return suppressed;
+    }
+
+    private StaffModel overlappingStaff(List<StaffModel> staves, int minY, int maxY) {
+        for (StaffModel staff : staves) {
+            float top = staff.top - staff.spacing * 1.25f;
+            float bottom = staff.bottom + staff.spacing * 1.25f;
+            if (maxY >= top && minY <= bottom) {
+                return staff;
+            }
+        }
+        return null;
+    }
+
+    private void clearRect(boolean[] black, int width, int height, int minX, int minY, int maxX, int maxY) {
+        int left = Math.max(0, minX - 2);
+        int right = Math.min(width - 1, maxX + 2);
+        int top = Math.max(0, minY - 2);
+        int bottom = Math.min(height - 1, maxY + 2);
+        for (int y = top; y <= bottom; y++) {
+            int row = y * width;
+            for (int x = left; x <= right; x++) {
+                black[row + x] = false;
             }
         }
     }
@@ -823,11 +911,16 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         final List<NoteEvent> notes;
         final List<StaffModel> staves;
         final List<Integer> linePeaks;
+        final int suppressedOverlays;
 
-        DirectRecognition(List<NoteEvent> notes, List<StaffModel> staves, List<Integer> linePeaks) {
+        DirectRecognition(List<NoteEvent> notes,
+                          List<StaffModel> staves,
+                          List<Integer> linePeaks,
+                          int suppressedOverlays) {
             this.notes = notes;
             this.staves = staves;
             this.linePeaks = linePeaks;
+            this.suppressedOverlays = suppressedOverlays;
         }
     }
 }

@@ -46,9 +46,11 @@ public class AudiverisPhotoRecognitionRegressionTest {
         System.out.println("  shiftedLcs=" + shiftedLcs(expected, recognized));
         System.out.println("  diatonicShiftedLcs=" + diatonicShiftedLcs(expected, recognized));
         System.out.println("  leftCutSweep=" + leftCutSweep(expected, recognized));
+        System.out.println("  firstStaffCutSweep=" + firstStaffCutSweep(expected, recognized, direct.staves));
         System.out.println("  productionMode=" + production.processingMode
                 + ", productionNotes=" + production.piece.notes.size()
                 + ", durations=" + durationSummary(production.piece.notes));
+        System.out.println("  suppressedOverlays=" + direct.suppressedOverlays);
         System.out.println("  firstDetails=" + firstDetails(recognized, 20));
         System.out.println("  peaks=" + direct.linePeaks);
         for (int i = 0; i < direct.staves.size(); i++) {
@@ -163,6 +165,34 @@ public class AudiverisPhotoRecognitionRegressionTest {
                     filtered.add(MusicNotation.midiFor(note.noteName, note.octave));
                     kept++;
                 }
+            }
+            int lcs = lcsLength(expectedMidi, filtered);
+            if (out.length() > 0) out.append(", ");
+            out.append(minX).append('=').append(kept).append('/').append(lcs);
+        }
+        return out.toString();
+    }
+
+    private static String firstStaffCutSweep(List<NoteEvent> expected,
+                                             List<NoteEvent> actual,
+                                             List<AudiverisCompatRecognitionEngine.StaffModel> staves) {
+        if (staves.isEmpty()) {
+            return "";
+        }
+        AudiverisCompatRecognitionEngine.StaffModel first = staves.get(0);
+        List<Integer> expectedMidi = toMidi(expected);
+        StringBuilder out = new StringBuilder();
+        for (int minX = 0; minX <= 700; minX += 50) {
+            List<Integer> filtered = new ArrayList<Integer>();
+            int kept = 0;
+            for (NoteEvent note : actual) {
+                if (note.y >= first.top - first.spacing * 1.25f
+                        && note.y <= first.bottom + first.spacing * 1.25f
+                        && note.x < minX) {
+                    continue;
+                }
+                filtered.add(MusicNotation.midiFor(note.noteName, note.octave));
+                kept++;
             }
             int lcs = lcsLength(expectedMidi, filtered);
             if (out.length() > 0) out.append(", ");
