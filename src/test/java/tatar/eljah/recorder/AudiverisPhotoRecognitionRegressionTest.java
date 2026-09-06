@@ -33,7 +33,8 @@ public class AudiverisPhotoRecognitionRegressionTest {
         AudiverisCompatRecognitionEngine.DirectRecognition direct = engine.recognizeDirectForTest(width, height, argb);
         List<NoteEvent> recognized = direct.notes;
         List<NoteEvent> expected = ReferenceComposition.expectedReferenceNotes();
-        OpenCvScoreProcessor.ProcessingResult production = engine.recognizeArgbForTest(
+        boolean skipProduction = Boolean.parseBoolean(System.getProperty("fluitblox.omr.skipProduction", "false"));
+        OpenCvScoreProcessor.ProcessingResult production = skipProduction ? null : engine.recognizeArgbForTest(
                 width, height, argb, "Audiveris regression", OpenCvScoreProcessor.ProcessingOptions.defaults());
 
         List<Integer> expectedMidi = toMidi(expected);
@@ -55,9 +56,13 @@ public class AudiverisPhotoRecognitionRegressionTest {
         System.out.println("  staffOffsetSweep=" + staffOffsetSweep(expected, recognized, direct.staves));
         System.out.println("  melodicOutlierSweep=" + melodicOutlierSweep(expected, recognized));
         System.out.println("  playableRangeSweep=" + playableRangeSweep(expected, recognized));
-        System.out.println("  productionMode=" + production.processingMode
-                + ", productionNotes=" + production.piece.notes.size()
-                + ", durations=" + durationSummary(production.piece.notes));
+        if (production == null) {
+            System.out.println("  productionMode=skipped, productionNotes=0, durations=skipped");
+        } else {
+            System.out.println("  productionMode=" + production.processingMode
+                    + ", productionNotes=" + production.piece.notes.size()
+                    + ", durations=" + durationSummary(production.piece.notes));
+        }
         System.out.println("  suppressedOverlays=" + direct.suppressedOverlays
                 + ", rawCandidates=" + direct.rawCandidateCount);
         System.out.println("  alignment=" + alignmentSummary(expected, recognized, 20));
@@ -94,7 +99,9 @@ public class AudiverisPhotoRecognitionRegressionTest {
         }
         writeDebugOverlay(image, direct, new File("target/audiveris-debug.png"));
         writeCoordinateTruthOverlay(image, direct, expected, new File("target/audiveris-coordinate-truth.png"));
-        assertReferenceSnapped(production, expected);
+        if (production != null) {
+            assertReferenceSnapped(production, expected);
+        }
     }
 
     private static List<Integer> toMidi(List<NoteEvent> notes) {
@@ -373,6 +380,7 @@ public class AudiverisPhotoRecognitionRegressionTest {
         int components = 0;
         int windows = 0;
         int pitchWindows = 0;
+        int templates = 0;
         int edgeComponents = 0;
         for (AudiverisCompatRecognitionEngine.CandidateDiagnostic d : direct.candidateDiagnostics) {
             if ("component".equals(d.source)) {
@@ -382,10 +390,13 @@ public class AudiverisPhotoRecognitionRegressionTest {
                 windows++;
             } else if ("pitch-window".equals(d.source)) {
                 pitchWindows++;
+            } else if ("template".equals(d.source)) {
+                templates++;
             }
         }
         return "component=" + components + ", window=" + windows
-                + ", pitchWindow=" + pitchWindows + ", edgeComponents=" + edgeComponents;
+                + ", pitchWindow=" + pitchWindows + ", template=" + templates
+                + ", edgeComponents=" + edgeComponents;
     }
 
     private static String accidentalSummary(List<NoteEvent> expected, List<NoteEvent> actual) {
@@ -520,7 +531,7 @@ public class AudiverisPhotoRecognitionRegressionTest {
                                                  AudiverisCompatRecognitionEngine.DirectRecognition direct) {
         List<ExpectedPoint> points = expectedReferencePoints();
         StringBuilder out = new StringBuilder();
-        String[] sources = {"component", "window", "pitch-window"};
+        String[] sources = {"component", "window", "pitch-window", "template"};
         for (String source : sources) {
             int total = 0;
             int hits = 0;
@@ -656,7 +667,7 @@ public class AudiverisPhotoRecognitionRegressionTest {
         int bestLcs = baseLcs;
         int bestExact = exactCoordinateMatches(expected, direct.notes, direct.staves);
         int bestLocalized = localizedCoordinateMatches(expected, direct.notes, direct.staves);
-        String[] sources = {"component", "window", "pitch-window"};
+        String[] sources = {"component", "window", "pitch-window", "template"};
         for (String source : sources) {
             for (int staffIndex = 0; staffIndex < direct.staves.size(); staffIndex++) {
                 for (int steps = -4; steps <= 4; steps++) {
