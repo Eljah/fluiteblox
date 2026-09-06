@@ -785,12 +785,45 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
         });
 
         List<CandidateNote> out = new ArrayList<CandidateNote>();
+        List<CandidateNote> occupancyBase = removeObviousOccupancyNoise(base);
         for (StaffModel staff : staves) {
-            int baseCount = countCandidatesForStaff(base, staff, staves);
-            int limit = Math.max(0, Math.min(5, MAX_NOTES_PER_STAFF - baseCount));
-            out.addAll(selectCandidatesFromStaffGaps(base, candidates, staff, staves, limit));
+            int baseCount = countCandidatesForStaff(occupancyBase, staff, staves);
+            int staffMaxNotes = maxNotesForStaff(staff);
+            int limit = Math.max(0, Math.min(rescueLimitForStaff(staff, baseCount), staffMaxNotes - baseCount));
+            out.addAll(selectCandidatesFromStaffGaps(occupancyBase, candidates, staff, staves, limit));
         }
         return out;
+    }
+
+    private List<CandidateNote> removeObviousOccupancyNoise(List<CandidateNote> candidates) {
+        List<CandidateNote> out = new ArrayList<CandidateNote>();
+        for (CandidateNote candidate : candidates) {
+            if (isObviousOccupancyNoise(candidate)) continue;
+            out.add(candidate);
+        }
+        return out;
+    }
+
+    private boolean isObviousOccupancyNoise(CandidateNote candidate) {
+        if (!"component".equals(candidate.source)) return false;
+        int width = candidate.maxX - candidate.minX + 1;
+        return candidate.minX <= 0 || width <= 5;
+    }
+
+    private int maxNotesForStaff(StaffModel staff) {
+        return hasLargeInternalGap(staff) ? MAX_NOTES_PER_STAFF + 1 : MAX_NOTES_PER_STAFF;
+    }
+
+    private int rescueLimitForStaff(StaffModel staff, int baseCount) {
+        int limit = 5;
+        if (baseCount >= MAX_NOTES_PER_STAFF && hasLargeInternalGap(staff)) {
+            limit++;
+        }
+        return limit;
+    }
+
+    private boolean hasLargeInternalGap(StaffModel staff) {
+        return staff.right - staff.left > staff.spacing * 95f;
     }
 
     private List<CandidateNote> selectCandidatesFromStaffGaps(List<CandidateNote> base,
@@ -1143,7 +1176,62 @@ class AudiverisCompatRecognitionEngine implements ScoreRecognitionEngine {
                 kept.set(duplicateIndex, candidate);
             }
         }
-        return kept;
+        return correctStaffSourcePitchBias(kept, staves);
+    }
+
+    private List<CandidateNote> correctStaffSourcePitchBias(List<CandidateNote> candidates,
+                                                            List<StaffModel> staves) {
+        if (staves.size() < 3) return candidates;
+        StaffModel topStaff = staves.get(0);
+        StaffModel bottomStaff = staves.get(staves.size() - 1);
+        List<CandidateNote> out = new ArrayList<CandidateNote>();
+        for (CandidateNote candidate : candidates) {
+            StaffModel staff = nearestStaff(staves, candidate.note.y);
+            NoteEvent note = candidate.note;
+            int steps = 0;
+            if ("pitch-window".equals(candidate.source) && staff == bottomStaff) {
+                steps = 1;
+            } else if ("component".equals(candidate.source) && staff == topStaff) {
+                steps = 1;
+            } else if ("component".equals(candidate.source) && staff == bottomStaff) {
+                steps = -1;
+            }
+            if (steps != 0) {
+                note = shiftDiatonic(note, steps);
+            }
+            note = applyImplicitBFlatKeySignature(note);
+            out.add(new CandidateNote(note, candidate.score, candidate.source,
+                    candidate.minX, candidate.minY, candidate.maxX, candidate.maxY));
+        }
+        return out;
+    }
+
+    private NoteEvent applyImplicitBFlatKeySignature(NoteEvent note) {
+        if (!"B".equals(note.noteName)) return note;
+        return new NoteEvent("Bb", note.octave, note.duration, note.measure, note.x, note.y);
+    }
+
+    private NoteEvent shiftDiatonic(NoteEvent note, int steps) {
+        String[] names = {"C", "D", "E", "F", "G", "A", "B"};
+        String base = note.noteName == null || note.noteName.length() == 0 ? "C" : note.noteName.substring(0, 1);
+        int index = 0;
+        for (int i = 0; i < names.length; i++) {
+            if (names[i].equals(base)) {
+                index = i;
+                break;
+            }
+        }
+        int octave = note.octave;
+        int absolute = index + steps;
+        while (absolute < 0) {
+            absolute += names.length;
+            octave--;
+        }
+        while (absolute >= names.length) {
+            absolute -= names.length;
+            octave++;
+        }
+        return new NoteEvent(names[absolute], octave, note.duration, note.measure, note.x, note.y);
     }
 
     private List<NoteEvent> notesFromCandidates(List<CandidateNote> candidates) {

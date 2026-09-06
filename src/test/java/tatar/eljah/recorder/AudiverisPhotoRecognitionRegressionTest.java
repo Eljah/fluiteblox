@@ -54,6 +54,7 @@ public class AudiverisPhotoRecognitionRegressionTest {
         System.out.println("  staffShiftSweep=" + staffShiftSweep(expected, recognized, direct.staves));
         System.out.println("  staffOffsetSweep=" + staffOffsetSweep(expected, recognized, direct.staves));
         System.out.println("  melodicOutlierSweep=" + melodicOutlierSweep(expected, recognized));
+        System.out.println("  playableRangeSweep=" + playableRangeSweep(expected, recognized));
         System.out.println("  productionMode=" + production.processingMode
                 + ", productionNotes=" + production.piece.notes.size()
                 + ", durations=" + durationSummary(production.piece.notes));
@@ -76,6 +77,11 @@ public class AudiverisPhotoRecognitionRegressionTest {
         System.out.println("  cleanupFilteredCoordinateTruth="
                 + coordinateTruthSummary(expected, filteredDirectRecognition(direct, FilterMode.EDGE_OR_NARROW_COMPONENTS)));
         System.out.println("  locationTruth=" + locationTruthSummary(expected, direct));
+        System.out.println("  candidateTruthBySource=" + candidateTruthBySource(expected, direct));
+        System.out.println("  bestStaffPitchCorrection=" + bestStaffPitchCorrection(expected, direct));
+        System.out.println("  bestSourcePitchCorrection=" + bestSourcePitchCorrection(expected, direct));
+        System.out.println("  flatKeyBiasTruth=" + flatKeyBiasTruth(expected, direct));
+        System.out.println("  bFlatKeyTruth=" + bFlatKeyTruth(expected, direct));
         System.out.println("  peaks=" + direct.linePeaks);
         System.out.println("  perStaffAlignment=" + perStaffAlignment(expected, recognized, direct.staves));
         for (int i = 0; i < direct.staves.size(); i++) {
@@ -510,6 +516,319 @@ public class AudiverisPhotoRecognitionRegressionTest {
                 + ", pitchErrorFirst=" + limitText(pitchErrors.toString(), 260);
     }
 
+    private static String candidateTruthBySource(List<NoteEvent> expected,
+                                                 AudiverisCompatRecognitionEngine.DirectRecognition direct) {
+        List<ExpectedPoint> points = expectedReferencePoints();
+        StringBuilder out = new StringBuilder();
+        String[] sources = {"component", "window", "pitch-window"};
+        for (String source : sources) {
+            int total = 0;
+            int hits = 0;
+            int localized = 0;
+            int hitMinWidth = Integer.MAX_VALUE;
+            int hitMaxWidth = 0;
+            float hitMinScore = Float.MAX_VALUE;
+            float hitMaxScore = 0f;
+            int missMinWidth = Integer.MAX_VALUE;
+            int missMaxWidth = 0;
+            float missMinScore = Float.MAX_VALUE;
+            float missMaxScore = 0f;
+            for (int i = 0; i < direct.notes.size() && i < direct.candidateDiagnostics.size(); i++) {
+                AudiverisCompatRecognitionEngine.CandidateDiagnostic diagnostic = direct.candidateDiagnostics.get(i);
+                if (!source.equals(diagnostic.source)) continue;
+                NoteEvent note = direct.notes.get(i);
+                total++;
+                int width = diagnostic.maxX - diagnostic.minX + 1;
+                boolean hit = isCoordinateTruthHit(note, expected, points, direct.staves);
+                if (isLocationTruthHit(note, points, direct.staves)) localized++;
+                if (hit) {
+                    hits++;
+                    hitMinWidth = Math.min(hitMinWidth, width);
+                    hitMaxWidth = Math.max(hitMaxWidth, width);
+                    hitMinScore = Math.min(hitMinScore, diagnostic.score);
+                    hitMaxScore = Math.max(hitMaxScore, diagnostic.score);
+                } else {
+                    missMinWidth = Math.min(missMinWidth, width);
+                    missMaxWidth = Math.max(missMaxWidth, width);
+                    missMinScore = Math.min(missMinScore, diagnostic.score);
+                    missMaxScore = Math.max(missMaxScore, diagnostic.score);
+                }
+            }
+            if (out.length() > 0) out.append(" | ");
+            out.append(source)
+                    .append(": exact=").append(hits).append('/').append(total)
+                    .append(", localized=").append(localized).append('/').append(total)
+                    .append(", hitW=").append(range(hitMinWidth, hitMaxWidth, hits))
+                    .append(", missW=").append(range(missMinWidth, missMaxWidth, total - hits))
+                    .append(", hitScore=").append(scoreRange(hitMinScore, hitMaxScore, hits))
+                    .append(", missScore=").append(scoreRange(missMinScore, missMaxScore, total - hits));
+        }
+        return out.toString();
+    }
+
+    private static boolean isLocationTruthHit(NoteEvent actual,
+                                              List<ExpectedPoint> points,
+                                              List<AudiverisCompatRecognitionEngine.StaffModel> staves) {
+        for (ExpectedPoint point : points) {
+            if (point.staffIndex >= staves.size()) continue;
+            AudiverisCompatRecognitionEngine.StaffModel staff = staves.get(point.staffIndex);
+            if (nearestStaff(staves, actual.y) != staff) continue;
+            float xTolerance = Math.max(18f, staff.spacing * 2.2f);
+            float yTolerance = Math.max(8f, staff.spacing * 1.15f);
+            if (Math.abs(actual.x - point.x) <= xTolerance
+                    && actual.y >= staff.top - yTolerance
+                    && actual.y <= staff.bottom + yTolerance) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isCoordinateTruthHit(NoteEvent actual,
+                                                List<NoteEvent> expected,
+                                                List<ExpectedPoint> points,
+                                                List<AudiverisCompatRecognitionEngine.StaffModel> staves) {
+        for (int i = 0; i < expected.size() && i < points.size(); i++) {
+            ExpectedPoint point = points.get(i);
+            if (point.staffIndex >= staves.size()) continue;
+            AudiverisCompatRecognitionEngine.StaffModel staff = staves.get(point.staffIndex);
+            if (nearestStaff(staves, actual.y) != staff) continue;
+            if (!samePitch(expected.get(i), actual)) continue;
+            float expectedY = expectedY(expected.get(i), staff);
+            float xTolerance = Math.max(18f, staff.spacing * 2.2f);
+            float yTolerance = Math.max(8f, staff.spacing * 1.15f);
+            if (Math.abs(actual.x - point.x) <= xTolerance && Math.abs(actual.y - expectedY) <= yTolerance) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String range(int min, int max, int count) {
+        if (count == 0) return "-";
+        return min + ".." + max;
+    }
+
+    private static String scoreRange(float min, float max, int count) {
+        if (count == 0) return "-";
+        return Math.round(min) + ".." + Math.round(max);
+    }
+
+    private static String bestStaffPitchCorrection(List<NoteEvent> expected,
+                                                   AudiverisCompatRecognitionEngine.DirectRecognition direct) {
+        int baseLcs = lcsLength(toMidi(expected), toMidi(direct.notes));
+        int bestStaff = -1;
+        int bestSteps = 0;
+        int bestLcs = baseLcs;
+        int bestExact = exactCoordinateMatches(expected, direct.notes, direct.staves);
+        int bestLocalized = localizedCoordinateMatches(expected, direct.notes, direct.staves);
+        for (int staffIndex = 0; staffIndex < direct.staves.size(); staffIndex++) {
+            for (int steps = -3; steps <= 3; steps++) {
+                if (steps == 0) continue;
+                List<NoteEvent> shifted = shiftStaffNotes(direct.notes, direct.staves, staffIndex, steps);
+                int lcs = lcsLength(toMidi(expected), toMidi(shifted));
+                int exact = exactCoordinateMatches(expected, shifted, direct.staves);
+                int localized = localizedCoordinateMatches(expected, shifted, direct.staves);
+                if (lcs > bestLcs || (lcs == bestLcs && exact > bestExact)
+                        || (lcs == bestLcs && exact == bestExact && localized > bestLocalized)) {
+                    bestStaff = staffIndex;
+                    bestSteps = steps;
+                    bestLcs = lcs;
+                    bestExact = exact;
+                    bestLocalized = localized;
+                }
+            }
+        }
+        return "baseLcs=" + baseLcs
+                + ", bestStaff=" + bestStaff
+                + ", steps=" + bestSteps
+                + ", lcs=" + bestLcs
+                + ", exact=" + bestExact
+                + ", localized=" + bestLocalized;
+    }
+
+    private static String bestSourcePitchCorrection(List<NoteEvent> expected,
+                                                    AudiverisCompatRecognitionEngine.DirectRecognition direct) {
+        int baseLcs = lcsLength(toMidi(expected), toMidi(direct.notes));
+        String bestSource = "-";
+        int bestStaff = -1;
+        int bestSteps = 0;
+        int bestLcs = baseLcs;
+        int bestExact = exactCoordinateMatches(expected, direct.notes, direct.staves);
+        int bestLocalized = localizedCoordinateMatches(expected, direct.notes, direct.staves);
+        String[] sources = {"component", "window", "pitch-window"};
+        for (String source : sources) {
+            for (int staffIndex = 0; staffIndex < direct.staves.size(); staffIndex++) {
+                for (int steps = -4; steps <= 4; steps++) {
+                    if (steps == 0) continue;
+                    List<NoteEvent> shifted = shiftSourceStaffNotes(direct, source, staffIndex, steps);
+                    int lcs = lcsLength(toMidi(expected), toMidi(shifted));
+                    int exact = exactCoordinateMatches(expected, shifted, direct.staves);
+                    int localized = localizedCoordinateMatches(expected, shifted, direct.staves);
+                    if (lcs > bestLcs || (lcs == bestLcs && exact > bestExact)
+                            || (lcs == bestLcs && exact == bestExact && localized > bestLocalized)) {
+                        bestSource = source;
+                        bestStaff = staffIndex;
+                        bestSteps = steps;
+                        bestLcs = lcs;
+                        bestExact = exact;
+                        bestLocalized = localized;
+                    }
+                }
+            }
+        }
+        return "baseLcs=" + baseLcs
+                + ", source=" + bestSource
+                + ", staff=" + bestStaff
+                + ", steps=" + bestSteps
+                + ", lcs=" + bestLcs
+                + ", exact=" + bestExact
+                + ", localized=" + bestLocalized;
+    }
+
+    private static List<NoteEvent> shiftSourceStaffNotes(AudiverisCompatRecognitionEngine.DirectRecognition direct,
+                                                         String source,
+                                                         int staffIndex,
+                                                         int steps) {
+        List<NoteEvent> out = new ArrayList<NoteEvent>();
+        AudiverisCompatRecognitionEngine.StaffModel target = direct.staves.get(staffIndex);
+        for (int i = 0; i < direct.notes.size(); i++) {
+            NoteEvent note = direct.notes.get(i);
+            AudiverisCompatRecognitionEngine.CandidateDiagnostic diagnostic =
+                    i < direct.candidateDiagnostics.size() ? direct.candidateDiagnostics.get(i) : null;
+            if (diagnostic != null && source.equals(diagnostic.source) && nearestStaff(direct.staves, note.y) == target) {
+                NoteEvent shifted = shiftDiatonic(note.noteName, note.octave, steps);
+                out.add(new NoteEvent(shifted.noteName, shifted.octave, note.duration, note.measure, note.x, note.y));
+            } else {
+                out.add(note);
+            }
+        }
+        return out;
+    }
+
+    private static String flatKeyBiasTruth(List<NoteEvent> expected,
+                                           AudiverisCompatRecognitionEngine.DirectRecognition direct) {
+        List<NoteEvent> biased = new ArrayList<NoteEvent>();
+        int changed = 0;
+        for (NoteEvent note : direct.notes) {
+            NoteEvent replacement = maybeFlatKeyBias(note, direct.staves);
+            if (!replacement.fullName().equals(note.fullName())) changed++;
+            biased.add(replacement);
+        }
+        int lcs = lcsLength(toMidi(expected), toMidi(biased));
+        int exact = exactCoordinateMatches(expected, biased, direct.staves);
+        int localized = localizedCoordinateMatches(expected, biased, direct.staves);
+        return "changed=" + changed
+                + ", lcs=" + lcs
+                + ", exact=" + exact
+                + ", localized=" + localized;
+    }
+
+    private static String bFlatKeyTruth(List<NoteEvent> expected,
+                                        AudiverisCompatRecognitionEngine.DirectRecognition direct) {
+        List<NoteEvent> flattened = new ArrayList<NoteEvent>();
+        int changed = 0;
+        for (NoteEvent note : direct.notes) {
+            if ("B".equals(note.noteName)) {
+                flattened.add(new NoteEvent("Bb", note.octave, note.duration, note.measure, note.x, note.y));
+                changed++;
+            } else {
+                flattened.add(note);
+            }
+        }
+        int lcs = lcsLength(toMidi(expected), toMidi(flattened));
+        int exact = exactCoordinateMatches(expected, flattened, direct.staves);
+        int localized = localizedCoordinateMatches(expected, flattened, direct.staves);
+        return "changed=" + changed
+                + ", lcs=" + lcs
+                + ", exact=" + exact
+                + ", localized=" + localized;
+    }
+
+    private static NoteEvent maybeFlatKeyBias(NoteEvent note,
+                                              List<AudiverisCompatRecognitionEngine.StaffModel> staves) {
+        if (!"C".equals(note.noteName) || note.octave != 5) {
+            return note;
+        }
+        AudiverisCompatRecognitionEngine.StaffModel staff = nearestStaff(staves, note.y);
+        if (staff == null) return note;
+        float b4Y = expectedY(new NoteEvent("B", 4, note.duration, note.measure), staff);
+        float c5Y = expectedY(new NoteEvent("C", 5, note.duration, note.measure), staff);
+        float boundary = (b4Y + c5Y) * 0.5f;
+        if (note.y > boundary - staff.spacing * 0.18f) {
+            return new NoteEvent("Bb", 4, note.duration, note.measure, note.x, note.y);
+        }
+        return note;
+    }
+
+    private static List<NoteEvent> shiftStaffNotes(List<NoteEvent> notes,
+                                                   List<AudiverisCompatRecognitionEngine.StaffModel> staves,
+                                                   int staffIndex,
+                                                   int steps) {
+        List<NoteEvent> out = new ArrayList<NoteEvent>();
+        AudiverisCompatRecognitionEngine.StaffModel target = staves.get(staffIndex);
+        for (NoteEvent note : notes) {
+            if (nearestStaff(staves, note.y) == target) {
+                NoteEvent shifted = shiftDiatonic(note.noteName, note.octave, steps);
+                out.add(new NoteEvent(shifted.noteName, shifted.octave, note.duration, note.measure, note.x, note.y));
+            } else {
+                out.add(note);
+            }
+        }
+        return out;
+    }
+
+    private static int exactCoordinateMatches(List<NoteEvent> expected,
+                                              List<NoteEvent> actual,
+                                              List<AudiverisCompatRecognitionEngine.StaffModel> staves) {
+        return coordinateMatchCounts(expected, actual, staves, true);
+    }
+
+    private static int localizedCoordinateMatches(List<NoteEvent> expected,
+                                                  List<NoteEvent> actual,
+                                                  List<AudiverisCompatRecognitionEngine.StaffModel> staves) {
+        return coordinateMatchCounts(expected, actual, staves, false);
+    }
+
+    private static int coordinateMatchCounts(List<NoteEvent> expected,
+                                             List<NoteEvent> actual,
+                                             List<AudiverisCompatRecognitionEngine.StaffModel> staves,
+                                             boolean requirePitch) {
+        List<ExpectedPoint> points = expectedReferencePoints();
+        boolean[] matchedActual = new boolean[actual.size()];
+        int matched = 0;
+        for (int i = 0; i < expected.size() && i < points.size(); i++) {
+            ExpectedPoint point = points.get(i);
+            if (point.staffIndex >= staves.size()) continue;
+            NoteEvent exp = expected.get(i);
+            AudiverisCompatRecognitionEngine.StaffModel staff = staves.get(point.staffIndex);
+            float expectedY = expectedY(exp, staff);
+            float xTolerance = Math.max(18f, staff.spacing * 2.2f);
+            float yTolerance = Math.max(8f, staff.spacing * (requirePitch ? 0.85f : 1.15f));
+            int bestIndex = -1;
+            float bestDistance = Float.MAX_VALUE;
+            for (int j = 0; j < actual.size(); j++) {
+                if (matchedActual[j]) continue;
+                NoteEvent note = actual.get(j);
+                if (nearestStaff(staves, note.y) != staff) continue;
+                if (requirePitch && !samePitch(exp, note)) continue;
+                float dx = Math.abs(note.x - point.x);
+                float dy = Math.abs(note.y - expectedY);
+                if (dx > xTolerance || dy > yTolerance) continue;
+                float distance = dx + dy;
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestIndex = j;
+                }
+            }
+            if (bestIndex >= 0) {
+                matchedActual[bestIndex] = true;
+                matched++;
+            }
+        }
+        return matched;
+    }
+
     private static void appendPitchError(StringBuilder out,
                                          int expectedIndex,
                                          String expected,
@@ -772,6 +1091,22 @@ public class AudiverisPhotoRecognitionRegressionTest {
             out.append(threshold).append('=').append(filteredNotes.size()).append('/').append(lcs);
         }
         return out.toString();
+    }
+
+    private static String playableRangeSweep(List<NoteEvent> expected, List<NoteEvent> actual) {
+        int min = MusicNotation.midiFor("F", 4);
+        int max = MusicNotation.midiFor("G", 5);
+        List<NoteEvent> filtered = new ArrayList<NoteEvent>();
+        for (NoteEvent note : actual) {
+            int midi = MusicNotation.midiFor(note.noteName, note.octave);
+            if (midi >= min && midi <= max) {
+                filtered.add(note);
+            }
+        }
+        int lcs = lcsLength(toMidi(expected), toMidi(filtered));
+        return "F4..G5=" + filtered.size() + "/" + lcs
+                + ", coverage=" + percent(lcs, expected.size()) + "%"
+                + ", precision=" + percent(lcs, filtered.size()) + "%";
     }
 
     private static List<NoteEvent> filterMelodicOutliers(List<NoteEvent> notes, int semitoneThreshold) {
