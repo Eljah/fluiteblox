@@ -122,6 +122,22 @@
                 <android.sdk.home>${env.ANDROID_SDK_ROOT}</android.sdk.home>
             </properties>
         </profile>
+        <profile>
+            <id>audiveris-dependency</id>
+            <activation>
+                <property>
+                    <name>audiveris.dependency</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>org.audiveris</groupId>
+                    <artifactId>proxymusic</artifactId>
+                    <version>4.0.3</version>
+                </dependency>
+            </dependencies>
+        </profile>
     </profiles>
 
         <repositories>
