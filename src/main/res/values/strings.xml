@@ -5,6 +5,7 @@
     <string name="main_library">2) Библиотека произведений</string>
     <string name="main_settings">3) Настройки</string>
     <string name="main_achievements">4) Достижения и прогресс</string>
+    <string name="main_tank_game">5) Нотный танкодром</string>
 
     <string name="settings_title">Настройки распознавания</string>
     <string name="settings_threshold_value_default">Порог интенсивности: 0.030</string>

@@ -19,6 +19,7 @@
         android:theme="@style/AppTheme">
         <activity android:name="tatar.eljah.recorder.AudioSettingsActivity" android:exported="false" />
         <activity android:name="tatar.eljah.recorder.AchievementsActivity" android:exported="false" />
+        <activity android:name="tatar.eljah.recorder.TankDefenseActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name="tatar.eljah.recorder.SettingsActivity" android:exported="false" />
         <activity android:name="tatar.eljah.recorder.FingeringHintActivity" android:exported="false" />
         <activity android:name="tatar.eljah.recorder.ScorePlayActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
