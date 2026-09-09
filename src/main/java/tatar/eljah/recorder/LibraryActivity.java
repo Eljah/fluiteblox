@@ -66,6 +66,7 @@ public class LibraryActivity extends AppCompatActivity {
 
     private void showExportDialog(final ScorePiece piece) {
         String[] options = new String[]{
+                getString(R.string.library_play_tanks),
                 getString(R.string.library_export_musicxml),
                 getString(R.string.library_export_midi)
         };
@@ -74,7 +75,13 @@ public class LibraryActivity extends AppCompatActivity {
                 .setItems(options, new android.content.DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(android.content.DialogInterface dialog, int which) {
-                        exportPiece(piece, which == 0);
+                        if (which == 0) {
+                            Intent intent = new Intent(LibraryActivity.this, TankDefenseActivity.class);
+                            intent.putExtra(TankDefenseActivity.EXTRA_PIECE_ID, piece.id);
+                            startActivity(intent);
+                            return;
+                        }
+                        exportPiece(piece, which == 1);
                     }
                 })
                 .show();

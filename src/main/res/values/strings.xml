@@ -59,6 +59,7 @@
     <string name="library_back">Назад в меню</string>
 
     <string name="library_export_title">Экспорт: %1$s</string>
+    <string name="library_play_tanks">Играть в танкодроме</string>
     <string name="library_export_musicxml">Экспорт в MusicXML</string>
     <string name="library_export_midi">Экспорт в MIDI</string>
     <string name="library_export_success">Файл сохранен: %1$s</string>
