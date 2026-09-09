@@ -81,6 +81,7 @@
     <string name="play_midi_failed">Не удалось запустить проигрывание на этом устройстве.</string>
     <string name="play_waiting_intensity">Слишком тихо (порог: %.3f). Сыграйте громче или настройте порог.</string>
     <string name="play_restart">Начать заново</string>
+    <string name="play_back">Назад</string>
     <string name="play_restarted">Прогресс сброшен. Начинайте с первой ноты.</string>
     <string name="play_simplified_mode">Упрощенный режим (#/b = та же нота)</string>
     <string name="play_header_with_fingering">Fluiteblox — %1$s</string>

@@ -65,23 +65,30 @@ public class ScoreLibraryRepository {
         } catch (JSONException ignored) {
             result.clear();
         }
-        upsertPreloadedPiece(result);
+        upsertPreloadedPieces(result);
         return result;
     }
 
 
-    private void upsertPreloadedPiece(List<ScorePiece> pieces) {
+    private void upsertPreloadedPieces(List<ScorePiece> pieces) {
+        upsertPreloadedPiece(pieces, buildPreloadedEtudePiece(), ReferenceComposition.EXPECTED_NOTES);
+        for (ScorePiece piece : PreloadedScoreLibrary.buildPieces()) {
+            upsertPreloadedPiece(pieces, piece, piece.notes.size());
+        }
+    }
+
+    private void upsertPreloadedPiece(List<ScorePiece> pieces, ScorePiece replacement, int expectedNotes) {
         for (int i = 0; i < pieces.size(); i++) {
             ScorePiece piece = pieces.get(i);
-            if (!PRELOADED_ETUDE_ID.equals(piece.id)) {
+            if (!replacement.id.equals(piece.id)) {
                 continue;
             }
-            if (piece.notes == null || piece.notes.size() != ReferenceComposition.EXPECTED_NOTES) {
-                pieces.set(i, buildPreloadedEtudePiece());
+            if (piece.notes == null || piece.notes.size() != expectedNotes) {
+                pieces.set(i, replacement);
             }
             return;
         }
-        pieces.add(buildPreloadedEtudePiece());
+        pieces.add(replacement);
     }
 
     private ScorePiece buildPreloadedEtudePiece() {

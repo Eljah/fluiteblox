@@ -29,6 +29,7 @@ public class ScorePlayActivity extends AppCompatActivity {
     private static final int SYNTH_SAMPLE_RATE = 22050;
     private static final int SAFE_SAMPLE_RATE = 44100;
     private static final int ENVELOPE_FADE_MS = 8;
+    private static final int PLAYBACK_PREROLL_MS = 350;
     private static final long TABLATURE_MISMATCH_GRACE_MS = 120L;
     private static final int TABLATURE_MISMATCH_CONFIRMATION_FRAMES = 2;
     private static final int MIN_MATCH_HOLD_MS = 110;
@@ -107,6 +108,16 @@ public class ScorePlayActivity extends AppCompatActivity {
         if (piece == null || piece.notes.isEmpty()) {
             status.setText(R.string.play_no_piece);
             return;
+        }
+
+        Button backButton = findViewById(R.id.btn_back_to_library);
+        if (backButton != null) {
+            backButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    exitToLibrary();
+                }
+            });
         }
 
         ((TextView) findViewById(R.id.text_piece_title)).setText(piece.title);
@@ -797,6 +808,7 @@ public class ScorePlayActivity extends AppCompatActivity {
                 return;
             }
             track.play();
+            writeSilence(track, sampleRate, Math.max(PLAYBACK_PREROLL_MS, ENVELOPE_FADE_MS * 2), midiMode);
 
             short[] buffer = new short[Math.max(sampleRate / 8, 512)];
             for (int i = 0; i < piece.notes.size() && playbackRequested(midiMode); i++) {
@@ -873,6 +885,26 @@ public class ScorePlayActivity extends AppCompatActivity {
             }
             setPlaybackRequested(midiMode, false);
             abandonMusicFocusIfOwned(focusToken);
+        }
+    }
+
+    private void writeSilence(AudioTrack track, int sampleRate, int durationMs, boolean midiMode) {
+        if (track == null || sampleRate <= 0 || durationMs <= 0) {
+            return;
+        }
+        int totalSamples = sampleRate * durationMs / 1000;
+        short[] silence = new short[Math.min(Math.max(sampleRate / 20, 256), Math.max(totalSamples, 256))];
+        int written = 0;
+        while (written < totalSamples && playbackRequested(midiMode)) {
+            if (Thread.currentThread().isInterrupted()) {
+                return;
+            }
+            int chunk = Math.min(silence.length, totalSamples - written);
+            int result = track.write(silence, 0, chunk);
+            if (result <= 0) {
+                return;
+            }
+            written += result;
         }
     }
 
@@ -1009,7 +1041,14 @@ public class ScorePlayActivity extends AppCompatActivity {
             closePanoramaContext();
             return;
         }
-        super.onBackPressed();
+        exitToLibrary();
+    }
+
+    private void exitToLibrary() {
+        pitchAnalyzer.stop();
+        stopMidiPlayback();
+        stopTablaturePlayback();
+        finish();
     }
 
     @Override
