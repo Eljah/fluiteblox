@@ -23,6 +23,7 @@ import java.util.List;
 
 import tatar.eljah.audio.AudioSettingsStore;
 import tatar.eljah.audio.PitchAnalyzer;
+import tatar.eljah.fluitblox.R;
 
 public class TankDefenseActivity extends AppCompatActivity {
     public static final String EXTRA_PIECE_ID = "tank_piece_id";
@@ -56,6 +57,12 @@ public class TankDefenseActivity extends AppCompatActivity {
         repository = new ScoreLibraryRepository(this);
         piece = resolvePiece();
         gameView = new TankDefenseGameView(this, piece);
+        gameView.setCurrentNoteListener(new TankDefenseGameView.CurrentNoteListener() {
+            @Override
+            public void onCurrentNoteChanged(String fullName) {
+                updateTitleFingering(fullName);
+            }
+        });
         setContentView(buildContentView());
         intensityThreshold = AudioSettingsStore.intensityThreshold(this);
         ensureMicListening();
@@ -189,6 +196,14 @@ public class TankDefenseActivity extends AppCompatActivity {
         stopDemoPlayback();
         piece = selected;
         gameView.setPiece(piece);
+    }
+
+    private void updateTitleFingering(String fullName) {
+        if (fullName == null || fullName.length() == 0) {
+            setTitle(getString(R.string.app_name));
+            return;
+        }
+        setTitle(getString(R.string.play_header_with_fingering, mapper.fingeringFor(fullName)));
     }
 
     private int dp(int value) {

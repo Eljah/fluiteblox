@@ -12,6 +12,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TankDefenseGameView extends View {
+    public interface CurrentNoteListener {
+        void onCurrentNoteChanged(String fullName);
+    }
+
     private static final String[] LANES = {"C", "D", "E", "F", "G", "A", "B"};
     private static final long FIRST_NOTE_DELAY_MS = 2200L;
     private static final long TANK_TRAVEL_MS = 4300L;
@@ -31,6 +35,8 @@ public class TankDefenseGameView extends View {
     private int misses;
     private long lastInputAtMs;
     private boolean demoAutoFire;
+    private String currentTitleNote;
+    private CurrentNoteListener currentNoteListener;
 
     public TankDefenseGameView(Context context, ScorePiece piece) {
         super(context);
@@ -45,6 +51,7 @@ public class TankDefenseGameView extends View {
         score = 0;
         misses = 0;
         lastInputAtMs = 0L;
+        currentTitleNote = null;
         shots.clear();
         for (Target target : targets) {
             target.hit = false;
@@ -53,6 +60,11 @@ public class TankDefenseGameView extends View {
             target.hitX = 0f;
         }
         invalidate();
+    }
+
+    public void setCurrentNoteListener(CurrentNoteListener listener) {
+        currentNoteListener = listener;
+        notifyCurrentNoteChanged(currentNoteForTitle(elapsedMs()));
     }
 
     public void setSpeedMultiplier(float speedMultiplier) {
@@ -112,6 +124,7 @@ public class TankDefenseGameView extends View {
         long now = elapsedMs();
         autoFireDemoTargets(now);
         updateMisses(now);
+        updateCurrentTitleNote(now);
         drawHeader(canvas, now);
         drawBattlefield(canvas, now);
         postInvalidateDelayed(16L);
@@ -377,6 +390,39 @@ public class TankDefenseGameView extends View {
         }
     }
 
+    private void updateCurrentTitleNote(long now) {
+        notifyCurrentNoteChanged(currentNoteForTitle(now));
+    }
+
+    private String currentNoteForTitle(long now) {
+        Target best = null;
+        long bestDue = Long.MAX_VALUE;
+        long graceMs = hitWindowMs();
+        for (Target target : targets) {
+            if (target.hit || target.escaped) {
+                continue;
+            }
+            if (target.dueMs < now - graceMs) {
+                continue;
+            }
+            if (target.dueMs < bestDue) {
+                best = target;
+                bestDue = target.dueMs;
+            }
+        }
+        return best == null ? null : best.fullName;
+    }
+
+    private void notifyCurrentNoteChanged(String fullName) {
+        if (sameString(currentTitleNote, fullName)) {
+            return;
+        }
+        currentTitleNote = fullName;
+        if (currentNoteListener != null) {
+            currentNoteListener.onCurrentNoteChanged(fullName);
+        }
+    }
+
     private float tankXFor(Target target, long now) {
         float startX = getWidth() + 70f;
         float hitX = Math.max(180f, getWidth() * 0.68f);
@@ -491,6 +537,13 @@ public class TankDefenseGameView extends View {
             }
         }
         return -1;
+    }
+
+    private static boolean sameString(String a, String b) {
+        if (a == null) {
+            return b == null;
+        }
+        return a.equals(b);
     }
 
     private static long durationMs(String duration) {
