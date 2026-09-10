@@ -1,54 +1,104 @@
-# Google Play publish checklist for this project
+# Google Play publish checklist for Fluiteblox
 
-This project currently builds an **APK** via the legacy `android-maven-plugin`. Google Play now expects **signed release artifacts** and, for new uploads, **Android App Bundles (AAB)** rather than debug APKs. Below is what is missing and what needs to change to make a publishable build.
+Current app identity:
 
-## 1) Release signing (required)
-Google Play only accepts **signed** release artifacts.
+- Package name: `tatar.eljah.fluitblox`
+- Play Console app id: `4972771354641032915`
+- Play Console dashboard: `https://play.google.com/console/u/1/developers/4849820391120439995/app/4972771354641032915/app-dashboard`
+- Version: `versionCode=1`, `versionName=1.0.0`
+- Min SDK: 21
+- Target SDK: 36
+- Artifact for new Play apps: `target/app-release.aab`
+- Release signing key: `keystore/release-key.jks`
 
-**What to do**
-- Create or use an existing keystore (`.jks`) and **sign the release build**.
-- Keep the keystore and passwords out of the repo (use environment variables or a local properties file).
+## Internal testing
 
-**Where it matters in this repo**
-- The build is driven by `android-maven-plugin` in `pom.xml`, which does not currently define any signing configuration.
+Internal testing is configured in Play Console:
 
-## 2) Build type: AAB (required for new uploads)
-New apps and updates must be uploaded as **AAB** (Android App Bundle). This repo already includes a bundletool step (`scripts/build-aab.sh`) wired into Maven to produce `target/app-release.aab`.
+- Track id: `4701695168286427488`
+- Internal testing page: `https://play.google.com/console/u/1/developers/4849820391120439995/app/4972771354641032915/tracks/4701695168286427488?tab=releases`
+- Join link: `https://play.google.com/apps/internaltest/4701695168286427488`
+- Release: `1 (1.0.0)`
+- Uploaded bundle: `target/app-release.aab`
+- New install size reported by Play Console: `11.3 MB`
+- Tester list: `testers` with 3 users.
 
-**What to do**
-- Use `scripts/build-aab.sh` (or the Maven profile that runs it) for release builds, and upload the resulting `.aab` to Play.
+Observed non-blocking Play Console warnings for the first internal release:
 
-## 3) Versioning metadata (required)
-Google Play requires `versionCode` and `versionName` to be set.
+- No tester access before selecting a tester list; resolved by selecting `testers`.
+- No deobfuscation file attached.
+- No native debug symbols attached for the native code in the App Bundle.
 
-**What to change**
-- Add `android:versionCode` and `android:versionName` to `AndroidManifest.xml`.
-- Increment `versionCode` for every release.
+## Android developer verification
 
-## 4) Target / min SDK (required and enforced by Play)
-Play enforces minimum **targetSdkVersion** levels (updated yearly). The manifest currently omits SDK levels.
+Package name registration is complete in Play Console:
 
-**What to change**
-- Add `<uses-sdk android:minSdkVersion="..." android:targetSdkVersion="..." />` in `AndroidManifest.xml`.
-- Update the build toolchain to a modern Android SDK / build tools level.
+- Play Console package page: `https://play.google.com/console/u/1/developers/4849820391120439995/android-developer-verification/packages/tatar.eljah.fluitblox`
+- Package name: `tatar.eljah.fluitblox`
+- Friendly name: `Fluiteblox`
+- Status observed in Play Console: confirmed.
+- Verification snippet used for proof-of-key APK: `DGILD3IC7CURKAAAAAAAAAAAAA`
+- Verification APK: `target/fluiteblox-adi-verification.apk`
 
-## 5) Package name / app identity (required)
-`com.example.*` is a placeholder package. Play requires a unique application ID.
+Release certificate fingerprints:
 
-**What to change**
-- Replace `com.example.tonetrainer` with your own unique package name (for example, `tatar.eljah.fluitblox`).
+- SHA-1: `B4:A9:1B:73:95:49:97:A4:F6:40:49:69:D5:28:CB:49:BB:44:95:A8`
+- SHA-256: `0C:F1:6F:59:C6:35:87:CB:05:AB:FD:17:66:0B:BE:6B:66:9A:D9:C9:63:13:AB:B6:9A:53:AC:9D:02:07:CB:22`
 
-## 6) Store listing / policy requirements (required)
-These are outside the build system but required to publish:
-- App name, icon, screenshots, feature graphic.
-- Privacy policy URL if you collect or transmit data (this app uses microphone and may send speech data).
-- Data safety form in the Play Console.
+Certificate identity:
 
----
+- Owner/issuer: `CN=Recorder Coach, OU=Music, O=FluiteBlox, L=Kazan, ST=Tatarstan, C=RU`
+- Valid from: `2026-02-13`
+- Valid until: `2053-07-01`
 
-### Summary: “what is missing to publish?”
-1. **Release signing** (keystore + signing config).
-2. **Manifest versioning** (`versionCode` / `versionName`).
-3. **Modern SDK targeting** (`minSdkVersion`, `targetSdkVersion`).
-4. **Unique package name** (not `com.example`).
-5. Store listing + policy assets.
+## Build artifact
+
+Google Play requires Android App Bundles for new apps. Build the release bundle on Windows with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build-aab.ps1 -AndroidHome D:\Java\sdks\android
+```
+
+On a Unix-like Android SDK, the bash script is also available:
+
+```bash
+ANDROID_HOME=/path/to/android/sdk ./scripts/build-aab.sh
+```
+
+The resulting upload artifact is:
+
+```text
+target/app-release.aab
+```
+
+Increment `android:versionCode` in `src/main/AndroidManifest.xml` for every release submitted to Play.
+
+## Play Console setup values
+
+- Default language: Russian or English.
+- Name: Fluiteblox.
+- Type: Game.
+- Price: Free.
+- Category: Educational / Music game.
+- Target audience: children and families, depending on the final policy choice in Play Console.
+- Contact email: `ilya.evlampiev@gmail.com`.
+- Privacy policy URL: `https://raw.githubusercontent.com/Eljah/fluiteblox/codex/find-out-if-audiveris-supports-mobile-scanning/docs/PRIVACY_POLICY.md`.
+
+## Policy notes
+
+The app requests:
+
+- `RECORD_AUDIO`: real-time pitch recognition during recorder practice and the tank game.
+- `CAMERA`: optional photo capture of sheet music for adding melodies.
+
+Current implementation has no `INTERNET` permission. Audio and captured sheet images are processed locally by the app and are not uploaded by this app.
+
+For the Data safety form, describe the app as handling microphone and camera data locally for core functionality. If no analytics, ads, accounts, or network upload are added, mark no sharing and no server-side collection.
+
+## Play Console assets
+
+Configured in the Standard Store Listing draft:
+
+- App icon: `docs/play-assets/fluiteblox-icon-512.png`.
+- Feature graphic: `docs/play-assets/feature-graphic.png`.
+- Phone screenshots: `docs/play-assets/phone-screenshots/`.
