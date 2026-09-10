@@ -17,15 +17,15 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
-        <activity android:name="tatar.eljah.recorder.AudioSettingsActivity" android:exported="false" />
-        <activity android:name="tatar.eljah.recorder.AchievementsActivity" android:exported="false" />
-        <activity android:name="tatar.eljah.recorder.TankDefenseActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
-        <activity android:name="tatar.eljah.recorder.SettingsActivity" android:exported="false" />
-        <activity android:name="tatar.eljah.recorder.FingeringHintActivity" android:exported="false" />
-        <activity android:name="tatar.eljah.recorder.ScorePlayActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
-        <activity android:name="tatar.eljah.recorder.LibraryActivity" android:exported="false" />
-        <activity android:name="tatar.eljah.recorder.CaptureSheetActivity" android:exported="false" />
-        <activity android:name="tatar.eljah.MainActivity" android:exported="true">
+        <activity android:name="tatar.eljah.recorder.AudioSettingsActivity" android:screenOrientation="portrait" android:exported="false" />
+        <activity android:name="tatar.eljah.recorder.AchievementsActivity" android:screenOrientation="portrait" android:exported="false" />
+        <activity android:name="tatar.eljah.recorder.TankDefenseActivity" android:screenOrientation="portrait" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
+        <activity android:name="tatar.eljah.recorder.SettingsActivity" android:screenOrientation="portrait" android:exported="false" />
+        <activity android:name="tatar.eljah.recorder.FingeringHintActivity" android:screenOrientation="portrait" android:exported="false" />
+        <activity android:name="tatar.eljah.recorder.ScorePlayActivity" android:screenOrientation="portrait" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
+        <activity android:name="tatar.eljah.recorder.LibraryActivity" android:screenOrientation="portrait" android:exported="false" />
+        <activity android:name="tatar.eljah.recorder.CaptureSheetActivity" android:screenOrientation="portrait" android:exported="false" />
+        <activity android:name="tatar.eljah.MainActivity" android:screenOrientation="portrait" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

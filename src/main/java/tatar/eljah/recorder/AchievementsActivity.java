@@ -19,6 +19,7 @@ public class AchievementsActivity extends AppCompatActivity {
     private Spinner pieceSpinner;
     private AchievementGraphView graphView;
     private TextView overallSummary;
+    private TextView tankSummary;
     private TextView summary;
 
     private List<ScorePiece> pieces = new ArrayList<ScorePiece>();
@@ -32,12 +33,14 @@ public class AchievementsActivity extends AppCompatActivity {
         pieceSpinner = findViewById(R.id.spinner_piece);
         graphView = findViewById(R.id.achievement_graph);
         overallSummary = findViewById(R.id.text_achievement_overall);
+        tankSummary = findViewById(R.id.text_tank_achievement_summary);
         summary = findViewById(R.id.text_achievement_summary);
 
         metricsStore = new PerformanceMetricsStore(this);
         pieces = new ScoreLibraryRepository(this).getAllPieces();
 
         overallSummary.setText(buildOverallSummary());
+        tankSummary.setText(new TankPerformanceStore(this).buildSummary());
 
         List<String> titles = new ArrayList<String>();
         for (ScorePiece piece : pieces) {

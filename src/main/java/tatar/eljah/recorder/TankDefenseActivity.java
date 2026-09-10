@@ -8,6 +8,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.graphics.Typeface;
 import android.support.v7.app.AppCompatActivity;
 import android.view.Gravity;
 import android.view.View;
@@ -15,6 +16,7 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -42,6 +44,7 @@ public class TankDefenseActivity extends AppCompatActivity {
     private ScorePiece piece;
     private TankDefenseGameView gameView;
     private TextView speedLabel;
+    private Button modeButton;
     private volatile float currentInputIntensity;
     private volatile boolean demoAudioRequested;
     private volatile boolean demoShotsRequested;
@@ -49,6 +52,8 @@ public class TankDefenseActivity extends AppCompatActivity {
     private Thread demoThread;
     private float intensityThreshold;
     private long lastShotAtMs;
+    private String heldNoteName;
+    private long heldNoteStartedAtMs;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,6 +66,12 @@ public class TankDefenseActivity extends AppCompatActivity {
             @Override
             public void onCurrentNoteChanged(String fullName) {
                 updateTitleFingering(fullName);
+            }
+        });
+        gameView.setGameResultListener(new TankDefenseGameView.GameResultListener() {
+            @Override
+            public void onGameFinished(TankDefenseGameView.GameResult result) {
+                recordTankResult(result);
             }
         });
         setContentView(buildContentView());
@@ -100,50 +111,69 @@ public class TankDefenseActivity extends AppCompatActivity {
 
         Button slowerButton = new Button(this);
         slowerButton.setText("-");
+        styleBlockControl(slowerButton);
         slowerButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 changeSpeed(-0.15f);
             }
         });
-        controls.addView(slowerButton, new LinearLayout.LayoutParams(dp(48), LinearLayout.LayoutParams.WRAP_CONTENT));
+        controls.addView(slowerButton, new LinearLayout.LayoutParams(dp(42), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         speedLabel = new TextView(this);
         speedLabel.setTextColor(android.graphics.Color.WHITE);
         speedLabel.setTextSize(18f);
         speedLabel.setGravity(Gravity.CENTER);
+        speedLabel.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         updateSpeedLabel();
-        controls.addView(speedLabel, new LinearLayout.LayoutParams(dp(76), LinearLayout.LayoutParams.WRAP_CONTENT));
+        controls.addView(speedLabel, new LinearLayout.LayoutParams(dp(62), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         Button fasterButton = new Button(this);
         fasterButton.setText("+");
+        styleBlockControl(fasterButton);
         fasterButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 changeSpeed(0.15f);
             }
         });
-        controls.addView(fasterButton, new LinearLayout.LayoutParams(dp(48), LinearLayout.LayoutParams.WRAP_CONTENT));
+        controls.addView(fasterButton, new LinearLayout.LayoutParams(dp(42), LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        modeButton = new Button(this);
+        styleBlockControl(modeButton);
+        updateModeButton();
+        modeButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                gameView.setDurationMode(!gameView.isDurationMode());
+                heldNoteName = null;
+                heldNoteStartedAtMs = 0L;
+                updateModeButton();
+            }
+        });
+        controls.addView(modeButton, new LinearLayout.LayoutParams(dp(70), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         Button pieceButton = new Button(this);
         pieceButton.setText("Song");
+        styleBlockControl(pieceButton);
         pieceButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 showPieceSelector();
             }
         });
-        controls.addView(pieceButton, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        controls.addView(pieceButton, new LinearLayout.LayoutParams(dp(66), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         Button demoButton = new Button(this);
         demoButton.setText("Demo");
+        styleBlockControl(demoButton);
         demoButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 startDemoPlayback();
             }
         });
-        controls.addView(demoButton, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        controls.addView(demoButton, new LinearLayout.LayoutParams(dp(66), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -210,6 +240,12 @@ public class TankDefenseActivity extends AppCompatActivity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
+    private void styleBlockControl(Button button) {
+        button.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+        button.setTextColor(android.graphics.Color.rgb(31, 25, 16));
+        button.setAllCaps(false);
+    }
+
     private void changeSpeed(float delta) {
         stopDemoPlayback();
         gameView.setSpeedMultiplier(gameView.speedMultiplier() + delta);
@@ -219,6 +255,12 @@ public class TankDefenseActivity extends AppCompatActivity {
     private void updateSpeedLabel() {
         if (speedLabel != null && gameView != null) {
             speedLabel.setText(String.format(java.util.Locale.US, "%.2fx", gameView.speedMultiplier()));
+        }
+    }
+
+    private void updateModeButton() {
+        if (modeButton != null && gameView != null) {
+            modeButton.setText(gameView.isDurationMode() ? "Dur" : "Pitch");
         }
     }
 
@@ -258,14 +300,23 @@ public class TankDefenseActivity extends AppCompatActivity {
 
     private void consumePitch(float pitchHz) {
         if (demoShotsRequested || gameView == null || pitchHz <= 0f || currentInputIntensity < intensityThreshold) {
+            heldNoteName = null;
+            heldNoteStartedAtMs = 0L;
             return;
         }
         long now = android.os.SystemClock.elapsedRealtime();
+        String noteName = mapper.fromFrequency(normalizeDetectedPitch(pitchHz));
+        if (!sameString(heldNoteName, noteName)) {
+            heldNoteName = noteName;
+            heldNoteStartedAtMs = now;
+        }
         if (now - lastShotAtMs < INPUT_COOLDOWN_MS) {
             return;
         }
         lastShotAtMs = now;
-        gameView.onDetectedNote(mapper.fromFrequency(normalizeDetectedPitch(pitchHz)), currentInputIntensity);
+        long heldDurationMs = heldNoteStartedAtMs == 0L ? 0L : now - heldNoteStartedAtMs;
+        gameView.onDetectedNote(noteName, currentInputIntensity,
+                gameView.isDurationMode() ? heldDurationMs : Long.MAX_VALUE);
     }
 
     private float normalizeDetectedPitch(float detectedHz) {
@@ -499,6 +550,21 @@ public class TankDefenseActivity extends AppCompatActivity {
             sum += n * n;
         }
         return (float) Math.sqrt(sum / length);
+    }
+
+    private void recordTankResult(TankDefenseGameView.GameResult result) {
+        if (result == null || demoAudioRequested || demoShotsRequested || piece == null) {
+            return;
+        }
+        new TankPerformanceStore(this).saveAttempt(piece.id, result);
+        Toast.makeText(this, "Tank score: " + result.score + "/" + result.total, Toast.LENGTH_SHORT).show();
+    }
+
+    private static boolean sameString(String a, String b) {
+        if (a == null) {
+            return b == null;
+        }
+        return a.equals(b);
     }
 
     @Override

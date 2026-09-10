@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.os.SystemClock;
 import android.view.View;
 
@@ -14,6 +15,10 @@ import java.util.List;
 public class TankDefenseGameView extends View {
     public interface CurrentNoteListener {
         void onCurrentNoteChanged(String fullName);
+    }
+
+    public interface GameResultListener {
+        void onGameFinished(GameResult result);
     }
 
     private static final String[] LANES = {"C", "D", "E", "F", "G", "A", "B"};
@@ -35,13 +40,17 @@ public class TankDefenseGameView extends View {
     private int misses;
     private long lastInputAtMs;
     private boolean demoAutoFire;
+    private boolean durationMode;
+    private boolean completionNotified;
     private String currentTitleNote;
     private CurrentNoteListener currentNoteListener;
+    private GameResultListener gameResultListener;
 
     public TankDefenseGameView(Context context, ScorePiece piece) {
         super(context);
         this.piece = piece;
         setBackgroundColor(Color.rgb(17, 22, 28));
+        paint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         buildLevel();
         restart();
     }
@@ -51,6 +60,7 @@ public class TankDefenseGameView extends View {
         score = 0;
         misses = 0;
         lastInputAtMs = 0L;
+        completionNotified = false;
         currentTitleNote = null;
         shots.clear();
         for (Target target : targets) {
@@ -67,10 +77,20 @@ public class TankDefenseGameView extends View {
         notifyCurrentNoteChanged(currentNoteForTitle(elapsedMs()));
     }
 
+    public void setGameResultListener(GameResultListener listener) {
+        gameResultListener = listener;
+    }
+
     public void setSpeedMultiplier(float speedMultiplier) {
-        this.speedMultiplier = Math.max(0.05f, Math.min(1.8f, speedMultiplier));
-        buildLevel();
-        restart();
+        float newSpeed = Math.max(0.05f, Math.min(1.8f, speedMultiplier));
+        if (Math.abs(newSpeed - this.speedMultiplier) < 0.001f) {
+            return;
+        }
+        long now = elapsedMs();
+        float oldSpeed = this.speedMultiplier;
+        this.speedMultiplier = newSpeed;
+        reschedulePendingTargets(now, oldSpeed, newSpeed);
+        invalidate();
     }
 
     public float speedMultiplier() {
@@ -88,7 +108,20 @@ public class TankDefenseGameView extends View {
         invalidate();
     }
 
+    public void setDurationMode(boolean durationMode) {
+        this.durationMode = durationMode;
+        invalidate();
+    }
+
+    public boolean isDurationMode() {
+        return durationMode;
+    }
+
     public void onDetectedNote(String fullName, float intensity) {
+        onDetectedNote(fullName, intensity, Long.MAX_VALUE);
+    }
+
+    public void onDetectedNote(String fullName, float intensity, long performedDurationMs) {
         if (fullName == null || fullName.length() == 0) {
             return;
         }
@@ -109,11 +142,14 @@ public class TankDefenseGameView extends View {
         }
         if (best != null) {
             float hitX = tankXFor(best, now);
-            best.hit = true;
-            best.hitAtMs = now;
-            best.hitX = hitX;
-            score++;
-            shots.add(new Shot(laneIndex(best.noteName), now, hitX));
+            boolean enoughDuration = !durationMode || performedDurationMs >= noteDurationMs(best);
+            shots.add(new Shot(laneIndex(best.noteName), now, hitX, performedDurationMs, enoughDuration));
+            if (enoughDuration) {
+                best.hit = true;
+                best.hitAtMs = now;
+                best.hitX = hitX;
+                score++;
+            }
         }
         invalidate();
     }
@@ -290,12 +326,12 @@ public class TankDefenseGameView extends View {
             if (target.hit) {
                 long hitAgeMs = now - target.hitAtMs;
                 if (hitAgeMs < SHOT_DURATION_MS) {
-                    drawTank(canvas, target.hitX, y);
+                    drawTank(canvas, target.hitX, y, target);
                 } else {
                     drawExplosion(canvas, target.hitX, y, hitAgeMs - SHOT_DURATION_MS);
                 }
             } else {
-                drawTank(canvas, x, y);
+                drawTank(canvas, x, y, target);
             }
         }
 
@@ -311,33 +347,33 @@ public class TankDefenseGameView extends View {
         canvas.drawLine(x + 12f, y, x + 56f, y, paint);
     }
 
-    private void drawTank(Canvas canvas, float x, float y) {
+    private void drawTank(Canvas canvas, float x, float y, Target target) {
+        float scale = durationScale(target.duration);
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(Color.rgb(93, 112, 67));
-        RectF body = new RectF(x - 35f, y - 18f, x + 35f, y + 14f);
-        canvas.drawRoundRect(body, 7f, 7f, paint);
+        RectF body = new RectF(x - 30f * scale, y - 16f, x + 30f * scale, y + 16f);
+        canvas.drawRect(body, paint);
         paint.setColor(Color.rgb(119, 139, 83));
-        RectF turret = new RectF(x - 12f, y - 32f, x + 18f, y - 10f);
-        canvas.drawRoundRect(turret, 6f, 6f, paint);
+        RectF turret = new RectF(x - 12f * scale, y - 32f, x + 18f * scale, y - 10f);
+        canvas.drawRect(turret, paint);
         paint.setStrokeWidth(7f);
         canvas.drawLine(x - 10f, y - 20f, x - 46f, y - 22f, paint);
         paint.setColor(Color.rgb(32, 37, 31));
-        canvas.drawCircle(x - 22f, y + 18f, 7f, paint);
-        canvas.drawCircle(x + 22f, y + 18f, 7f, paint);
+        canvas.drawRect(x - 26f * scale, y + 18f, x - 14f * scale, y + 30f, paint);
+        canvas.drawRect(x + 14f * scale, y + 18f, x + 26f * scale, y + 30f, paint);
     }
 
     private void drawExplosion(Canvas canvas, float x, float y, long ageMs) {
         float radius = 14f + Math.min(1f, ageMs / 520f) * 34f;
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(Color.rgb(245, 176, 53));
-        canvas.drawCircle(x, y, radius, paint);
+        canvas.drawRect(x - radius, y - radius, x + radius, y + radius, paint);
         paint.setColor(Color.rgb(238, 88, 54));
-        canvas.drawCircle(x, y, radius * 0.55f, paint);
+        canvas.drawRect(x - radius * 0.55f, y - radius * 0.55f, x + radius * 0.55f, y + radius * 0.55f, paint);
     }
 
     private void drawShots(Canvas canvas, long now, int top, float laneHeight) {
         paint.setStyle(Paint.Style.FILL);
-        paint.setColor(Color.rgb(249, 232, 126));
         for (int i = shots.size() - 1; i >= 0; i--) {
             Shot shot = shots.get(i);
             float progress = (now - shot.startedAtMs) / (float) SHOT_DURATION_MS;
@@ -347,7 +383,9 @@ public class TankDefenseGameView extends View {
             }
             float y = top + laneHeight * (shot.lane + 0.5f);
             float x = 92f + (shot.targetX - 92f) * Math.max(0f, progress);
-            canvas.drawCircle(x, y, 8f, paint);
+            float scale = shotScale(shot.performedDurationMs);
+            paint.setColor(shot.destroys ? Color.rgb(249, 232, 126) : Color.rgb(230, 105, 80));
+            canvas.drawRect(x - 9f * scale, y - 5f * scale, x + 13f * scale, y + 5f * scale, paint);
         }
     }
 
@@ -362,6 +400,7 @@ public class TankDefenseGameView extends View {
             }
         }
         misses = missCount;
+        notifyGameFinishedIfNeeded();
     }
 
     private void autoFireDemoTargets(long now) {
@@ -380,7 +419,7 @@ public class TankDefenseGameView extends View {
                 target.hitX = hitX;
                 score++;
                 lastInputAtMs = now;
-                shots.add(new Shot(laneIndex(target.noteName), now, hitX));
+                shots.add(new Shot(laneIndex(target.noteName), now, hitX, Long.MAX_VALUE, true));
             } else {
                 anyPending = true;
             }
@@ -523,6 +562,42 @@ public class TankDefenseGameView extends View {
         return SystemClock.elapsedRealtime() - startMs;
     }
 
+    private void reschedulePendingTargets(long now, float oldSpeed, float newSpeed) {
+        long nextDue = Long.MIN_VALUE;
+        for (int i = 0; i < targets.size(); i++) {
+            Target target = targets.get(i);
+            if (target.hit || target.escaped) {
+                continue;
+            }
+            if (nextDue == Long.MIN_VALUE) {
+                long remaining = target.dueMs - now;
+                if (remaining > 0L) {
+                    target.dueMs = now + Math.max(120L, Math.round(remaining * oldSpeed / newSpeed));
+                }
+                nextDue = target.dueMs + noteDurationMs(target);
+            } else {
+                target.dueMs = nextDue;
+                nextDue += noteDurationMs(target);
+            }
+        }
+    }
+
+    private void notifyGameFinishedIfNeeded() {
+        if (completionNotified || targets.isEmpty()) {
+            return;
+        }
+        for (int i = 0; i < targets.size(); i++) {
+            Target target = targets.get(i);
+            if (!target.hit && !target.escaped) {
+                return;
+            }
+        }
+        completionNotified = true;
+        if (gameResultListener != null) {
+            gameResultListener.onGameFinished(new GameResult(score, targets.size(), misses, speedMultiplier, durationMode));
+        }
+    }
+
     private static String baseNote(String fullName) {
         if (fullName == null || fullName.length() == 0) {
             return "";
@@ -578,8 +653,32 @@ public class TankDefenseGameView extends View {
         return "1/4";
     }
 
+    private long noteDurationMs(Target target) {
+        return scaledDurationMs(target == null ? null : target.duration);
+    }
+
     private long scaledDurationMs(String duration) {
         return scaled(durationMs(duration));
+    }
+
+    private static float durationScale(String duration) {
+        if ("whole".equals(duration)) return 1.75f;
+        if ("half".equals(duration)) return 1.35f;
+        if ("eighth".equals(duration)) return 0.82f;
+        if ("16th".equals(duration)) return 0.64f;
+        return 1f;
+    }
+
+    private float shotScale(long performedDurationMs) {
+        if (performedDurationMs == Long.MAX_VALUE) {
+            return 1.45f;
+        }
+        long quarter = scaledDurationMs("quarter");
+        if (performedDurationMs >= scaledDurationMs("whole")) return 1.75f;
+        if (performedDurationMs >= scaledDurationMs("half")) return 1.35f;
+        if (performedDurationMs >= quarter) return 1f;
+        if (performedDurationMs >= scaledDurationMs("eighth")) return 0.82f;
+        return 0.64f;
     }
 
     private long tankTravelMs() {
@@ -598,7 +697,7 @@ public class TankDefenseGameView extends View {
         final String fullName;
         final String noteName;
         final String duration;
-        final long dueMs;
+        long dueMs;
         boolean hit;
         boolean escaped;
         long hitAtMs;
@@ -616,11 +715,31 @@ public class TankDefenseGameView extends View {
         final int lane;
         final long startedAtMs;
         final float targetX;
+        final long performedDurationMs;
+        final boolean destroys;
 
-        Shot(int lane, long startedAtMs, float targetX) {
+        Shot(int lane, long startedAtMs, float targetX, long performedDurationMs, boolean destroys) {
             this.lane = lane;
             this.startedAtMs = startedAtMs;
             this.targetX = targetX;
+            this.performedDurationMs = performedDurationMs;
+            this.destroys = destroys;
+        }
+    }
+
+    public static final class GameResult {
+        public final int score;
+        public final int total;
+        public final int misses;
+        public final float speedMultiplier;
+        public final boolean durationMode;
+
+        GameResult(int score, int total, int misses, float speedMultiplier, boolean durationMode) {
+            this.score = score;
+            this.total = total;
+            this.misses = misses;
+            this.speedMultiplier = speedMultiplier;
+            this.durationMode = durationMode;
         }
     }
 }
