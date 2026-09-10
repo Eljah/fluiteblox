@@ -25,7 +25,8 @@ public class TankDefenseGameView extends View {
     private static final long FIRST_NOTE_DELAY_MS = 2200L;
     private static final long TANK_TRAVEL_MS = 4300L;
     private static final long HIT_WINDOW_MS = 460L;
-    private static final long SHOT_DURATION_MS = 220L;
+    private static final long SHOT_DURATION_MS = 340L;
+    private static final long UNDERPOWERED_FLASH_MS = 620L;
     private static final int STAFF_LINE_COUNT = 5;
     private static final float STAFF_STEP = 13f;
 
@@ -68,6 +69,8 @@ public class TankDefenseGameView extends View {
             target.escaped = false;
             target.hitAtMs = 0L;
             target.hitX = 0f;
+            target.underpoweredAtMs = 0L;
+            target.underpoweredShotMs = 0L;
         }
         invalidate();
     }
@@ -149,6 +152,9 @@ public class TankDefenseGameView extends View {
                 best.hitAtMs = now;
                 best.hitX = hitX;
                 score++;
+            } else {
+                best.underpoweredAtMs = now;
+                best.underpoweredShotMs = performedDurationMs;
             }
         }
         invalidate();
@@ -238,6 +244,8 @@ public class TankDefenseGameView extends View {
         paint.setStyle(Paint.Style.FILL);
         if (target.hit) {
             paint.setColor(Color.rgb(74, 165, 104));
+        } else if (nowIsUnderpowered(target)) {
+            paint.setColor(Color.rgb(239, 137, 45));
         } else if (target.escaped) {
             paint.setColor(Color.rgb(201, 72, 64));
         } else {
@@ -349,18 +357,29 @@ public class TankDefenseGameView extends View {
 
     private void drawTank(Canvas canvas, float x, float y, Target target) {
         float scale = durationScale(target.duration);
+        if (nowIsUnderpowered(target)) {
+            drawTankDamage(canvas, x, y, scale);
+        }
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(Color.rgb(93, 112, 67));
-        RectF body = new RectF(x - 30f * scale, y - 16f, x + 30f * scale, y + 16f);
+        RectF body = new RectF(x - 34f * scale, y - 14f * scale, x + 34f * scale, y + 15f * scale);
         canvas.drawRect(body, paint);
         paint.setColor(Color.rgb(119, 139, 83));
-        RectF turret = new RectF(x - 12f * scale, y - 32f, x + 18f * scale, y - 10f);
+        RectF turret = new RectF(x - 13f * scale, y - 30f * scale, x + 20f * scale, y - 10f * scale);
         canvas.drawRect(turret, paint);
-        paint.setStrokeWidth(7f);
-        canvas.drawLine(x - 10f, y - 20f, x - 46f, y - 22f, paint);
+        paint.setStrokeWidth(5f + 3f * scale);
+        canvas.drawLine(x - 10f * scale, y - 20f * scale, x - 50f * scale, y - 22f * scale, paint);
         paint.setColor(Color.rgb(32, 37, 31));
-        canvas.drawRect(x - 26f * scale, y + 18f, x - 14f * scale, y + 30f, paint);
-        canvas.drawRect(x + 14f * scale, y + 18f, x + 26f * scale, y + 30f, paint);
+        canvas.drawRect(x - 29f * scale, y + 18f * scale, x - 16f * scale, y + 29f * scale, paint);
+        canvas.drawRect(x + 16f * scale, y + 18f * scale, x + 29f * scale, y + 29f * scale, paint);
+    }
+
+    private void drawTankDamage(Canvas canvas, float x, float y, float scale) {
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(Color.rgb(239, 137, 45));
+        float half = 46f * scale;
+        canvas.drawRect(x - half, y - 36f * scale, x - half + 12f, y - 24f * scale, paint);
+        canvas.drawRect(x + half - 14f, y - 6f * scale, x + half, y + 8f * scale, paint);
     }
 
     private void drawExplosion(Canvas canvas, float x, float y, long ageMs) {
@@ -385,7 +404,9 @@ public class TankDefenseGameView extends View {
             float x = 92f + (shot.targetX - 92f) * Math.max(0f, progress);
             float scale = shotScale(shot.performedDurationMs);
             paint.setColor(shot.destroys ? Color.rgb(249, 232, 126) : Color.rgb(230, 105, 80));
-            canvas.drawRect(x - 9f * scale, y - 5f * scale, x + 13f * scale, y + 5f * scale, paint);
+            canvas.drawRect(x - 12f * scale, y - 5f * scale, x + 18f * scale, y + 5f * scale, paint);
+            paint.setColor(shot.destroys ? Color.rgb(255, 248, 188) : Color.rgb(255, 168, 97));
+            canvas.drawRect(x + 18f * scale, y - 3f * scale, x + 26f * scale, y + 3f * scale, paint);
         }
     }
 
@@ -419,7 +440,7 @@ public class TankDefenseGameView extends View {
                 target.hitX = hitX;
                 score++;
                 lastInputAtMs = now;
-                shots.add(new Shot(laneIndex(target.noteName), now, hitX, Long.MAX_VALUE, true));
+                shots.add(new Shot(laneIndex(target.noteName), now, hitX, noteDurationMs(target), true));
             } else {
                 anyPending = true;
             }
@@ -460,6 +481,12 @@ public class TankDefenseGameView extends View {
         if (currentNoteListener != null) {
             currentNoteListener.onCurrentNoteChanged(fullName);
         }
+    }
+
+    private boolean nowIsUnderpowered(Target target) {
+        return target != null
+                && target.underpoweredAtMs > 0L
+                && elapsedMs() - target.underpoweredAtMs < UNDERPOWERED_FLASH_MS;
     }
 
     private float tankXFor(Target target, long now) {
@@ -662,23 +689,23 @@ public class TankDefenseGameView extends View {
     }
 
     private static float durationScale(String duration) {
-        if ("whole".equals(duration)) return 1.75f;
-        if ("half".equals(duration)) return 1.35f;
-        if ("eighth".equals(duration)) return 0.82f;
-        if ("16th".equals(duration)) return 0.64f;
+        if ("whole".equals(duration)) return 2.15f;
+        if ("half".equals(duration)) return 1.55f;
+        if ("eighth".equals(duration)) return 0.78f;
+        if ("16th".equals(duration)) return 0.55f;
         return 1f;
     }
 
     private float shotScale(long performedDurationMs) {
         if (performedDurationMs == Long.MAX_VALUE) {
-            return 1.45f;
+            return 1.6f;
         }
         long quarter = scaledDurationMs("quarter");
-        if (performedDurationMs >= scaledDurationMs("whole")) return 1.75f;
-        if (performedDurationMs >= scaledDurationMs("half")) return 1.35f;
+        if (performedDurationMs >= scaledDurationMs("whole")) return 2.15f;
+        if (performedDurationMs >= scaledDurationMs("half")) return 1.55f;
         if (performedDurationMs >= quarter) return 1f;
-        if (performedDurationMs >= scaledDurationMs("eighth")) return 0.82f;
-        return 0.64f;
+        if (performedDurationMs >= scaledDurationMs("eighth")) return 0.78f;
+        return 0.55f;
     }
 
     private long tankTravelMs() {
@@ -702,6 +729,8 @@ public class TankDefenseGameView extends View {
         boolean escaped;
         long hitAtMs;
         float hitX;
+        long underpoweredAtMs;
+        long underpoweredShotMs;
 
         Target(String fullName, String noteName, String duration, long dueMs) {
             this.fullName = fullName;

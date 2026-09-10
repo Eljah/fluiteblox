@@ -16,6 +16,8 @@
         <java.version>1.8</java.version>
         <android.support.version>28.0.0</android.support.version>
         <android.maven.plugin.version>4.6.0</android.maven.plugin.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     </properties>
 
     <dependencyManagement>

@@ -1,7 +1,11 @@
 package tatar.eljah.recorder;
 
 import android.Manifest;
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.DialogInterface;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.os.Build;
@@ -13,9 +17,12 @@ import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -201,26 +208,49 @@ public class TankDefenseActivity extends AppCompatActivity {
         if (playable.isEmpty()) {
             return;
         }
-        String[] labels = new String[playable.size()];
         int selectedIndex = -1;
         for (int i = 0; i < playable.size(); i++) {
             ScorePiece candidate = playable.get(i);
-            String title = candidate.title == null || candidate.title.length() == 0 ? candidate.id : candidate.title;
-            labels[i] = title + " (" + candidate.notes.size() + ")";
             if (piece != null && piece.id != null && piece.id.equals(candidate.id)) {
                 selectedIndex = i;
             }
         }
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("Tank melody")
-                .setSingleChoiceItems(labels, selectedIndex, new android.content.DialogInterface.OnClickListener() {
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setCustomTitle(buildSongDialogTitle())
+                .setSingleChoiceItems(new BlockSongAdapter(this, playable, piece == null ? null : piece.id),
+                        selectedIndex,
+                        new DialogInterface.OnClickListener() {
                     @Override
-                    public void onClick(android.content.DialogInterface dialog, int which) {
+                    public void onClick(DialogInterface dialog, int which) {
                         selectPiece(playable.get(which));
                         dialog.dismiss();
                     }
                 })
-                .show();
+                .create();
+        dialog.setOnShowListener(new DialogInterface.OnShowListener() {
+            @Override
+            public void onShow(DialogInterface dialogInterface) {
+                ListView listView = dialog.getListView();
+                if (listView != null) {
+                    listView.setBackgroundColor(Color.rgb(34, 49, 38));
+                    listView.setDividerHeight(dp(4));
+                    listView.setCacheColorHint(Color.TRANSPARENT);
+                }
+            }
+        });
+        dialog.show();
+    }
+
+    private View buildSongDialogTitle() {
+        TextView title = new TextView(this);
+        title.setText("TANK MELODY");
+        title.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+        title.setTextColor(Color.rgb(255, 239, 153));
+        title.setTextSize(24f);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        title.setPadding(dp(22), dp(16), dp(22), dp(16));
+        title.setBackgroundColor(Color.rgb(40, 61, 43));
+        return title;
     }
 
     private void selectPiece(ScorePiece selected) {
@@ -608,6 +638,38 @@ public class TankDefenseActivity extends AppCompatActivity {
             return b == null;
         }
         return a.equals(b);
+    }
+
+    private static final class BlockSongAdapter extends ArrayAdapter<ScorePiece> {
+        private final String selectedPieceId;
+
+        BlockSongAdapter(Context context, List<ScorePiece> pieces, String selectedPieceId) {
+            super(context, android.R.layout.simple_list_item_single_choice, pieces);
+            this.selectedPieceId = selectedPieceId;
+        }
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            TextView view = (TextView) super.getView(position, convertView, parent);
+            ScorePiece piece = getItem(position);
+            String title = piece == null || piece.title == null || piece.title.length() == 0 ? "" : piece.title;
+            int notes = piece == null || piece.notes == null ? 0 : piece.notes.size();
+            view.setText(title.length() > 22 ? title + "\n[" + notes + "]" : title + "  [" + notes + "]");
+            view.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+            view.setTextSize(title.length() > 22 ? 15f : 18f);
+            view.setTextColor(Color.rgb(245, 238, 188));
+            view.setPadding(dp(parent, 18), dp(parent, 14), dp(parent, 18), dp(parent, 14));
+            view.setSingleLine(false);
+            view.setMaxLines(2);
+            boolean selected = piece != null && piece.id != null && piece.id.equals(selectedPieceId);
+            view.setBackgroundColor(selected ? Color.rgb(205, 143, 48)
+                    : (position % 2 == 0 ? Color.rgb(42, 69, 49) : Color.rgb(35, 58, 47)));
+            return view;
+        }
+
+        private int dp(View parent, int value) {
+            return Math.round(value * parent.getResources().getDisplayMetrics().density);
+        }
     }
 
     @Override
