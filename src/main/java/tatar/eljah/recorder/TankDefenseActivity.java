@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.graphics.Typeface;
+import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.view.Gravity;
 import android.view.View;
@@ -45,6 +46,8 @@ public class TankDefenseActivity extends AppCompatActivity {
     private TankDefenseGameView gameView;
     private TextView speedLabel;
     private Button modeButton;
+    private TextView titleTextView;
+    private FingeringPatternView titleFingeringView;
     private volatile float currentInputIntensity;
     private volatile boolean demoAudioRequested;
     private volatile boolean demoShotsRequested;
@@ -62,12 +65,6 @@ public class TankDefenseActivity extends AppCompatActivity {
         repository = new ScoreLibraryRepository(this);
         piece = resolvePiece();
         gameView = new TankDefenseGameView(this, piece);
-        gameView.setCurrentNoteListener(new TankDefenseGameView.CurrentNoteListener() {
-            @Override
-            public void onCurrentNoteChanged(String fullName) {
-                updateTitleFingering(fullName);
-            }
-        });
         gameView.setGameResultListener(new TankDefenseGameView.GameResultListener() {
             @Override
             public void onGameFinished(TankDefenseGameView.GameResult result) {
@@ -75,6 +72,13 @@ public class TankDefenseActivity extends AppCompatActivity {
             }
         });
         setContentView(buildContentView());
+        installCustomTitle();
+        gameView.setCurrentNoteListener(new TankDefenseGameView.CurrentNoteListener() {
+            @Override
+            public void onCurrentNoteChanged(String fullName) {
+                updateTitleFingering(fullName);
+            }
+        });
         intensityThreshold = AudioSettingsStore.intensityThreshold(this);
         ensureMicListening();
     }
@@ -229,6 +233,13 @@ public class TankDefenseActivity extends AppCompatActivity {
     }
 
     private void updateTitleFingering(String fullName) {
+        if (titleTextView != null && titleFingeringView != null) {
+            titleTextView.setText(getString(R.string.app_name));
+            titleFingeringView.setPattern(fullName == null || fullName.length() == 0
+                    ? ""
+                    : mapper.fingeringPatternFor(fullName));
+            return;
+        }
         if (fullName == null || fullName.length() == 0) {
             setTitle(getString(R.string.app_name));
             return;
@@ -238,6 +249,38 @@ public class TankDefenseActivity extends AppCompatActivity {
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    private void installCustomTitle() {
+        ActionBar actionBar = getSupportActionBar();
+        if (actionBar == null) {
+            return;
+        }
+        LinearLayout titleLayout = new LinearLayout(this);
+        titleLayout.setOrientation(LinearLayout.HORIZONTAL);
+        titleLayout.setGravity(Gravity.CENTER_VERTICAL);
+
+        titleTextView = new TextView(this);
+        titleTextView.setText(getString(R.string.app_name));
+        titleTextView.setTextColor(android.graphics.Color.WHITE);
+        titleTextView.setTextSize(20f);
+        titleTextView.setTypeface(Typeface.DEFAULT_BOLD);
+        titleLayout.addView(titleTextView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        titleFingeringView = new FingeringPatternView(this);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(174), dp(34));
+        params.leftMargin = dp(12);
+        titleLayout.addView(titleFingeringView, params);
+
+        actionBar.setDisplayShowTitleEnabled(false);
+        actionBar.setDisplayShowCustomEnabled(true);
+        actionBar.setCustomView(titleLayout, new ActionBar.LayoutParams(
+                ActionBar.LayoutParams.WRAP_CONTENT,
+                ActionBar.LayoutParams.MATCH_PARENT,
+                Gravity.CENTER_VERTICAL));
+        updateTitleFingering(null);
     }
 
     private void styleBlockControl(Button button) {
