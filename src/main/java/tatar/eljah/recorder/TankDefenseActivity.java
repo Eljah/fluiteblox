@@ -55,6 +55,7 @@ public class TankDefenseActivity extends AppCompatActivity {
     private Button modeButton;
     private TextView titleTextView;
     private FingeringPatternView titleFingeringView;
+    private AlertDialog resultDialog;
     private volatile float currentInputIntensity;
     private volatile boolean demoAudioRequested;
     private volatile boolean demoShotsRequested;
@@ -258,6 +259,7 @@ public class TankDefenseActivity extends AppCompatActivity {
             return;
         }
         stopDemoPlayback();
+        dismissResultDialog();
         piece = selected;
         gameView.setPiece(piece);
     }
@@ -629,8 +631,107 @@ public class TankDefenseActivity extends AppCompatActivity {
         if (result == null || demoAudioRequested || demoShotsRequested || piece == null) {
             return;
         }
-        new TankPerformanceStore(this).saveAttempt(piece.id, result);
-        Toast.makeText(this, "Tank score: " + result.score + "/" + result.total, Toast.LENGTH_SHORT).show();
+        TankPerformanceStore.Reward reward = new TankPerformanceStore(this).saveAttempt(piece.id, result);
+        showResultDialog(result, reward);
+    }
+
+    private void showResultDialog(final TankDefenseGameView.GameResult result, TankPerformanceStore.Reward reward) {
+        if (isFinishing()) {
+            return;
+        }
+        dismissResultDialog();
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(22), dp(18), dp(22), dp(18));
+        content.setBackgroundColor(Color.rgb(34, 49, 38));
+
+        TextView score = new TextView(this);
+        score.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+        score.setTextColor(Color.rgb(255, 239, 153));
+        score.setTextSize(22f);
+        score.setText("SCORE " + result.score + "/" + result.total);
+        content.addView(score);
+
+        TextView blocks = new TextView(this);
+        blocks.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+        blocks.setTextColor(Color.rgb(244, 185, 64));
+        blocks.setTextSize(20f);
+        blocks.setPadding(0, dp(10), 0, 0);
+        blocks.setText("+" + reward.blocks + " BLOCKS");
+        content.addView(blocks);
+
+        TextView details = new TextView(this);
+        details.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+        details.setTextColor(Color.rgb(230, 238, 199));
+        details.setTextSize(15f);
+        details.setPadding(0, dp(8), 0, 0);
+        details.setText(reward.reasonText()
+                + "\nStreak: " + reward.playStreak + " day(s)"
+                + "\nMode: " + (result.durationMode ? "Duration" : "Pitch")
+                + "\nSpeed: " + String.format(java.util.Locale.US, "%.2fx", result.speedMultiplier));
+        content.addView(details);
+
+        resultDialog = new AlertDialog.Builder(this)
+                .setCustomTitle(buildResultDialogTitle(reward))
+                .setView(content)
+                .setPositiveButton("Again", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        gameView.restart();
+                    }
+                })
+                .setNeutralButton("Next", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        selectNextPiece();
+                    }
+                })
+                .setNegativeButton("Close", null)
+                .create();
+        resultDialog.show();
+    }
+
+    private View buildResultDialogTitle(TankPerformanceStore.Reward reward) {
+        TextView title = new TextView(this);
+        title.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+        title.setTextColor(Color.rgb(255, 239, 153));
+        title.setTextSize(23f);
+        title.setGravity(Gravity.CENTER_VERTICAL);
+        title.setPadding(dp(22), dp(16), dp(22), dp(16));
+        title.setBackgroundColor(Color.rgb(40, 61, 43));
+        title.setText(reward.newSpeedRecord ? "NEW SPEED BLOCK" : (reward.newSong ? "NEW SONG BLOCK" : "BLOCKS EARNED"));
+        return title;
+    }
+
+    private void selectNextPiece() {
+        List<ScorePiece> pieces = repository.getAllPieces();
+        if (pieces == null || pieces.isEmpty()) {
+            gameView.restart();
+            return;
+        }
+        int current = -1;
+        for (int i = 0; i < pieces.size(); i++) {
+            ScorePiece candidate = pieces.get(i);
+            if (candidate != null && candidate.id != null && piece != null && candidate.id.equals(piece.id)) {
+                current = i;
+                break;
+            }
+        }
+        for (int step = 1; step <= pieces.size(); step++) {
+            ScorePiece next = pieces.get((current + step + pieces.size()) % pieces.size());
+            if (next != null && next.notes != null && !next.notes.isEmpty()) {
+                selectPiece(next);
+                return;
+            }
+        }
+        gameView.restart();
+    }
+
+    private void dismissResultDialog() {
+        if (resultDialog != null) {
+            resultDialog.dismiss();
+            resultDialog = null;
+        }
     }
 
     private static boolean sameString(String a, String b) {
@@ -687,6 +788,7 @@ public class TankDefenseActivity extends AppCompatActivity {
         super.onDestroy();
         activityDestroyed = true;
         stopDemoPlayback();
+        dismissResultDialog();
         pitchAnalyzer.stop();
     }
 }

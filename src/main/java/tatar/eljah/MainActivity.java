@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
+import android.widget.Toast;
 
 import tatar.eljah.fluitblox.R;
 import tatar.eljah.recorder.AchievementsActivity;
@@ -11,6 +12,7 @@ import tatar.eljah.recorder.CaptureSheetActivity;
 import tatar.eljah.recorder.LibraryActivity;
 import tatar.eljah.recorder.SettingsActivity;
 import tatar.eljah.recorder.TankDefenseActivity;
+import tatar.eljah.recorder.TankPerformanceStore;
 
 public class MainActivity extends AppCompatActivity {
     private static final int REQ_SETTINGS = 1001;
@@ -30,6 +32,7 @@ public class MainActivity extends AppCompatActivity {
         captureButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                awardBuilderBlock("Add notes");
                 startActivity(new Intent(MainActivity.this, CaptureSheetActivity.class));
             }
         });
@@ -37,6 +40,7 @@ public class MainActivity extends AppCompatActivity {
         libraryButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                awardBuilderBlock("Library");
                 startActivity(new Intent(MainActivity.this, LibraryActivity.class));
             }
         });
@@ -44,6 +48,7 @@ public class MainActivity extends AppCompatActivity {
         settingsButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                awardBuilderBlock("Settings");
                 startActivityForResult(new Intent(MainActivity.this, SettingsActivity.class), REQ_SETTINGS);
             }
         });
@@ -61,6 +66,13 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(new Intent(MainActivity.this, TankDefenseActivity.class));
             }
         });
+    }
+
+    private void awardBuilderBlock(String action) {
+        int blocks = new TankPerformanceStore(this).addBuilderAction(action);
+        if (blocks > 0) {
+            Toast.makeText(this, "+1 builder block", Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override
