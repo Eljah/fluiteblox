@@ -27,6 +27,7 @@ public class AchievementsActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        AppLocaleManager.applySavedLocale(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_achievements);
 
@@ -48,9 +49,9 @@ public class AchievementsActivity extends AppCompatActivity {
         }
 
         ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
-                android.R.layout.simple_spinner_item,
+                R.layout.spinner_item_blox,
                 titles);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        adapter.setDropDownViewResource(R.layout.spinner_dropdown_item_blox);
         pieceSpinner.setAdapter(adapter);
 
         pieceSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {

@@ -4,9 +4,17 @@
     <string name="main_capture">1) Tire uma foto das notas</string>
     <string name="main_library">2) Biblioteca de obras</string>
     <string name="main_settings">3) Configurações</string>
+    <string name="main_achievements">4) Achievements and progress</string>
+    <string name="main_tank_game">5) Note Tankdrome</string>
+    <string name="main_tank_game_cta">Play Fluiteblox</string>
+    <string name="main_game_instruction">Take your recorder. Play the note when it reaches the red timing line, and the cannon will fire.</string>
+    <string name="main_builder_settings">Settings and library</string>
+    <string name="main_builder_block_awarded">+1 builder block</string>
+    <string name="action_close">X</string>
     <string name="settings_title">Configurações de reconhecimento</string>
     <string name="settings_threshold_value_default">Limite de intensidade: 0,030</string>
     <string name="settings_threshold_value_template">Limite de intensidade: %.3f</string>
+    <string name="settings_threshold_graph_label">Threshold: %.3f</string>
     <string name="settings_hint">Toque no gráfico de intensidade para definir o limite acima do ruído.</string>
     <string name="settings_menu_title">Configurações</string>
     <string name="settings_language">Idioma e localização</string>
@@ -28,11 +36,21 @@
     <string name="capture_title">Digitalizando a equipe</string>
     <string name="capture_piece_name_hint">Título do trabalho</string>
     <string name="capture_open_camera">Câmera aberta</string>
+    <string name="capture_pick_gallery">Выбрать из галереи</string>
     <string name="capture_waiting">Aguardando fotos. Dica: Mantenha a folha o mais perpendicular possível à câmera.</string>
     <string name="capture_save">Salvar na biblioteca</string>
     <string name="capture_analysis_template">Avaliação OpenCV: perpendicularidade %1$d%%, linhas %2$d, linhas de barra %3$d, notas encontradas %4$d.</string>
+    <string name="capture_parameters_template">Параметры: порог %1$d, шум %2$d%%.</string>
     <string name="capture_debug_colors">Luz de fundo: branco - notas/traço, preto - fundo, vermelho - linhas da pauta, verde - símbolos musicais.</string>
     <string name="capture_expected_notes">Referência extraída de XML/MIDI: 56 notas esperadas.</string>
+    <string name="capture_threshold_default">Порог черный/белый: 7</string>
+    <string name="capture_threshold_template">Порог черный/белый: %1$d</string>
+    <string name="capture_noise_default">Подавление шума: 50%%</string>
+    <string name="capture_noise_template">Подавление шума: %1$d%%</string>
+    <string name="capture_gallery_load_failed">Не удалось загрузить изображение из галереи.</string>
+    <string name="capture_opencv_init_failed">Failed to start OpenCV: %1$s</string>
+    <string name="capture_staff_knowledge_applied">Знание нотоносца: применено ограничение на 5 линий (обнаружено групп: %1$d).</string>
+    <string name="capture_antiglare_applied">Anti-glare/anti-noir: CLAHE + median blur + adaptive threshold (устойчивость к пересъёмке с экрана).</string>
     <string name="capture_take_photo_first">Primeiro tire uma foto.</string>
     <string name="capture_title_required">Digite o título do trabalho.</string>
     <string name="capture_saved">As partituras foram salvas na biblioteca.</string>
@@ -41,7 +59,9 @@
     <string name="library_title">Biblioteca</string>
     <string name="library_empty">A biblioteca está vazia. Adicione sua primeira peça.</string>
     <string name="library_back">Voltar ao cardápio</string>
+    <string name="library_item_template">%1$s - %2$d notes</string>
     <string name="library_export_title">Exportar: %1$s</string>
+    <string name="library_play_tanks">Играть в танкодроме</string>
     <string name="library_export_musicxml">Exportar para MusicXML</string>
     <string name="library_export_midi">Exportar para MIDI</string>
     <string name="library_export_success">Arquivo salvo: %1$s</string>
@@ -64,8 +84,34 @@
     <string name="play_midi_failed">Falha ao iniciar a reprodução neste dispositivo.</string>
     <string name="play_waiting_intensity">Muito silencioso (limiar: %.3f). Toque mais alto ou ajuste o limite.</string>
     <string name="play_restart">Começar de novo</string>
+    <string name="play_back">Назад</string>
     <string name="play_restarted">Redefinição do progresso. Comece com a primeira nota.</string>
     <string name="play_simplified_mode">Modo simplificado (#/b = mesma nota)</string>
+    <string name="play_header_with_fingering">Fluiteblox — %1$s</string>
+    <string name="play_panorama_up">Вверх</string>
+    <string name="play_panorama_down">Вниз</string>
+    <string name="play_panorama_show_details">Показать детали</string>
+    <string name="play_panorama_back_to_nav">Назад к навигации</string>
+    <string name="play_panorama_no_actual">нет данных</string>
+    <string name="play_panorama_detail_template">Нота #%1$d, сыграно: %2$s</string>
+    <string name="play_panorama_extra_detail_template">Ожидалось: %1$s\nДлительность: %2$s\nОшибка длительности: %3$s</string>
+    <string name="play_panorama_yes">да</string>
+    <string name="play_panorama_no">нет</string>
+    <string name="achievements_title">Достижения по произведениям</string>
+    <string name="achievements_no_pieces">Нет произведений для отображения.</string>
+    <string name="achievements_empty">Завершенных попыток пока нет. Доведите произведение до конца.</string>
+    <string name="achievements_overall_empty">Общая статистика пока недоступна.</string>
+    <string name="achievements_overall_template">Общая статистика:
+а) произведений доведено до конца: %1$d
+б) попыток начать играть: %2$d
+в) доведено до конца без ошибок нот: %3$d
+г) доведено до конца без ошибок длительности: %4$d</string>
+    <string name="achievements_summary_template">Завершенных попыток: %1$d
+Последняя попытка — попадания: %2$s, продолжение: %3$s, длительность: %4$s</string>
+    <string name="achievements_graph_not_enough">Not enough completed attempts for a graph</string>
+    <string name="achievements_graph_hits">Blue: hits</string>
+    <string name="achievements_graph_recovery">Green: recovery</string>
+    <string name="achievements_graph_duration">Orange: duration</string>
     <string name="hint_title">Dica de dedilhado</string>
     <string name="hint_note_index">Nota №%1$d</string>
     <string name="hint_expected">Necessário: %1$s\nDedos: %2$s</string>
@@ -78,4 +124,66 @@
     <string name="hint_duration_eighth">oitavo</string>
     <string name="hint_duration_sixteenth">décimo sexto</string>
     <string name="hint_duration_unknown">desconhecido</string>
+    <string name="capture_staff_slider_title">Per-staff filter tuning (common default is auto-fixed after scan).</string>
+    <string name="capture_staff_slider_item">Staff %1$d: filter %2$d%%, notes %3$d</string>
+    <string name="capture_edit_tools_title">Recognition map editing</string>
+    <string name="capture_edit_none">Pan/zoom</string>
+    <string name="capture_edit_add">+ note</string>
+    <string name="capture_edit_delete">- note</string>
+    <string name="capture_edit_duration">Dur.</string>
+    <string name="capture_edit_up">Up</string>
+    <string name="capture_edit_down">Down</string>
+    <string name="capture_edit_mode_none">Mode: pan/zoom</string>
+    <string name="capture_edit_mode_add">Mode: add note (tap)</string>
+    <string name="capture_edit_mode_delete">Mode: delete note (tap)</string>
+    <string name="capture_edit_mode_duration">Mode: change duration (tap)</string>
+    <string name="capture_edit_mode_up">Mode: move note up by 1 step (tap)</string>
+    <string name="capture_edit_mode_down">Mode: move note down by 1 step (tap)</string>
+    <string name="capture_panorama_open">Open panorama (fullscreen)</string>
+    <string name="capture_panorama_close">Close panorama</string>
+    <string name="capture_panorama_save">Сохранить</string>
+    <string name="capture_panorama_cancel">Отменить</string>
+    <string name="capture_blob_continue">Continue recognition</string>
+    <string name="capture_blob_mode_hint">Series 1-7 mode: tap a blob to remove it from subsequent stages.</string>
+    <string name="tank_fallback_title">Tank Demo</string>
+    <string name="tank_song">Song</string>
+    <string name="tank_demo">Demo</string>
+    <string name="tank_melody_title">Tank melody</string>
+    <string name="tank_mode_pitch">Pitch</string>
+    <string name="tank_mode_duration">Dur</string>
+    <string name="tank_score_template">Score %1$d/%2$d   Miss %3$d</string>
+    <string name="tank_result_score_template">SCORE %1$d/%2$d</string>
+    <string name="tank_blocks_template">+%1$d BLOCKS</string>
+    <string name="tank_result_details_template">%1$s\nStreak: %2$d day(s)\nMode: %3$s\nSpeed: %4$s</string>
+    <string name="tank_dialog_again">Again</string>
+    <string name="tank_dialog_next">Next</string>
+    <string name="tank_dialog_close">Close</string>
+    <string name="tank_result_new_speed">NEW SPEED BLOCK</string>
+    <string name="tank_result_new_song">NEW SONG BLOCK</string>
+    <string name="tank_result_blocks">BLOCKS EARNED</string>
+    <string name="tank_song_notes_template">%1$s  [%2$d]</string>
+    <string name="tank_achievements_empty_template">Tankdrome achievements:
+Blocks: %1$d
+Play streak: %2$d day(s)
+Played songs: %3$d
+Builder blocks: %4$d
+Finish a song to build the first game tower.</string>
+    <string name="tank_achievements_summary_template">Tankdrome achievements:
+Blocks: %1$d
+Play streak: %2$d day(s)
+Played songs: %3$d
+Attempts: %4$d
+Builder blocks: %5$d
+Pitch perfect: %6$d
+Duration perfect: %7$d
+Best pitch: %8$.1f%%
+Best duration: %9$.1f%%
+Fastest perfect: %10$.2fx</string>
+    <string name="tank_reward_finished_song">Finished song</string>
+    <string name="tank_reward_daily_return">Daily return</string>
+    <string name="tank_reward_accuracy">80%%+ accuracy</string>
+    <string name="tank_reward_perfect_run">Perfect run</string>
+    <string name="tank_reward_duration_perfect">Duration perfect</string>
+    <string name="tank_reward_speed_record">New speed record</string>
+    <string name="tank_reward_new_song">New song explored</string>
 </resources>

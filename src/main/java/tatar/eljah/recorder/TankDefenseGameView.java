@@ -12,6 +12,8 @@ import android.view.View;
 import java.util.ArrayList;
 import java.util.List;
 
+import tatar.eljah.fluitblox.R;
+
 public class TankDefenseGameView extends View {
     public interface CurrentNoteListener {
         void onCurrentNoteChanged(String fullName);
@@ -197,9 +199,10 @@ public class TankDefenseGameView extends View {
         paint.setTextSize(24f);
         paint.setColor(Color.rgb(34, 43, 50));
         String title = piece == null || piece.title == null ? "" : piece.title;
-        canvas.drawText("Score " + score + "/" + targets.size() + "   Miss " + misses, 24f, 34f, paint);
+        canvas.drawText(getContext().getString(R.string.tank_score_template, score, targets.size(), misses),
+                24f, 224f, paint);
         paint.setTextSize(20f);
-        canvas.drawText(title, 24f, 62f, paint);
+        canvas.drawText(title, 24f, 252f, paint);
 
         if (now - lastInputAtMs < 180L) {
             paint.setColor(Color.rgb(74, 165, 104));

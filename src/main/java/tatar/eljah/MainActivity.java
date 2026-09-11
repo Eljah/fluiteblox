@@ -71,7 +71,7 @@ public class MainActivity extends AppCompatActivity {
     private void awardBuilderBlock(String action) {
         int blocks = new TankPerformanceStore(this).addBuilderAction(action);
         if (blocks > 0) {
-            Toast.makeText(this, "+1 builder block", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.main_builder_block_awarded), Toast.LENGTH_SHORT).show();
         }
     }
 

@@ -103,7 +103,7 @@ public class TankDefenseActivity extends AppCompatActivity {
         }
         ScorePiece fallback = new ScorePiece();
         fallback.id = "tank-fallback";
-        fallback.title = "Tank Demo";
+        fallback.title = getString(R.string.tank_fallback_title);
         fallback.notes.add(new NoteEvent("E", 5, "quarter", 1));
         fallback.notes.add(new NoteEvent("E", 5, "quarter", 1));
         fallback.notes.add(new NoteEvent("G", 5, "quarter", 1));
@@ -130,7 +130,7 @@ public class TankDefenseActivity extends AppCompatActivity {
                 changeSpeed(-0.15f);
             }
         });
-        controls.addView(slowerButton, new LinearLayout.LayoutParams(dp(42), LinearLayout.LayoutParams.WRAP_CONTENT));
+        controls.addView(slowerButton, new LinearLayout.LayoutParams(dp(40), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         speedLabel = new TextView(this);
         speedLabel.setTextColor(android.graphics.Color.WHITE);
@@ -138,7 +138,7 @@ public class TankDefenseActivity extends AppCompatActivity {
         speedLabel.setGravity(Gravity.CENTER);
         speedLabel.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         updateSpeedLabel();
-        controls.addView(speedLabel, new LinearLayout.LayoutParams(dp(62), LinearLayout.LayoutParams.WRAP_CONTENT));
+        controls.addView(speedLabel, new LinearLayout.LayoutParams(dp(60), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         Button fasterButton = new Button(this);
         fasterButton.setText("+");
@@ -149,7 +149,7 @@ public class TankDefenseActivity extends AppCompatActivity {
                 changeSpeed(0.15f);
             }
         });
-        controls.addView(fasterButton, new LinearLayout.LayoutParams(dp(42), LinearLayout.LayoutParams.WRAP_CONTENT));
+        controls.addView(fasterButton, new LinearLayout.LayoutParams(dp(40), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         modeButton = new Button(this);
         styleBlockControl(modeButton);
@@ -163,10 +163,10 @@ public class TankDefenseActivity extends AppCompatActivity {
                 updateModeButton();
             }
         });
-        controls.addView(modeButton, new LinearLayout.LayoutParams(dp(70), LinearLayout.LayoutParams.WRAP_CONTENT));
+        controls.addView(modeButton, new LinearLayout.LayoutParams(dp(68), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         Button pieceButton = new Button(this);
-        pieceButton.setText("Song");
+        pieceButton.setText(R.string.tank_song);
         styleBlockControl(pieceButton);
         pieceButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -174,10 +174,10 @@ public class TankDefenseActivity extends AppCompatActivity {
                 showPieceSelector();
             }
         });
-        controls.addView(pieceButton, new LinearLayout.LayoutParams(dp(66), LinearLayout.LayoutParams.WRAP_CONTENT));
+        controls.addView(pieceButton, new LinearLayout.LayoutParams(dp(62), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         Button demoButton = new Button(this);
-        demoButton.setText("Demo");
+        demoButton.setText(R.string.tank_demo);
         styleBlockControl(demoButton);
         demoButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -185,7 +185,7 @@ public class TankDefenseActivity extends AppCompatActivity {
                 startDemoPlayback();
             }
         });
-        controls.addView(demoButton, new LinearLayout.LayoutParams(dp(66), LinearLayout.LayoutParams.WRAP_CONTENT));
+        controls.addView(demoButton, new LinearLayout.LayoutParams(dp(58), LinearLayout.LayoutParams.WRAP_CONTENT));
 
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -244,7 +244,7 @@ public class TankDefenseActivity extends AppCompatActivity {
 
     private View buildSongDialogTitle() {
         TextView title = new TextView(this);
-        title.setText("TANK MELODY");
+        title.setText(R.string.tank_melody_title);
         title.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         title.setTextColor(Color.rgb(255, 239, 153));
         title.setTextSize(24f);
@@ -317,8 +317,12 @@ public class TankDefenseActivity extends AppCompatActivity {
 
     private void styleBlockControl(Button button) {
         button.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
-        button.setTextColor(android.graphics.Color.rgb(31, 25, 16));
+        button.setTextColor(Color.rgb(242, 240, 216));
+        button.setBackgroundResource(R.drawable.block_button_secondary);
         button.setAllCaps(false);
+        button.setTextSize(14f);
+        button.setMinHeight(dp(44));
+        button.setPadding(dp(5), 0, dp(5), 0);
     }
 
     private void changeSpeed(float delta) {
@@ -335,7 +339,9 @@ public class TankDefenseActivity extends AppCompatActivity {
 
     private void updateModeButton() {
         if (modeButton != null && gameView != null) {
-            modeButton.setText(gameView.isDurationMode() ? "Dur" : "Pitch");
+            modeButton.setText(gameView.isDurationMode()
+                    ? R.string.tank_mode_duration
+                    : R.string.tank_mode_pitch);
         }
     }
 
@@ -649,7 +655,7 @@ public class TankDefenseActivity extends AppCompatActivity {
         score.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         score.setTextColor(Color.rgb(255, 239, 153));
         score.setTextSize(22f);
-        score.setText("SCORE " + result.score + "/" + result.total);
+        score.setText(getString(R.string.tank_result_score_template, result.score, result.total));
         content.addView(score);
 
         TextView blocks = new TextView(this);
@@ -657,7 +663,7 @@ public class TankDefenseActivity extends AppCompatActivity {
         blocks.setTextColor(Color.rgb(244, 185, 64));
         blocks.setTextSize(20f);
         blocks.setPadding(0, dp(10), 0, 0);
-        blocks.setText("+" + reward.blocks + " BLOCKS");
+        blocks.setText(getString(R.string.tank_blocks_template, reward.blocks));
         content.addView(blocks);
 
         TextView details = new TextView(this);
@@ -665,28 +671,28 @@ public class TankDefenseActivity extends AppCompatActivity {
         details.setTextColor(Color.rgb(230, 238, 199));
         details.setTextSize(15f);
         details.setPadding(0, dp(8), 0, 0);
-        details.setText(reward.reasonText()
-                + "\nStreak: " + reward.playStreak + " day(s)"
-                + "\nMode: " + (result.durationMode ? "Duration" : "Pitch")
-                + "\nSpeed: " + String.format(java.util.Locale.US, "%.2fx", result.speedMultiplier));
+        String mode = getString(result.durationMode ? R.string.tank_mode_duration : R.string.tank_mode_pitch);
+        String speed = String.format(java.util.Locale.US, "%.2fx", result.speedMultiplier);
+        details.setText(getString(R.string.tank_result_details_template,
+                reward.reasonText(), reward.playStreak, mode, speed));
         content.addView(details);
 
         resultDialog = new AlertDialog.Builder(this)
                 .setCustomTitle(buildResultDialogTitle(reward))
                 .setView(content)
-                .setPositiveButton("Again", new DialogInterface.OnClickListener() {
+                .setPositiveButton(R.string.tank_dialog_again, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         gameView.restart();
                     }
                 })
-                .setNeutralButton("Next", new DialogInterface.OnClickListener() {
+                .setNeutralButton(R.string.tank_dialog_next, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         selectNextPiece();
                     }
                 })
-                .setNegativeButton("Close", null)
+                .setNegativeButton(R.string.tank_dialog_close, null)
                 .create();
         resultDialog.show();
     }
@@ -699,7 +705,9 @@ public class TankDefenseActivity extends AppCompatActivity {
         title.setGravity(Gravity.CENTER_VERTICAL);
         title.setPadding(dp(22), dp(16), dp(22), dp(16));
         title.setBackgroundColor(Color.rgb(40, 61, 43));
-        title.setText(reward.newSpeedRecord ? "NEW SPEED BLOCK" : (reward.newSong ? "NEW SONG BLOCK" : "BLOCKS EARNED"));
+        title.setText(reward.newSpeedRecord
+                ? R.string.tank_result_new_speed
+                : (reward.newSong ? R.string.tank_result_new_song : R.string.tank_result_blocks));
         return title;
     }
 
@@ -741,7 +749,7 @@ public class TankDefenseActivity extends AppCompatActivity {
         return a.equals(b);
     }
 
-    private static final class BlockSongAdapter extends ArrayAdapter<ScorePiece> {
+    private final class BlockSongAdapter extends ArrayAdapter<ScorePiece> {
         private final String selectedPieceId;
 
         BlockSongAdapter(Context context, List<ScorePiece> pieces, String selectedPieceId) {
@@ -755,7 +763,8 @@ public class TankDefenseActivity extends AppCompatActivity {
             ScorePiece piece = getItem(position);
             String title = piece == null || piece.title == null || piece.title.length() == 0 ? "" : piece.title;
             int notes = piece == null || piece.notes == null ? 0 : piece.notes.size();
-            view.setText(title.length() > 22 ? title + "\n[" + notes + "]" : title + "  [" + notes + "]");
+            String label = getString(R.string.tank_song_notes_template, title, notes);
+            view.setText(title.length() > 22 ? label.replace("  [", "\n[") : label);
             view.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
             view.setTextSize(title.length() > 22 ? 15f : 18f);
             view.setTextColor(Color.rgb(245, 238, 188));

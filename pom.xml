@@ -9,8 +9,8 @@
     <packaging>apk</packaging>
 
     <properties>
-        <android.compile.sdk>34</android.compile.sdk>
-        <android.build.tools>28.0.3</android.build.tools>
+        <android.compile.sdk>36</android.compile.sdk>
+        <android.build.tools>36.1.0</android.build.tools>
         <android.sdk.home>/usr/local/lib/android/sdk</android.sdk.home>
         <aab.skip>true</aab.skip>
         <java.version>1.8</java.version>

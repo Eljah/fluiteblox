@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import tatar.eljah.fluitblox.R;
+
 public class TankPerformanceStore {
     private static final String PREFS = "tank_performance";
     private static final String KEY_ATTEMPTS = "attempts";
@@ -27,9 +29,11 @@ public class TankPerformanceStore {
     private static final int MAX_ATTEMPTS = 120;
     private static final int BUILDER_DAILY_LIMIT = 6;
 
+    private final Context context;
     private final SharedPreferences sharedPreferences;
 
     public TankPerformanceStore(Context context) {
+        this.context = context.getApplicationContext();
         sharedPreferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
@@ -105,8 +109,8 @@ public class TankPerformanceStore {
         int builderBlocks = sharedPreferences.getInt(KEY_BUILDER_BLOCKS, 0);
         int streak = sharedPreferences.getInt(KEY_PLAY_STREAK, 0);
         if (attempts.isEmpty()) {
-            return String.format(Locale.US,
-                    "Tankdrome achievements:\nBlocks: %d\nPlay streak: %d day(s)\nPlayed songs: %d\nBuilder blocks: %d\nFinish a song to build the first game tower.",
+            return context.getString(
+                    R.string.tank_achievements_empty_template,
                     blocks,
                     streak,
                     playedPieces,
@@ -132,8 +136,8 @@ public class TankPerformanceStore {
                 }
             }
         }
-        return String.format(Locale.US,
-                "Tankdrome achievements:\nBlocks: %d\nPlay streak: %d day(s)\nPlayed songs: %d\nAttempts: %d\nBuilder blocks: %d\nPitch perfect: %d\nDuration perfect: %d\nBest pitch: %.1f%%\nBest duration: %.1f%%\nFastest perfect: %.2fx",
+        return context.getString(
+                R.string.tank_achievements_summary_template,
                 blocks,
                 streak,
                 playedPieces,
@@ -170,34 +174,34 @@ public class TankPerformanceStore {
         Reward reward = new Reward();
         reward.speedMultiplier = attempt.speedMultiplier;
         reward.blocks = 1;
-        reward.lines.add("Finished song");
+        reward.lines.add(context.getString(R.string.tank_reward_finished_song));
         String today = dayKey(System.currentTimeMillis());
         if (!today.equals(sharedPreferences.getString(KEY_LAST_PLAY_DAY, ""))) {
             reward.blocks++;
-            reward.lines.add("Daily return");
+            reward.lines.add(context.getString(R.string.tank_reward_daily_return));
         }
         if (attempt.ratio() >= 0.8f) {
             reward.blocks++;
-            reward.lines.add("80%+ accuracy");
+            reward.lines.add(context.getString(R.string.tank_reward_accuracy));
         }
         if (attempt.isPerfect()) {
             reward.blocks++;
-            reward.lines.add("Perfect run");
+            reward.lines.add(context.getString(R.string.tank_reward_perfect_run));
             if (attempt.durationMode) {
                 reward.blocks++;
-                reward.lines.add("Duration perfect");
+                reward.lines.add(context.getString(R.string.tank_reward_duration_perfect));
             }
             float fastest = sharedPreferences.getFloat(KEY_FASTEST_PERFECT, 0f);
             if (attempt.speedMultiplier > fastest + 0.001f) {
                 reward.blocks++;
                 reward.newSpeedRecord = true;
-                reward.lines.add("New speed record");
+                reward.lines.add(context.getString(R.string.tank_reward_speed_record));
             }
         }
         if (!hasPlayedPiece(attempt.pieceId)) {
             reward.blocks++;
             reward.newSong = true;
-            reward.lines.add("New song explored");
+            reward.lines.add(context.getString(R.string.tank_reward_new_song));
         }
         return reward;
     }

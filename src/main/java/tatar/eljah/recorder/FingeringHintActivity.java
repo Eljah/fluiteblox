@@ -9,6 +9,7 @@ import tatar.eljah.fluitblox.R;
 public class FingeringHintActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        AppLocaleManager.applySavedLocale(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_fingering_hint);
 

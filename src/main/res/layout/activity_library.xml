@@ -2,31 +2,35 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    style="@style/BloxScreen">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/library_title"
-        android:textStyle="bold"
-        android:textSize="22sp" />
+        style="@style/BloxTitle" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="@string/library_export_hint" />
+        android:text="@string/library_export_hint"
+        style="@style/BloxMuted" />
 
     <ListView
         android:id="@+id/list_library"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="12dp" />
+        android:layout_marginTop="12dp"
+        android:background="@drawable/block_panel"
+        android:padding="8dp"
+        android:cacheColorHint="@android:color/transparent" />
 
     <Button
         android:id="@+id/btn_library_back"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/library_back" />
+        android:text="@string/library_back"
+        style="@style/BloxButtonSecondary" />
 </LinearLayout>
