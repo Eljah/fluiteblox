@@ -1,49 +1,67 @@
-# Store Listing Draft (Google Play)
-
-> TODO: Replace placeholders in angle brackets with your final text.
+# Store Listing Draft
 
 ## App name
-**<App Name>**
 
-## Short description (max 80 chars)
-<Short, punchy description of what the app does>
+Fluiteblox
+
+## Short description
+
+Learn recorder notes in a playful music tank game.
 
 ## Full description
-<Full description. Suggested structure:>
 
-- What the app helps users achieve (1–2 sentences).
-- Key features (bullet list).
-- Who the app is for (1–2 sentences).
-- Any important limitations or requirements (e.g., microphone).
+Fluiteblox helps children practice recorder melodies through a blocky music game. Notes move across a staff, and the player plays the correct recorder pitch at the right time to fire at targets.
 
-### Example outline
-- **Learn and practice with Fluitebox** with guided demos and practice exercises.
-- **Real-time pitch analysis** using your microphone.
-- **Reference samples** to compare pronunciation.
-- **Progress-focused practice** for consistent improvement.
+Key features:
 
-## Feature graphic (1024 x 500)
-- File: <feature-graphic.png>
-- Notes: No device mockups with prominent bezels; keep text minimal.
+- Tankdrome game mode built around real melodies from the app library.
+- Staff notation during gameplay, not just letter note names.
+- Pitch mode for learning note height.
+- Duration mode for practicing how long each note should sound.
+- Demo playback with synthesized music and automatic shots.
+- Adjustable speed, including very slow practice.
+- Built-in library of beginner melodies and etudes.
+- Optional sheet-music photo import for expanding the library.
+- Local achievements, streaks, and progress rewards.
 
-## App icon (512 x 512)
-- File: <icon-512.png>
+Fluiteblox uses the microphone for real-time pitch recognition. Camera access is optional and used only when adding melodies from sheet-music photos.
 
-## Screenshots (min 2, recommended 4–8)
-Provide a mix of the most important screens. Suggested set:
-1. Home / main screen
-2. Demo / example playback
-3. Practice / analysis screen
-4. Results / feedback view (if applicable)
+## Category and tags
 
-## Promotional video (optional)
-- URL: <YouTube link>
+- Type: Game.
+- Suggested category: Educational.
+- Suggested tags: music, recorder, music education, children, rhythm, notes.
 
-## Tags / category
-- Category: **Education** (suggested)
-- Tags: <pronunciation, language learning, etc.>
+## Content declarations
+
+- Ads: No.
+- In-app purchases: No.
+- Account creation: No.
+- User-generated public content: No.
+- Internet access: No app `INTERNET` permission in the current build.
+- Permissions: microphone and camera for core educational functionality.
+
+## Preview assets to prepare
+
+- App icon: 512 x 512 PNG.
+- Feature graphic: 1024 x 500 PNG.
+- Phone screenshots: at least 2; recommended 4-6.
+
+Suggested screenshots:
+
+1. Main child-first Tankdrome entry screen.
+2. Tankdrome gameplay with staff notes, tanks, and shots.
+3. Song selection menu.
+4. Achievements and progress board.
+5. Library screen.
+6. Sheet-music photo import screen.
+
+## Release notes
+
+Initial release of Fluiteblox: a child-friendly recorder practice game with melody library, real-time pitch recognition, demo playback, sheet-music import, and achievements.
 
 ## Contact details
-- Support email: <support@example.com>
-- Website: <https://example.com>
-- Privacy policy: <https://example.com/privacy>
+
+- Support email: ilya.evlampiev@gmail.com.
+- Website: https://github.com/Eljah/fluiteblox.
+- Privacy policy: https://raw.githubusercontent.com/Eljah/fluiteblox/codex/find-out-if-audiveris-supports-mobile-scanning/docs/PRIVACY_POLICY.md.

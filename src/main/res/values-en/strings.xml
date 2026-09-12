@@ -4,9 +4,17 @@
     <string name="main_capture">1) Take a photo of the notes</string>
     <string name="main_library">2) Library of works</string>
     <string name="main_settings">3) Settings</string>
+    <string name="main_achievements">4) Achievements and progress</string>
+    <string name="main_tank_game">5) Note Tankdrome</string>
+    <string name="main_tank_game_cta">Play Fluiteblox</string>
+    <string name="main_game_instruction">Take your recorder. Play the note when it reaches the red timing line, and the cannon will fire.</string>
+    <string name="main_builder_settings">Settings and library</string>
+    <string name="main_builder_block_awarded">+1 builder block</string>
+    <string name="action_close">X</string>
     <string name="settings_title">Recognition settings</string>
     <string name="settings_threshold_value_default">Intensity threshold: 0.030</string>
     <string name="settings_threshold_value_template">Intensity threshold: %.3f</string>
+    <string name="settings_threshold_graph_label">Threshold: %.3f</string>
     <string name="settings_hint">Tap on the intensity graph to set the threshold above noise.</string>
     <string name="settings_menu_title">Settings</string>
     <string name="settings_language">Language and localization</string>
@@ -28,11 +36,21 @@
     <string name="capture_title">Scanning the staff</string>
     <string name="capture_piece_name_hint">Title of the work</string>
     <string name="capture_open_camera">Open camera</string>
+    <string name="capture_pick_gallery">Choose from gallery</string>
     <string name="capture_waiting">Waiting for photos. Tip: Keep the sheet as perpendicular to the camera as possible.</string>
     <string name="capture_save">Save to library</string>
     <string name="capture_analysis_template">OpenCV evaluation: perpendicularity %1$d%%, rows %2$d, bar lines %3$d, notes found %4$d.</string>
+    <string name="capture_parameters_template">Parameters: threshold %1$d, noise %2$d%%.</string>
     <string name="capture_debug_colors">Backlight: white - notes/stroke, black - background, red - staff lines, green - musical symbols.</string>
     <string name="capture_expected_notes">Reference extracted from XML/MIDI: 56 notes expected.</string>
+    <string name="capture_threshold_default">Black/white threshold: 7</string>
+    <string name="capture_threshold_template">Black/white threshold: %1$d</string>
+    <string name="capture_noise_default">Noise suppression: 50%%</string>
+    <string name="capture_noise_template">Noise suppression: %1$d%%</string>
+    <string name="capture_gallery_load_failed">Failed to load image from gallery.</string>
+    <string name="capture_opencv_init_failed">Failed to start OpenCV: %1$s</string>
+    <string name="capture_staff_knowledge_applied">Staff knowledge: limited to 5-line systems (detected groups: %1$d).</string>
+    <string name="capture_antiglare_applied">Anti-glare/anti-noir: CLAHE + median blur + adaptive threshold (stable for screen re-shooting).</string>
     <string name="capture_take_photo_first">First take a photo.</string>
     <string name="capture_title_required">Enter the title of the work.</string>
     <string name="capture_saved">Sheet music has been saved to the library.</string>
@@ -41,7 +59,9 @@
     <string name="library_title">Library</string>
     <string name="library_empty">The library is empty. Add your first piece.</string>
     <string name="library_back">Back to menu</string>
+    <string name="library_item_template">%1$s - %2$d notes</string>
     <string name="library_export_title">Export: %1$s</string>
+    <string name="library_play_tanks">Play in Tankdrome</string>
     <string name="library_export_musicxml">Export to MusicXML</string>
     <string name="library_export_midi">Export to MIDI</string>
     <string name="library_export_success">File saved: %1$s</string>
@@ -64,8 +84,29 @@
     <string name="play_midi_failed">Failed to start playback on this device.</string>
     <string name="play_waiting_intensity">Too quiet (threshold: %.3f). Play louder or adjust the threshold.</string>
     <string name="play_restart">Start again</string>
+    <string name="play_back">Back</string>
     <string name="play_restarted">Progress reset. Start with the first note.</string>
     <string name="play_simplified_mode">Simplified mode (#/b = same note)</string>
+    <string name="play_header_with_fingering">Fluiteblox - %1$s</string>
+    <string name="play_panorama_up">Up</string>
+    <string name="play_panorama_down">Down</string>
+    <string name="play_panorama_show_details">Show details</string>
+    <string name="play_panorama_back_to_nav">Back to navigation</string>
+    <string name="play_panorama_no_actual">no data</string>
+    <string name="play_panorama_detail_template">Note #%1$d, played: %2$s</string>
+    <string name="play_panorama_extra_detail_template">Expected: %1$s\nDuration: %2$s\nDuration error: %3$s</string>
+    <string name="play_panorama_yes">yes</string>
+    <string name="play_panorama_no">no</string>
+    <string name="achievements_title">Achievements by piece</string>
+    <string name="achievements_no_pieces">No pieces to display.</string>
+    <string name="achievements_empty">No completed attempts yet. Finish a piece to the end.</string>
+    <string name="achievements_overall_empty">Overall statistics are not available yet.</string>
+    <string name="achievements_overall_template">Overall statistics:\na) pieces finished: %1$d\nb) attempts started: %2$d\nc) finished without note errors: %3$d\nd) finished without duration errors: %4$d</string>
+    <string name="achievements_summary_template">Completed attempts: %1$d\nLatest attempt - hits: %2$s, recovery: %3$s, duration: %4$s</string>
+    <string name="achievements_graph_not_enough">Not enough completed attempts for a graph</string>
+    <string name="achievements_graph_hits">Blue: hits</string>
+    <string name="achievements_graph_recovery">Green: recovery</string>
+    <string name="achievements_graph_duration">Orange: duration</string>
     <string name="hint_title">Fingering hint</string>
     <string name="hint_note_index">Note №%1$d</string>
     <string name="hint_expected">Needed: %1$s\nFingers: %2$s</string>
@@ -95,6 +136,49 @@
     <string name="capture_edit_mode_down">Mode: move note down by 1 step (tap)</string>
     <string name="capture_panorama_open">Open panorama (fullscreen)</string>
     <string name="capture_panorama_close">Close panorama</string>
+    <string name="capture_panorama_save">Save</string>
+    <string name="capture_panorama_cancel">Cancel</string>
     <string name="capture_blob_continue">Continue recognition</string>
     <string name="capture_blob_mode_hint">Series 1-7 mode: tap a blob to remove it from subsequent stages.</string>
+    <string name="tank_fallback_title">Tank Demo</string>
+    <string name="tank_song">Song</string>
+    <string name="tank_demo">Demo</string>
+    <string name="tank_melody_title">Tank melody</string>
+    <string name="tank_mode_pitch">Pitch</string>
+    <string name="tank_mode_duration">Dur</string>
+    <string name="tank_score_template">Score %1$d/%2$d   Miss %3$d</string>
+    <string name="tank_result_score_template">SCORE %1$d/%2$d</string>
+    <string name="tank_blocks_template">+%1$d BLOCKS</string>
+    <string name="tank_result_details_template">%1$s\nStreak: %2$d day(s)\nMode: %3$s\nSpeed: %4$s</string>
+    <string name="tank_dialog_again">Again</string>
+    <string name="tank_dialog_next">Next</string>
+    <string name="tank_dialog_close">Close</string>
+    <string name="tank_result_new_speed">NEW SPEED BLOCK</string>
+    <string name="tank_result_new_song">NEW SONG BLOCK</string>
+    <string name="tank_result_blocks">BLOCKS EARNED</string>
+    <string name="tank_song_notes_template">%1$s  [%2$d]</string>
+    <string name="tank_achievements_empty_template">Tankdrome achievements:
+Blocks: %1$d
+Play streak: %2$d day(s)
+Played songs: %3$d
+Builder blocks: %4$d
+Finish a song to build the first game tower.</string>
+    <string name="tank_achievements_summary_template">Tankdrome achievements:
+Blocks: %1$d
+Play streak: %2$d day(s)
+Played songs: %3$d
+Attempts: %4$d
+Builder blocks: %5$d
+Pitch perfect: %6$d
+Duration perfect: %7$d
+Best pitch: %8$.1f%%
+Best duration: %9$.1f%%
+Fastest perfect: %10$.2fx</string>
+    <string name="tank_reward_finished_song">Finished song</string>
+    <string name="tank_reward_daily_return">Daily return</string>
+    <string name="tank_reward_accuracy">80%%+ accuracy</string>
+    <string name="tank_reward_perfect_run">Perfect run</string>
+    <string name="tank_reward_duration_perfect">Duration perfect</string>
+    <string name="tank_reward_speed_record">New speed record</string>
+    <string name="tank_reward_new_song">New song explored</string>
 </resources>

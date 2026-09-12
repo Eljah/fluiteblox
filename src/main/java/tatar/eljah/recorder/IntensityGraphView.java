@@ -12,6 +12,8 @@ import android.view.View;
 import java.util.ArrayList;
 import java.util.List;
 
+import tatar.eljah.fluitblox.R;
+
 public class IntensityGraphView extends View {
     public interface OnThresholdChangedListener {
         void onThresholdChanged(float value);
@@ -71,7 +73,11 @@ public class IntensityGraphView extends View {
 
         float yThreshold = h - threshold * h;
         canvas.drawLine(0, yThreshold, w, yThreshold, thresholdPaint);
-        canvas.drawText("Threshold: " + String.format("%.3f", threshold), 8f, Math.max(22f, yThreshold - 8f), textPaint);
+        canvas.drawText(
+                getContext().getString(R.string.settings_threshold_graph_label, threshold),
+                8f,
+                Math.max(22f, yThreshold - 8f),
+                textPaint);
 
         if (history.isEmpty()) {
             return;

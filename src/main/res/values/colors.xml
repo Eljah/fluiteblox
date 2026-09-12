@@ -1,6 +1,16 @@
 <resources>
-    <color name="colorPrimary">#6200EE</color>
-    <color name="colorPrimaryDark">#3700B3</color>
-    <color name="colorAccent">#03DAC5</color>
+    <color name="colorPrimary">#223126</color>
+    <color name="colorPrimaryDark">#101A13</color>
+    <color name="colorAccent">#F4B83F</color>
+    <color name="blox_screen">#142119</color>
+    <color name="blox_panel">#223126</color>
+    <color name="blox_panel_border">#151C17</color>
+    <color name="blox_text">#F2F0D8</color>
+    <color name="blox_title">#FFE36D</color>
+    <color name="blox_primary">#F4B83F</color>
+    <color name="blox_primary_border">#FFF0A5</color>
+    <color name="blox_secondary">#3D6A4B</color>
+    <color name="blox_secondary_border">#8FC17E</color>
+    <color name="blox_muted">#AFC9A8</color>
     <color name="white">#FFFFFF</color>
 </resources>

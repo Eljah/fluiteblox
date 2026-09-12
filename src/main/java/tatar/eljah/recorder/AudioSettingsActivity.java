@@ -23,6 +23,7 @@ public class AudioSettingsActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        AppLocaleManager.applySavedLocale(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_audio_settings);
 

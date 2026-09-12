@@ -4,8 +4,10 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
@@ -66,6 +68,8 @@ public class CaptureSheetActivity extends AppCompatActivity {
     private DebugBlobSeriesEngine.Session blobSession;
     private int blobStage = 1;
     private boolean blobSeriesMode;
+    private final ScoreRecognitionEngine recognitionEngine =
+            new AudiverisCompatRecognitionEngine(new OpenCvRecognitionEngine());
     private final ArrayList<Float> perStaffFilterStrength = new ArrayList<Float>();
     private final ArrayList<SeekBar> perStaffSeekBars = new ArrayList<SeekBar>();
     private final ArrayList<NoteEvent> panoramaDraftNotes = new ArrayList<NoteEvent>();
@@ -79,6 +83,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        AppLocaleManager.applySavedLocale(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_capture_sheet);
         ReferenceComposition.loadFromAssets(getAssets());
@@ -220,7 +225,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
                 }
                 OpenCvScoreProcessor.ProcessingResult result = latestResult;
                 if (result == null) {
-                    result = new OpenCvScoreProcessor().process(capturedBitmap, title, currentOptions());
+                    result = recognitionEngine.recognize(capturedBitmap, title, currentOptions());
                 }
                 result.piece.title = title;
                 new ScoreLibraryRepository(CaptureSheetActivity.this).savePiece(result.piece);
@@ -402,7 +407,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
             @Override
             public void run() {
                 try {
-                    final OpenCvScoreProcessor.ProcessingResult result = new OpenCvScoreProcessor().process(bmp, "draft", options);
+                    final OpenCvScoreProcessor.ProcessingResult result = recognitionEngine.recognize(bmp, "draft", options);
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
@@ -470,10 +475,10 @@ public class CaptureSheetActivity extends AppCompatActivity {
         if (result == null) {
             return "legacy";
         }
-        if (result.openCvUsed) {
-            return "OpenCV";
+        if (result.processingMode != null && result.processingMode.trim().length() > 0) {
+            return result.processingMode;
         }
-        return "legacy (fallback)";
+        return result.openCvUsed ? "OpenCV" : "legacy (fallback)";
     }
 
     private void updateOverlayBounds(ImageView preview, Bitmap shownBitmap) {
@@ -652,6 +657,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
             TextView label = new TextView(this);
             int pct = Math.round(perStaffFilterStrength.get(i) * 100f);
             label.setText(getString(R.string.capture_staff_slider_item, i + 1, pct, 0));
+            styleDynamicLabel(label);
             staffSlidersLayout.addView(label);
 
             SeekBar seek = new SeekBar(this);
@@ -694,6 +700,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
             Button button = new Button(this);
             button.setText(String.valueOf(stage));
             button.setAllCaps(false);
+            styleDynamicButton(button);
             button.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -706,6 +713,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
         continueButton.setId(R.id.btn_blob_continue);
         continueButton.setText(R.string.capture_blob_continue);
         continueButton.setAllCaps(false);
+        styleDynamicButton(continueButton);
         continueButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -715,6 +723,25 @@ public class CaptureSheetActivity extends AppCompatActivity {
         blobStageButtonsContainer.addView(continueButton);
     }
 
+    private void styleDynamicLabel(TextView label) {
+        label.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+        label.setTextColor(Color.rgb(242, 240, 216));
+        label.setTextSize(14f);
+        label.setPadding(0, dp(8), 0, dp(2));
+    }
+
+    private void styleDynamicButton(Button button) {
+        button.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+        button.setTextColor(Color.rgb(242, 240, 216));
+        button.setBackgroundResource(R.drawable.block_button_secondary);
+        button.setMinHeight(dp(48));
+        button.setPadding(dp(12), 0, dp(12), 0);
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
     private void startBlobSeriesMode(Bitmap source) {
         if (blobSeriesEngine == null) {
             try {
@@ -722,7 +749,7 @@ public class CaptureSheetActivity extends AppCompatActivity {
             } catch (Throwable t) {
                 Log.e(TAG, "Failed to initialize OpenCV blob engine", t);
                 Toast.makeText(this, R.string.capture_gallery_load_failed, Toast.LENGTH_SHORT).show();
-                analysisText.setText("OpenCV init failed: " + t.getClass().getSimpleName());
+                analysisText.setText(getString(R.string.capture_opencv_init_failed, t.getClass().getSimpleName()));
                 rerunProcessing();
                 return;
             }

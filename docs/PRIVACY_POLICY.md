@@ -1,40 +1,47 @@
 # Privacy Policy
 
-_Last updated: <YYYY-MM-DD>_
+Last updated: 2026-09-10
 
-This Privacy Policy describes how **<App Name>** (“we,” “our,” or “us”) collects, uses, and shares information when you use the **<App Name>** mobile application (the “App”).
+This Privacy Policy describes how Fluiteblox handles information when you use the Fluiteblox mobile application.
 
-## 1) Information we collect
+## Information the app uses
 
-### Audio / microphone data
-The App requests access to your device microphone to analyze speech and provide real-time feedback. Audio is used **only for on-device analysis** and is **not stored or transmitted** by default.
+### Microphone audio
 
-### Device information
-We do not intentionally collect device identifiers. If system logs or crash reports are enabled by the OS, they may include limited device information.
+Fluiteblox asks for microphone access to recognize recorder pitch during practice and during the Tankdrome game. Audio is processed on the device for real-time feedback. The app does not upload microphone audio to a server.
 
-## 2) How we use information
-We use microphone input solely to provide the App’s core functionality (speech analysis and feedback). We do not use audio data for advertising or profiling.
+### Camera images
 
-## 3) Sharing of information
-We do **not** sell, trade, or share personal information with third parties. We do not transmit audio recordings to any server by default.
+Fluiteblox can ask for camera access when the user chooses to photograph sheet music and add it as a melody. Captured images are used on the device for sheet-music recognition. The app does not upload these images to a server.
 
-## 4) Data retention
-We do not store microphone audio. Any transient audio data is processed in memory and discarded immediately after analysis.
+### Local practice data
 
-## 5) Children’s privacy
-The App is not directed to children under 13. We do not knowingly collect personal information from children.
+The app stores local progress, achievements, selected songs, imported melodies, and practice settings on the device. This data is used only to run the app experience and show progress.
 
-## 6) Security
-We take reasonable measures to protect user data; however, no method of transmission or storage is 100% secure.
+## Sharing
 
-## 7) Your choices
-You can revoke microphone access at any time in your device settings. The App may not function correctly without microphone access.
+Fluiteblox does not sell personal information. The app does not share microphone audio, camera images, imported melodies, or practice progress with third parties.
 
-## 8) Changes to this policy
-We may update this policy from time to time. We will revise the “Last updated” date above and, if changes are significant, provide notice within the App or on our website.
+## Children
 
-## 9) Contact us
-If you have questions about this policy, contact us at:
+Fluiteblox is designed as a child-friendly recorder learning game. Microphone and camera permissions are used only for the app's educational music features. The app does not include ads, social features, account creation, or user-to-user communication.
 
-- Email: <support@example.com>
-- Website: <https://example.com>
+## Security and retention
+
+Audio analysis is transient and processed in memory. Captured sheet images, imported melodies, achievements, and settings remain on the device until the user clears app data or uninstalls the app.
+
+## Your choices
+
+You can deny or revoke microphone and camera permissions in Android system settings. Some features may not work without the relevant permission.
+
+You can delete local app data from Android system settings or by uninstalling the app.
+
+## Changes
+
+This policy may be updated when the app changes. The "Last updated" date will be revised when that happens.
+
+## Contact
+
+Support email: ilya.evlampiev@gmail.com
+
+Website: https://github.com/Eljah/fluiteblox

@@ -19,6 +19,7 @@ public class AchievementsActivity extends AppCompatActivity {
     private Spinner pieceSpinner;
     private AchievementGraphView graphView;
     private TextView overallSummary;
+    private TextView tankSummary;
     private TextView summary;
 
     private List<ScorePiece> pieces = new ArrayList<ScorePiece>();
@@ -26,18 +27,21 @@ public class AchievementsActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        AppLocaleManager.applySavedLocale(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_achievements);
 
         pieceSpinner = findViewById(R.id.spinner_piece);
         graphView = findViewById(R.id.achievement_graph);
         overallSummary = findViewById(R.id.text_achievement_overall);
+        tankSummary = findViewById(R.id.text_tank_achievement_summary);
         summary = findViewById(R.id.text_achievement_summary);
 
         metricsStore = new PerformanceMetricsStore(this);
         pieces = new ScoreLibraryRepository(this).getAllPieces();
 
         overallSummary.setText(buildOverallSummary());
+        tankSummary.setText(new TankPerformanceStore(this).buildSummary());
 
         List<String> titles = new ArrayList<String>();
         for (ScorePiece piece : pieces) {
@@ -45,9 +49,9 @@ public class AchievementsActivity extends AppCompatActivity {
         }
 
         ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
-                android.R.layout.simple_spinner_item,
+                R.layout.spinner_item_blox,
                 titles);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        adapter.setDropDownViewResource(R.layout.spinner_dropdown_item_blox);
         pieceSpinner.setAdapter(adapter);
 
         pieceSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {

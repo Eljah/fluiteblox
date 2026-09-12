@@ -159,6 +159,62 @@ public class RecorderNoteMapper {
         return fallback;
     }
 
+    public String fingeringPatternFor(String note) {
+        String normalized = MusicNotation.normalizeNoteKey(note);
+        if (normalized == null) {
+            return "";
+        }
+        String pattern = exactFingeringPattern(normalized);
+        if (pattern != null) {
+            return pattern;
+        }
+        MusicNotation.ParsedNote parsed = MusicNotation.parseNormalizedNoteKey(normalized);
+        if (parsed == null) {
+            return "";
+        }
+        String closestKey = null;
+        int minDistance = Integer.MAX_VALUE;
+        int targetMidi = MusicNotation.midiFor(parsed.noteName, parsed.octave);
+        for (String key : FINGERINGS.keySet()) {
+            MusicNotation.ParsedNote keyParsed = MusicNotation.parseNormalizedNoteKey(key);
+            if (keyParsed == null) {
+                continue;
+            }
+            int distance = Math.abs(MusicNotation.midiFor(keyParsed.noteName, keyParsed.octave) - targetMidi);
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestKey = key;
+            }
+        }
+        return closestKey == null ? "" : exactFingeringPattern(closestKey);
+    }
+
+    private String exactFingeringPattern(String normalized) {
+        if ("C4".equals(normalized) || "D4".equals(normalized)) return "xxx|xxxx";
+        if ("C#4".equals(normalized) || "Db4".equals(normalized)
+                || "D#4".equals(normalized) || "Eb4".equals(normalized)) return "xxx|xxxh";
+        if ("E4".equals(normalized) || "C5".equals(normalized) || "C6".equals(normalized)) return "xxx|xxxo";
+        if ("F4".equals(normalized) || "D5".equals(normalized) || "D6".equals(normalized)) return "xxx|xxoo";
+        if ("F#4".equals(normalized) || "Gb4".equals(normalized)) return "xxx|xhoo";
+        if ("G4".equals(normalized) || "G5".equals(normalized) || "G6".equals(normalized)) return "xxo|oooo";
+        if ("G#4".equals(normalized) || "Ab4".equals(normalized)
+                || "G#5".equals(normalized) || "Ab5".equals(normalized)
+                || "G#6".equals(normalized) || "Ab6".equals(normalized)) return "xho|oooo";
+        if ("A4".equals(normalized) || "A5".equals(normalized) || "A6".equals(normalized)) return "xoo|oooo";
+        if ("A#4".equals(normalized) || "Bb4".equals(normalized)
+                || "A#5".equals(normalized) || "Bb5".equals(normalized)) return "hoo|oooo";
+        if ("B4".equals(normalized) || "B5".equals(normalized)) return "ooo|oooo";
+        if ("C#5".equals(normalized) || "Db5".equals(normalized)
+                || "C#6".equals(normalized) || "Db6".equals(normalized)) return "xxx|xxho";
+        if ("D#5".equals(normalized) || "Eb5".equals(normalized)
+                || "D#6".equals(normalized) || "Eb6".equals(normalized)) return "xxx|xhoo";
+        if ("E5".equals(normalized) || "E6".equals(normalized)) return "xxx|xooo";
+        if ("F5".equals(normalized) || "F6".equals(normalized)) return "xxx|hooo";
+        if ("F#5".equals(normalized) || "Gb5".equals(normalized)
+                || "F#6".equals(normalized) || "Gb6".equals(normalized)) return "xxx|oooo";
+        return null;
+    }
+
     private String nearestFingering(String note) {
         MusicNotation.ParsedNote parsed = MusicNotation.parseNormalizedNoteKey(note);
         if (parsed == null) {

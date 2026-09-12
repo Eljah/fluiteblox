@@ -3,5 +3,73 @@
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:windowBackground">@color/blox_screen</item>
+    </style>
+
+    <style name="BloxScreen">
+        <item name="android:background">@color/blox_screen</item>
+        <item name="android:padding">16dp</item>
+    </style>
+
+    <style name="BloxPanel" parent="BloxBody">
+        <item name="android:background">@drawable/block_panel</item>
+        <item name="android:padding">16dp</item>
+    </style>
+
+    <style name="BloxTitle">
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textColor">@color/blox_title</item>
+        <item name="android:textSize">24sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="BloxSectionTitle" parent="BloxTitle">
+        <item name="android:textSize">18sp</item>
+        <item name="android:textColor">@color/blox_text</item>
+    </style>
+
+    <style name="BloxBody">
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textColor">@color/blox_text</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:lineSpacingExtra">3dp</item>
+    </style>
+
+    <style name="BloxMuted" parent="BloxBody">
+        <item name="android:textColor">@color/blox_muted</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="BloxButtonSecondary">
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:background">@drawable/block_button_secondary</item>
+        <item name="android:textColor">@color/blox_text</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:paddingLeft">12dp</item>
+        <item name="android:paddingRight">12dp</item>
+        <item name="android:letterSpacing">0</item>
+    </style>
+
+    <style name="BloxButtonPrimary" parent="BloxButtonSecondary">
+        <item name="android:background">@drawable/block_button_primary</item>
+        <item name="android:textColor">#151C17</item>
+        <item name="android:textSize">18sp</item>
+    </style>
+
+    <style name="BloxInput">
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:background">@drawable/block_input</item>
+        <item name="android:textColor">#151C17</item>
+        <item name="android:textColorHint">#60705C</item>
+        <item name="android:padding">12dp</item>
+    </style>
+
+    <style name="BloxGraphPanel">
+        <item name="android:background">@drawable/block_graph_panel</item>
+        <item name="android:padding">4dp</item>
     </style>
 </resources>

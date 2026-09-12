@@ -5,18 +5,22 @@
     <string name="main_library">2) Библиотека произведений</string>
     <string name="main_settings">3) Настройки</string>
     <string name="main_achievements">4) Достижения и прогресс</string>
-
+    <string name="main_tank_game">5) Нотный танкодром</string>
+    <string name="main_tank_game_cta">Играть в Fluiteblox</string>
+    <string name="main_game_instruction">Возьми блок-флейту. Играй ноту, когда она попадает в красную рамку, чтобы пушка выстрелила.</string>
+    <string name="main_builder_settings">Настройки и библиотека</string>
+    <string name="main_builder_block_awarded">+1 блок строителя</string>
+    <string name="action_close">X</string>
     <string name="settings_title">Настройки распознавания</string>
     <string name="settings_threshold_value_default">Порог интенсивности: 0.030</string>
     <string name="settings_threshold_value_template">Порог интенсивности: %.3f</string>
+    <string name="settings_threshold_graph_label">Порог: %.3f</string>
     <string name="settings_hint">Тапните по графику интенсивности, чтобы задать порог выше шумов.</string>
-
     <string name="settings_menu_title">Настройки</string>
     <string name="settings_language">Язык и локализация</string>
     <string name="settings_apply">Применить</string>
     <string name="settings_audio_section">Аудио-калибровка</string>
     <string name="settings_open_audio_calibration">Открыть калибровку микрофона</string>
-
     <string name="language_russian">Русский</string>
     <string name="language_english">English</string>
     <string name="language_german">Deutsch</string>
@@ -29,7 +33,6 @@
     <string name="language_chinese">中文</string>
     <string name="language_japanese">日本語</string>
     <string name="language_arabic">العربية</string>
-
     <string name="capture_title">Сканирование нотного стана</string>
     <string name="capture_piece_name_hint">Название произведения</string>
     <string name="capture_open_camera">Открыть камеру</string>
@@ -45,6 +48,7 @@
     <string name="capture_noise_default">Подавление шума: 50%%</string>
     <string name="capture_noise_template">Подавление шума: %1$d%%</string>
     <string name="capture_gallery_load_failed">Не удалось загрузить изображение из галереи.</string>
+    <string name="capture_opencv_init_failed">Не удалось запустить OpenCV: %1$s</string>
     <string name="capture_staff_knowledge_applied">Знание нотоносца: применено ограничение на 5 линий (обнаружено групп: %1$d).</string>
     <string name="capture_antiglare_applied">Anti-glare/anti-noir: CLAHE + median blur + adaptive threshold (устойчивость к пересъёмке с экрана).</string>
     <string name="capture_take_photo_first">Сначала сделайте фото.</string>
@@ -52,18 +56,17 @@
     <string name="capture_saved">Ноты сохранены в библиотеку.</string>
     <string name="capture_camera_unavailable">Камера недоступна на этом устройстве.</string>
     <string name="capture_camera_permission_denied">Доступ к камере не выдан.</string>
-
     <string name="library_title">Библиотека</string>
     <string name="library_empty">Библиотека пуста. Добавьте первое произведение.</string>
     <string name="library_back">Назад в меню</string>
-
+    <string name="library_item_template">%1$s - %2$d нот</string>
     <string name="library_export_title">Экспорт: %1$s</string>
+    <string name="library_play_tanks">Играть в танкодроме</string>
     <string name="library_export_musicxml">Экспорт в MusicXML</string>
     <string name="library_export_midi">Экспорт в MIDI</string>
     <string name="library_export_success">Файл сохранен: %1$s</string>
     <string name="library_export_error">Не удалось экспортировать файл.</string>
     <string name="library_export_hint">Долгое нажатие по произведению — экспорт MusicXML/MIDI</string>
-
     <string name="play_waiting">Ожидание аудио от микрофона…</string>
     <string name="play_no_piece">Произведение не найдено.</string>
     <string name="play_status_template">Ожидается: %1$s, сыграно: %2$s (%3$d Гц)</string>
@@ -81,6 +84,7 @@
     <string name="play_midi_failed">Не удалось запустить проигрывание на этом устройстве.</string>
     <string name="play_waiting_intensity">Слишком тихо (порог: %.3f). Сыграйте громче или настройте порог.</string>
     <string name="play_restart">Начать заново</string>
+    <string name="play_back">Назад</string>
     <string name="play_restarted">Прогресс сброшен. Начинайте с первой ноты.</string>
     <string name="play_simplified_mode">Упрощенный режим (#/b = та же нота)</string>
     <string name="play_header_with_fingering">Fluiteblox — %1$s</string>
@@ -93,8 +97,6 @@
     <string name="play_panorama_extra_detail_template">Ожидалось: %1$s\nДлительность: %2$s\nОшибка длительности: %3$s</string>
     <string name="play_panorama_yes">да</string>
     <string name="play_panorama_no">нет</string>
-
-
     <string name="achievements_title">Достижения по произведениям</string>
     <string name="achievements_no_pieces">Нет произведений для отображения.</string>
     <string name="achievements_empty">Завершенных попыток пока нет. Доведите произведение до конца.</string>
@@ -106,7 +108,10 @@
 г) доведено до конца без ошибок длительности: %4$d</string>
     <string name="achievements_summary_template">Завершенных попыток: %1$d
 Последняя попытка — попадания: %2$s, продолжение: %3$s, длительность: %4$s</string>
-
+    <string name="achievements_graph_not_enough">Недостаточно завершенных попыток для графика</string>
+    <string name="achievements_graph_hits">Синий: попадания</string>
+    <string name="achievements_graph_recovery">Зеленый: продолжение</string>
+    <string name="achievements_graph_duration">Оранжевый: длительность</string>
     <string name="hint_title">Подсказка аппликатуры</string>
     <string name="hint_note_index">Нота №%1$d</string>
     <string name="hint_expected">Нужно было: %1$s\nПальцы: %2$s</string>
@@ -140,4 +145,45 @@
     <string name="capture_panorama_cancel">Отменить</string>
     <string name="capture_blob_continue">Продолжить распознавание</string>
     <string name="capture_blob_mode_hint">Режим серий 1-7: нажимайте на блоб для удаления в последующих сериях.</string>
+    <string name="tank_fallback_title">Демо танкодрома</string>
+    <string name="tank_song">Пьеса</string>
+    <string name="tank_demo">Демо</string>
+    <string name="tank_melody_title">Мелодия для танкодрома</string>
+    <string name="tank_mode_pitch">Высота</string>
+    <string name="tank_mode_duration">Длит.</string>
+    <string name="tank_score_template">Счет %1$d/%2$d   Пропущено %3$d</string>
+    <string name="tank_result_score_template">СЧЕТ %1$d/%2$d</string>
+    <string name="tank_blocks_template">+%1$d БЛОКОВ</string>
+    <string name="tank_result_details_template">%1$s\nСерия: %2$d дн.\nРежим: %3$s\nСкорость: %4$s</string>
+    <string name="tank_dialog_again">Еще раз</string>
+    <string name="tank_dialog_next">Следующая</string>
+    <string name="tank_dialog_close">Закрыть</string>
+    <string name="tank_result_new_speed">НОВЫЙ СКОРОСТНОЙ БЛОК</string>
+    <string name="tank_result_new_song">НОВЫЙ БЛОК МЕЛОДИИ</string>
+    <string name="tank_result_blocks">БЛОКИ ПОЛУЧЕНЫ</string>
+    <string name="tank_song_notes_template">%1$s  [%2$d]</string>
+    <string name="tank_achievements_empty_template">Достижения танкодрома:
+Блоки: %1$d
+Серия входов: %2$d дн.
+Сыграно мелодий: %3$d
+Блоки строителя: %4$d
+Доиграйте мелодию до конца, чтобы построить первую игровую башню.</string>
+    <string name="tank_achievements_summary_template">Достижения танкодрома:
+Блоки: %1$d
+Серия входов: %2$d дн.
+Сыграно мелодий: %3$d
+Попыток: %4$d
+Блоки строителя: %5$d
+Идеальная высота: %6$d
+Идеальная длительность: %7$d
+Лучшая высота: %8$.1f%%
+Лучшая длительность: %9$.1f%%
+Самый быстрый идеальный заезд: %10$.2fx</string>
+    <string name="tank_reward_finished_song">Мелодия завершена</string>
+    <string name="tank_reward_daily_return">Возвращение сегодня</string>
+    <string name="tank_reward_accuracy">Точность 80%%+</string>
+    <string name="tank_reward_perfect_run">Идеальный заезд</string>
+    <string name="tank_reward_duration_perfect">Идеальная длительность</string>
+    <string name="tank_reward_speed_record">Новый рекорд скорости</string>
+    <string name="tank_reward_new_song">Новая мелодия изучена</string>
 </resources>

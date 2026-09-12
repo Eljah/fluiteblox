@@ -2,33 +2,36 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    style="@style/BloxScreen">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/settings_menu_title"
-        android:textSize="22sp"
-        android:textStyle="bold" />
+        style="@style/BloxTitle" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="@string/settings_language" />
+        android:text="@string/settings_language"
+        style="@style/BloxSectionTitle" />
 
     <Spinner
         android:id="@+id/spinner_language"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp" />
+        android:layout_marginTop="8dp"
+        android:background="@drawable/block_input"
+        android:padding="8dp" />
 
     <Button
         android:id="@+id/btn_apply_settings"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="@string/settings_apply" />
+        android:text="@string/settings_apply"
+        style="@style/BloxButtonPrimary" />
 
 
 
@@ -36,13 +39,15 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="24dp"
-        android:text="@string/settings_audio_section" />
+        android:text="@string/settings_audio_section"
+        style="@style/BloxSectionTitle" />
 
     <Button
         android:id="@+id/btn_open_audio_calibration"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="@string/settings_open_audio_calibration" />
+        android:text="@string/settings_open_audio_calibration"
+        style="@style/BloxButtonSecondary" />
 
 </LinearLayout>

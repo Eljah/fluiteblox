@@ -44,7 +44,9 @@ public class SettingsActivity extends AppCompatActivity {
             }
         }
 
-        spinner.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, LANG_NATIVE_LABELS));
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, R.layout.spinner_item_blox, LANG_NATIVE_LABELS);
+        adapter.setDropDownViewResource(R.layout.spinner_dropdown_item_blox);
+        spinner.setAdapter(adapter);
         spinner.setSelection(selected);
 
         Button apply = findViewById(R.id.btn_apply_settings);

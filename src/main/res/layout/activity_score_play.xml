@@ -1,6 +1,7 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@color/blox_screen">
 
     <ScrollView
         android:layout_width="match_parent"
@@ -11,14 +12,29 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
+            style="@style/BloxScreen">
 
-            <TextView
-                android:id="@+id/text_piece_title"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="20sp"
-                android:textStyle="bold" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btn_back_to_library"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:text="@string/play_back"
+                    style="@style/BloxButtonSecondary" />
+
+                <TextView
+                    android:id="@+id/text_piece_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    style="@style/BloxTitle" />
+            </LinearLayout>
 
 
             <RadioGroup
@@ -33,28 +49,35 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checked="true"
-                    android:text="@string/play_mode_mic" />
+                    android:text="@string/play_mode_mic"
+                    android:textColor="@color/blox_text"
+                    android:fontFamily="monospace" />
 
                 <RadioButton
                     android:id="@+id/radio_mode_midi"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="16dp"
-                    android:text="@string/play_mode_midi" />
+                    android:text="@string/play_mode_midi"
+                    android:textColor="@color/blox_text"
+                    android:fontFamily="monospace" />
 
                 <RadioButton
                     android:id="@+id/radio_mode_tablature"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="16dp"
-                    android:text="@string/play_mode_tablature" />
+                    android:text="@string/play_mode_tablature"
+                    android:textColor="@color/blox_text"
+                    android:fontFamily="monospace" />
             </RadioGroup>
 
             <tatar.eljah.recorder.PitchOverlayView
                 android:id="@+id/pitch_overlay"
                 android:layout_width="match_parent"
                 android:layout_height="300dp"
-                android:layout_marginTop="12dp" />
+                android:layout_marginTop="12dp"
+                style="@style/BloxGraphPanel" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -67,14 +90,17 @@
                     android:id="@+id/btn_restart"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/play_restart" />
+                    android:text="@string/play_restart"
+                    style="@style/BloxButtonSecondary" />
 
                 <CheckBox
                     android:id="@+id/check_simplified_mode"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="12dp"
-                    android:text="@string/play_simplified_mode" />
+                    android:text="@string/play_simplified_mode"
+                    android:textColor="@color/blox_text"
+                    android:fontFamily="monospace" />
             </LinearLayout>
 
             <TextView
@@ -82,7 +108,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="@string/play_waiting" />
+                android:text="@string/play_waiting"
+                style="@style/BloxBody" />
 
         </LinearLayout>
     </ScrollView>
@@ -124,7 +151,8 @@
                         android:id="@+id/btn_panorama_close"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
-                        android:text="✕" />
+                        android:text="@string/action_close"
+                        style="@style/BloxButtonSecondary" />
                 </LinearLayout>
 
                 <LinearLayout
@@ -139,14 +167,16 @@
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_weight="1"
-                        android:text="@string/play_panorama_up" />
+                        android:text="@string/play_panorama_up"
+                        style="@style/BloxButtonSecondary" />
 
                     <Button
                         android:id="@+id/btn_panorama_down"
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_weight="1"
-                        android:text="@string/play_panorama_down" />
+                        android:text="@string/play_panorama_down"
+                        style="@style/BloxButtonSecondary" />
                 </LinearLayout>
 
                 <Button
@@ -154,7 +184,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="@string/play_panorama_show_details" />
+                    android:text="@string/play_panorama_show_details"
+                    style="@style/BloxButtonSecondary" />
 
                 <Button
                     android:id="@+id/btn_panorama_back_to_nav"
@@ -162,7 +193,8 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="@string/play_panorama_back_to_nav"
-                    android:visibility="gone" />
+                    android:visibility="gone"
+                    style="@style/BloxButtonSecondary" />
             </LinearLayout>
 
             <LinearLayout
@@ -177,24 +209,22 @@
                     android:id="@+id/text_panorama_note"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="#FFFFFF"
-                    android:textSize="30sp"
-                    android:textStyle="bold" />
+                    style="@style/BloxTitle" />
 
                 <TextView
                     android:id="@+id/text_panorama_detail"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:textColor="#FFFFFF" />
+                    style="@style/BloxBody" />
 
                 <TextView
                     android:id="@+id/text_panorama_detail_extra"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:textColor="#FFFFFF"
-                    android:visibility="gone" />
+                    android:visibility="gone"
+                    style="@style/BloxMuted" />
             </LinearLayout>
         </LinearLayout>
     </FrameLayout>

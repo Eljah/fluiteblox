@@ -2,41 +2,40 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="16dp">
+    style="@style/BloxScreen">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/hint_title"
-        android:textStyle="bold"
-        android:textSize="22sp" />
+        style="@style/BloxTitle" />
 
     <TextView
         android:id="@+id/text_note_index"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:textSize="18sp" />
+        style="@style/BloxSectionTitle" />
 
     <TextView
         android:id="@+id/text_duration_hint"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:textSize="18sp" />
+        style="@style/BloxBody" />
 
     <TextView
         android:id="@+id/text_expected_note"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:textSize="18sp" />
+        style="@style/BloxPanel" />
 
     <TextView
         android:id="@+id/text_actual_note"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:textSize="18sp" />
+        style="@style/BloxPanel" />
 
 </LinearLayout>

@@ -6,8 +6,8 @@ KEYSTORE_PATH="$REPO_ROOT/keystore/release-key.jks"
 KEY_ALIAS="${KEY_ALIAS:-release}"
 KEYSTORE_PASSWORD="${KEYSTORE_PASSWORD:-Tatarstan1920}"
 KEY_PASSWORD="${KEY_PASSWORD:-Tatarstan1920}"
-ANDROID_PLATFORM="${ANDROID_PLATFORM:-34}"
-BUILD_TOOLS_AAPT2="${BUILD_TOOLS_AAPT2:-34.0.0}"
+ANDROID_PLATFORM="${ANDROID_PLATFORM:-36}"
+BUILD_TOOLS_AAPT2="${BUILD_TOOLS_AAPT2:-36.1.0}"
 
 "$REPO_ROOT/scripts/prepare-keystore.sh"
 
@@ -17,7 +17,10 @@ if [[ -z "${ANDROID_HOME:-}" ]]; then
 fi
 
 AAPT2="$ANDROID_HOME/build-tools/$BUILD_TOOLS_AAPT2/aapt2"
-if [[ ! -x "$AAPT2" ]]; then
+if [[ ! -f "$AAPT2" && -f "$AAPT2.exe" ]]; then
+  AAPT2="$AAPT2.exe"
+fi
+if [[ ! -f "$AAPT2" ]]; then
   echo "aapt2 not found at $AAPT2" >&2
   exit 1
 fi
